@@ -1,19 +1,68 @@
 #!/usr/bin/env python3
 """
-极简笔记服务器 - 纯文本终端输出，无Emoji乱码
+rusin-note - 极简在线笔记服务 (支持多线程并发、IP限流、配置文件)
 """
 
 import os
 import re
+import json
+import time
 import html
 import urllib.parse
-from http.server import HTTPServer, BaseHTTPRequestHandler
+from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
+from collections import defaultdict
+from threading import Lock
 
-PORT = 8000
+# ---------- 加载配置 ----------
+CONFIG_FILE = "config.json"
+DEFAULT_CONFIG = {
+    "max_note_size_mb": 5,
+    "rate_limit": {
+        "window_seconds": 60,
+        "max_requests": 30
+    }
+}
+
+def load_config():
+    if os.path.exists(CONFIG_FILE):
+        try:
+            with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception as e:
+            print(f"[警告] 读取配置文件失败，使用默认配置: {e}")
+    return DEFAULT_CONFIG
+
+config = load_config()
+MAX_CONTENT_BYTES = config.get("max_note_size_mb", 5) * 1024 * 1024
+RATE_WINDOW = config.get("rate_limit", {}).get("window_seconds", 60)
+RATE_MAX = config.get("rate_limit", {}).get("max_requests", 30)
+
+# ---------- 笔记存储 ----------
 NOTES_DIR = "notes"
 os.makedirs(NOTES_DIR, exist_ok=True)
 
+# ---------- IP限流数据结构 ----------
+ip_requests = defaultdict(list)  # ip -> [timestamp1, timestamp2, ...]
+ip_lock = Lock()
 
+def is_rate_limited(ip: str) -> bool:
+    """检查IP是否超过限制，若未超则记录本次请求"""
+    now = time.time()
+    with ip_lock:
+        # 清理过期记录（保留窗口内的）
+        records = ip_requests[ip]
+        # 保留大于 now - RATE_WINDOW 的记录
+        cutoff = now - RATE_WINDOW
+        # 因为记录是按时间顺序追加的，可以二分优化，但数据量小直接遍历
+        records[:] = [t for t in records if t > cutoff]
+        # 判断是否已满
+        if len(records) >= RATE_MAX:
+            return True
+        # 添加当前请求时间
+        records.append(now)
+        return False
+
+# ---------- 文件操作 ----------
 def get_note_path(note_id: str):
     if not re.match(r'^[\w\-_\u4e00-\u9fff]+$', note_id):
         return None
@@ -43,11 +92,25 @@ def write_note(note_id: str, content: str) -> bool:
     except IOError:
         return False
 
-
+# ---------- HTTP 处理器 ----------
 class NoteHandler(BaseHTTPRequestHandler):
     def log_request(self, code='-', size='-'):
         if code != 200:
             super().log_request(code, size)
+
+    def get_client_ip(self) -> str:
+        """从请求头获取真实IP，支持代理"""
+        # 尝试从 X-Forwarded-For 获取
+        forwarded = self.headers.get("X-Forwarded-For")
+        if forwarded:
+            # 取第一个IP（最原始的客户端）
+            ip = forwarded.split(",")[0].strip()
+            return ip
+        real_ip = self.headers.get("X-Real-IP")
+        if real_ip:
+            return real_ip.strip()
+        # 否则直接取连接地址
+        return self.client_address[0]
 
     def do_GET(self):
         parsed = urllib.parse.urlparse(self.path)
@@ -78,6 +141,12 @@ class NoteHandler(BaseHTTPRequestHandler):
         self.wfile.write(html_page.encode("utf-8"))
 
     def do_POST(self):
+        # ----- 限流检查（仅针对POST） -----
+        client_ip = self.get_client_ip()
+        if is_rate_limited(client_ip):
+            self.send_error(429, f"Too many requests (max {RATE_MAX} per {RATE_WINDOW}s)")
+            return
+
         parsed = urllib.parse.urlparse(self.path)
         note_id = parsed.path.lstrip("/")
         if not note_id:
@@ -88,8 +157,8 @@ class NoteHandler(BaseHTTPRequestHandler):
             return
 
         content_length = int(self.headers.get("Content-Length", 0))
-        if content_length > 1024 * 1024:
-            self.send_error(413, "Content too large")
+        if content_length > MAX_CONTENT_BYTES:
+            self.send_error(413, f"Content too large (max {MAX_CONTENT_BYTES//1024//1024}MB)")
             return
 
         post_data = self.rfile.read(content_length).decode("utf-8")
@@ -104,7 +173,6 @@ class NoteHandler(BaseHTTPRequestHandler):
             self.send_error(500, "Failed to save note")
 
     def render_page(self, note_id: str, content: str) -> str:
-        """极简白板页面，完全复刻 rusin-note 风格"""
         escaped_content = html.escape(content)
         escaped_id = html.escape(note_id)
 
@@ -178,13 +246,15 @@ class NoteHandler(BaseHTTPRequestHandler):
 </body>
 </html>"""
 
-
-def run_server(port=PORT):
+# ---------- 启动服务器 ----------
+def run_server(port=8000):
     server_address = ("", port)
-    httpd = HTTPServer(server_address, NoteHandler)
-    print("[启动] 极简笔记服务已启动")
+    httpd = ThreadingHTTPServer(server_address, NoteHandler)
+    print("[启动] rusin-note 服务已启动")
     print(f"[地址] http://localhost:{port}")
     print(f"[目录] 笔记保存在 ./{NOTES_DIR}/")
+    print(f"[限制] 每个笔记最大 {MAX_CONTENT_BYTES//1024//1024}MB")
+    print(f"[限流] 每个IP {RATE_MAX} 次 / {RATE_WINDOW} 秒 (仅POST)")
     print("[提示] 按 Ctrl+C 停止服务")
     try:
         httpd.serve_forever()

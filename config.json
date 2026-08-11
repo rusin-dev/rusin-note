@@ -1,0 +1,7 @@
+{
+    "max_note_size_mb": 5,
+    "rate_limit": {
+        "window_seconds": 60,
+        "max_requests": 30
+    }
+}
