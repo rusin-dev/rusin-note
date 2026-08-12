@@ -1,17 +1,24 @@
 {
-    "max_note_size_mb": 1,
-    "rate_limit": {
-        "window_seconds": 60,
-        "max_requests": 30
-    },
-    "id_generation": {
-        "length": 4,
-        "use_uppercase": false,
-        "use_lowercase": true,
-        "use_digits": false
-    },
-    "session_timeout": {
-        "enabled": false,
-        "minutes": 1440
-    }
+  "max_note_size_mb": 1,
+  "rate_limit": {
+    "window_seconds": 60,
+    "max_requests": 30
+  },
+  "id_generation": {
+    "length": 4,
+    "use_uppercase": false,
+    "use_lowercase": true,
+    "use_digits": false
+  },
+  "session_timeout": {
+    "enabled": false,
+    "minutes": 1440
+  },
+  "password_policy": {
+    "min_length": 16,
+    "require_uppercase": true,
+    "require_lowercase": true,
+    "require_digits": true,
+    "require_special": true
+  }
 }
