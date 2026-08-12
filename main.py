@@ -5,6 +5,8 @@ rusin-note - 极简在线笔记服务 (支持匿名公开笔记 /world/ 和私�
 - 私有笔记需注册登录，路径 /user/<username>/<note_id>
 - 顶部导航栏，登录/注册/登出
 - 密码强度要求严格
+- 支持纯数字ID自动重定向到公开笔记
+- 统计页面 /count
 """
 
 import os
@@ -171,7 +173,7 @@ def check_password_complexity(password: str) -> bool:
         return False
     return True
 
-# ---------- IP限流（原样保留） ----------
+# ---------- IP限流 ----------
 ip_requests = defaultdict(list)
 ip_lock = Lock()
 MAX_RECORDS_PER_IP = RATE_MAX * 2
@@ -267,6 +269,39 @@ def list_user_notes(username: str) -> list[str]:
                 notes.append(note_id)
     return notes
 
+# ---------- 统计函数 ----------
+def get_stats():
+    """返回 (public_count, public_size, private_count, private_size)"""
+    public_count = 0
+    public_size = 0
+    private_count = 0
+    private_size = 0
+
+    if not os.path.exists(NOTES_BASE):
+        return (0, 0, 0, 0)
+
+    for item in os.listdir(NOTES_BASE):
+        item_path = os.path.join(NOTES_BASE, item)
+        if not os.path.isdir(item_path):
+            continue
+        if item == "public":
+            for fname in os.listdir(item_path):
+                if fname.endswith(".txt"):
+                    public_count += 1
+                    try:
+                        public_size += os.path.getsize(os.path.join(item_path, fname))
+                    except:
+                        pass
+        else:
+            for fname in os.listdir(item_path):
+                if fname.endswith(".txt"):
+                    private_count += 1
+                    try:
+                        private_size += os.path.getsize(os.path.join(item_path, fname))
+                    except:
+                        pass
+    return (public_count, public_size, private_count, private_size)
+
 # ---------- 随机ID生成 ----------
 def generate_random_id() -> str:
     while True:
@@ -312,7 +347,6 @@ class NoteHandler(BaseHTTPRequestHandler):
 
     # ---------- 导航栏 ----------
     def _get_navbar(self, current_user=None) -> str:
-        """生成顶部导航栏 HTML"""
         if current_user is None:
             current_user = self.get_current_user()
         if current_user:
@@ -333,6 +367,7 @@ class NoteHandler(BaseHTTPRequestHandler):
                     <span class="nav-links">
                         <a href="/register">注册</a>
                         <a href="/login">登录</a>
+                        <a href="/count">统计</a>
                     </span>
                 </div>
             """
@@ -410,6 +445,32 @@ class NoteHandler(BaseHTTPRequestHandler):
         .note-list a {{ color: #0366d6; text-decoration: none; }}
         .note-list a:hover {{ text-decoration: underline; }}
         .empty {{ color: #888; }}
+        .stat-grid {{
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-top: 20px;
+        }}
+        .stat-card {{
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 16px 20px;
+            background: #fafafa;
+        }}
+        .stat-card h3 {{
+            margin-bottom: 8px;
+            font-weight: 400;
+            color: #333;
+        }}
+        .stat-card .number {{
+            font-size: 28px;
+            font-weight: 500;
+        }}
+        .stat-card .detail {{
+            color: #666;
+            font-size: 14px;
+            margin-top: 4px;
+        }}
     </style>
 </head>
 <body>
@@ -429,6 +490,7 @@ class NoteHandler(BaseHTTPRequestHandler):
                 <li><a href="/world/" style="font-size: 18px;">匿名公开笔记 (快速开始)</a></li>
                 <li><a href="/register" style="font-size: 18px;">注册私有账号</a></li>
                 <li><a href="/login" style="font-size: 18px;">登录已有账号</a></li>
+                <li><a href="/count" style="font-size: 18px;">统计信息</a></li>
             </ul>
         """
         return self._render_base(body, "首页")
@@ -494,17 +556,44 @@ class NoteHandler(BaseHTTPRequestHandler):
         navbar = self._get_navbar(username)
         return self._render_base(body, f"{username} 的笔记", navbar)
 
+    def _render_count_page(self):
+        pub_cnt, pub_size, priv_cnt, priv_size = get_stats()
+        # 格式化大小
+        def fmt_size(sz):
+            if sz < 1024:
+                return f"{sz} B"
+            elif sz < 1024*1024:
+                return f"{sz/1024:.2f} KB"
+            elif sz < 1024*1024*1024:
+                return f"{sz/(1024*1024):.2f} MB"
+            else:
+                return f"{sz/(1024*1024*1024):.2f} GB"
+
+        body = f"""
+            <h1>笔记统计</h1>
+            <div class="stat-grid">
+                <div class="stat-card">
+                    <h3>公开笔记</h3>
+                    <div class="number">{pub_cnt}</div>
+                    <div class="detail">总大小: {fmt_size(pub_size)}</div>
+                </div>
+                <div class="stat-card">
+                    <h3>私有笔记</h3>
+                    <div class="number">{priv_cnt}</div>
+                    <div class="detail">总大小: {fmt_size(priv_size)}</div>
+                </div>
+            </div>
+            <p style="margin-top: 24px;"><a href="/">返回首页</a></p>
+        """
+        return self._render_base(body, "统计信息")
+
     def _render_note_page(self, note_id: str, content: str, username: str = None, is_world: bool = False):
-        """
-        渲染笔记编辑页面，支持公开或私有。
-        username 为 None 表示公开笔记 (world)
-        """
         escaped_id = html.escape(note_id)
         escaped_content = html.escape(content)
         if is_world:
             action_url = f"/world/{escaped_id}"
             title = f"公开笔记 - {escaped_id}"
-            navbar = self._get_navbar()  # 匿名导航
+            navbar = self._get_navbar()
         else:
             action_url = f"/user/{html.escape(username)}/{escaped_id}"
             title = f"私有笔记 - {escaped_id}"
@@ -554,7 +643,7 @@ class NoteHandler(BaseHTTPRequestHandler):
             height: 100vh;
             display: flex;
             flex-direction: column;
-            padding-top: 50px; /* 为 navbar 腾空间 */
+            padding-top: 50px;
         }}
         textarea {{
             flex: 1;
@@ -812,6 +901,21 @@ class NoteHandler(BaseHTTPRequestHandler):
             self.wfile.write(self._render_home().encode("utf-8"))
             return
 
+        # 统计页面
+        if path == "/count":
+            self.send_response(200)
+            self.send_header("Content-Type", self._HTML_HEADER)
+            self.end_headers()
+            self.wfile.write(self._render_count_page().encode("utf-8"))
+            return
+
+        # 纯数字路径 -> 重定向到 /world/<数字>
+        digit_match = re.match(r'^/(\d+)$', path)
+        if digit_match:
+            note_id = digit_match.group(1)
+            self._send_redirect(f"/world/{note_id}")
+            return
+
         # 注册页面
         if path == "/register":
             self.send_response(200)
@@ -843,7 +947,6 @@ class NoteHandler(BaseHTTPRequestHandler):
         world_match = re.match(r'^/world/([^/]+)?$', path)
         if world_match:
             note_id = world_match.group(1)
-            # 如果 /world/ 后面没有ID，生成随机ID并重定向
             if note_id is None:
                 new_id = generate_random_id()
                 self._send_redirect(f"/world/{new_id}")
@@ -853,7 +956,7 @@ class NoteHandler(BaseHTTPRequestHandler):
                 self.send_error(400, "Invalid note ID")
                 return
 
-            content = read_note("public", note_id)  # 公开笔记统一使用用户名 "public"
+            content = read_note("public", note_id)
             page = self._render_note_page(note_id, content, is_world=True)
             self.send_response(200)
             self.send_header("Content-Type", self._HTML_HEADER)
@@ -874,7 +977,6 @@ class NoteHandler(BaseHTTPRequestHandler):
             # 认证检查
             current_user = self.get_current_user()
             if current_user != username:
-                # 未登录或用户名不匹配
                 self.send_response(401)
                 self.send_header("Content-Type", self._HTML_HEADER)
                 self.end_headers()
@@ -882,13 +984,11 @@ class NoteHandler(BaseHTTPRequestHandler):
                 self.wfile.write(self._render_base(body, "请先登录").encode("utf-8"))
                 return
 
-            # 处理 /user/<username>/new -> 创建新笔记
             if note_id == "new":
                 new_id = generate_random_id()
                 self._send_redirect(f"/user/{username}/{new_id}")
                 return
 
-            # 处理 /user/<username> -> 显示笔记列表
             if note_id is None:
                 notes = list_user_notes(username)
                 self.send_response(200)
@@ -897,7 +997,6 @@ class NoteHandler(BaseHTTPRequestHandler):
                 self.wfile.write(self._render_user_list(username, notes).encode("utf-8"))
                 return
 
-            # 处理 /user/<username>/<note_id> -> 显示笔记
             if not validate_note_id(note_id):
                 self.send_error(400, "Invalid note ID")
                 return
@@ -915,7 +1014,6 @@ class NoteHandler(BaseHTTPRequestHandler):
 
     # ---------- POST 请求 ----------
     def do_POST(self):
-        # 限流
         client_ip = self.get_client_ip()
         if is_rate_limited(client_ip):
             self.send_error(429, f"Too many requests (max {RATE_MAX} per {RATE_WINDOW}s)")
@@ -973,7 +1071,6 @@ class NoteHandler(BaseHTTPRequestHandler):
                 users[username] = {"salt": salt, "hash": hashed}
             save_users()
 
-            # 自动登录
             token = create_session(username)
             self.send_response(302)
             self._set_session_cookie(token)
@@ -1052,7 +1149,6 @@ class NoteHandler(BaseHTTPRequestHandler):
                 self.send_error(400, "Invalid username or note ID")
                 return
 
-            # 认证
             if not self.is_authenticated(username):
                 self.send_error(401, "Unauthorized")
                 return
@@ -1074,7 +1170,6 @@ class NoteHandler(BaseHTTPRequestHandler):
                 self.send_error(500, "Failed to save note")
             return
 
-        # 其他POST -> 404
         self.send_error(404, "Not found")
 
     def send_error(self, code, message=None, explain=None):
@@ -1098,6 +1193,8 @@ def run_server(port=8080):
     print(f"[限流] 每个IP {RATE_MAX} 次 / {RATE_WINDOW} 秒 (仅POST)")
     print("[公开笔记] 访问 /world/<id> 即可匿名编辑")
     print("[私有笔记] 注册登录后访问 /user/<username>/<id>")
+    print("[快捷] 访问 /数字 自动重定向到 /world/数字")
+    print("[统计] 访问 /count 查看笔记统计")
     print("[提示] 按 Ctrl+C 停止服务")
     try:
         httpd.serve_forever()
