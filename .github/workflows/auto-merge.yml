@@ -2,8 +2,7 @@ name: Auto-merge dev to main (no PR)
 
 on:
   schedule:
-    # 每天凌晨 2:00 (UTC) 运行，即北京时间上午 10:00
-    - cron: "0 2 * * *"
+    - cron: "0 18 * * *"
   workflow_dispatch:  # 允许手动触发
 
 jobs:
