@@ -101,9 +101,25 @@ python 版本 $\geq 3.10$。
 ## 项目结构
 
 ```plaintext
----config.json （配置项）
-  |
-  --main.py （核心代码）
+rusin-note:.
+│  README_en.md
+│  config.json（配置项）
+│  Disclaimer.md（免责声明）
+│  LICENSE
+│  main.py（核心代码）
+│  README.md
+│  contribute.md（协作指南）
+│  
+├─image
+│      logo.png
+│      
+├─.github
+│  └─workflows
+│          check.yml（测试 PR）
+│          auto-merge.yml（自动合并）
+│          labeler.yml（自动打标签）
+│          
+└─notes
 ```
 
 ### 配置项解析

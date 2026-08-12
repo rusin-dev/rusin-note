@@ -97,9 +97,25 @@ Connect to your server, then:
 ## Project Structure
 
 ```plaintext
----config.json (Configuration)
-  |
-  --main.py (Core code)
+rusin-note:.
+│  README_en.md
+│  config.json (configuration)
+│  Disclaimer.md (disclaimer)
+│  LICENSE
+│  main.py (core code)
+│  README.md
+│  contribute.md (collaboration guide)
+│  
+├─image
+│      logo.png
+│      
+├─.github
+│  └─workflows
+│          check.yml (test PR)
+│          auto-merge.yml (auto-merge)
+│          labeler.yml (auto-labeling)
+│          
+└─notes
 ```
 
 ### Configuration Options
