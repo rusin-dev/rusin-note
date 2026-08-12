@@ -125,3 +125,9 @@ python 版本 $\geq 3.10$。
    - `minutes` ：设定时长，（单位：**秒**）默认 $1440$；
 
    当时间超过设定时，将登出访客账号。
+- `password_policy`：密码策略，定义访客密码的复杂度要求。  
+   - `min_length`：密码最小长度，默认 `8`；  
+   - `require_uppercase`：是否必须包含大写字母，默认 `true`；  
+   - `require_lowercase`：是否必须包含小写字母，默认 `true`；  
+   - `require_digits`：是否必须包含数字，默认 `true`；  
+   - `require_special`：是否必须包含特殊符号（不含 `/ \ ( ) " '`），默认 `true`； 

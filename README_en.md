@@ -123,3 +123,9 @@ Connect to your server, then:
     - `minutes`：Timeout duration (in **seconds**), default `1440`.
 
     Visitors will be logged out when the session exceeds the configured time.
+- `password_policy`: password policy, defining the complexity requirements for guest passwords.  
+   - `min_length`: minimum password length, default `8`;  
+   - `require_uppercase`: whether uppercase letters are required, default `true`;  
+   - `require_lowercase`: whether lowercase letters are required, default `true`;  
+   - `require_digits`: whether digits are required, default `true`;  
+   - `require_special`: whether special characters (excluding `/ \ ( ) " '`) are required, default `true`;
