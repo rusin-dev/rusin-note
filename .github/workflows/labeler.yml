@@ -16,8 +16,11 @@ jobs:
       - name: Label based on title
         uses: actions/github-script@v7
         with:
+          # 如果需要临时使用 Node 20，可以取消下面一行的注释
+          # env:
+          #   ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
           script: |
-            const context = github.context;
+            // 直接使用全局的 context、github、core
             const payload = context.payload;
             let title = '';
             let issue_number = null;
@@ -35,7 +38,7 @@ jobs:
               return;
             }
 
-            // ----- 在这里自定义标签规则 -----
+            // ===== 在这里自定义您的标签规则 =====
             const rules = [
               { regex: /bug|fix|错误|故障/i, label: 'bug' },
               { regex: /feature|enhancement|新功能|改进/i, label: 'enhancement' },
@@ -43,12 +46,13 @@ jobs:
               { regex: /question|疑问|help|求助/i, label: 'question' },
               { regex: /duplicate|重复/i, label: 'duplicate' },
               { regex: /wontfix|不修复/i, label: 'wontfix' },
-              // 您可以继续添加更多规则
+              // 可继续添加更多规则，如：
+              // { regex: /urgent|紧急/i, label: 'priority' },
             ];
-            // -----------------------------------
+            // ==================================
 
             // 收集所有匹配的标签
-            let labelsToAdd = [];
+            const labelsToAdd = [];
             for (const rule of rules) {
               if (rule.regex.test(title)) {
                 labelsToAdd.push(rule.label);
