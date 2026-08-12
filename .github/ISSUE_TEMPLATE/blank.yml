@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: 其他 Issue
+    url: https://github.com/rusin-dev/rusin-note/issues/new
+    about: 创建一个空白的 Issue，不使用 Issue 模板

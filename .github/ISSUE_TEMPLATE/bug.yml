@@ -1,0 +1,67 @@
+name: 反馈 Bug
+description: 用于反馈较紧急的代码 Bug
+title: "[bug] \"标题\""
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ↑ 请将上方的 Title 中的 “标题” 替换成您实际的 Bug 简短介绍。
+  - type: checkboxes
+    id: checkagain
+    attributes:
+      label: 请确认以下事项
+      description: |
+        1. 我已仔细阅读[协作指南](https://github.com/rusin-dev/rusin-note/blob/main/contribute.md)以及[项目结构](https://github.com/rusin-dev/rusin-note/blob/dev/README.md#%E9%A1%B9%E7%9B%AE%E7%BB%93%E6%9E%84)中的内容。
+        2. 此 Bug 长时间无人发现或修复。
+        3. 没有 Bug 类似的、open/closed 的 issue。
+        4. 文件后缀名非 md、txt（requirements.txt 除外）（其他后缀名右转文档错误）。
+      options:
+        - label: 我已确认以上事项
+          required: true
+  - type: checkboxes
+    id: place
+    attributes:
+      label: 重要性
+      description: |
+        您发现的 Bug 是否影响网站运行
+      options:
+        - label: 不影响，只是似乎于代码本意不符
+        - label: 略有影响，导致网页加载速度慢后或可能返回非 200 状态码
+        - label: 影响大，直接导致非 200 状态码和功能问题，需快速修复
+        - label: 影响极大，导致越权漏洞或用户信息泄露，需紧急修复
+        - label: 其它
+  - type: input
+    id: otherplace
+    attributes:
+      label: 更具体的重要性
+      description: |
+        如果您的重要性选择了「其它」，请在这里告诉我们具体的影响。
+  - type: input
+    id: name
+    attributes:
+      label: 错误位置
+      description: 格式：“文件目录” “行号”
+      placeholder: 例：./main.py 23~25
+    validations:
+      required: true
+  - type: dropdown 
+    id: content
+    attributes:
+      label: 错误类型
+      description: |
+        请在此选择错误类型，非普通错误类型请选择“其它”。
+      options:
+        - 语法错误（基本不会出现）
+        - 样式渲染错误（css）
+        - 交互逻辑错误（js）
+        - 后端请求错误
+        - 其它
+    validations:
+      required: true
+  - type: input
+    id: remark
+    attributes:
+      label: 详细错误原因及修改方案
+      description: |
+        为什么错误呢？怎么修改？给出你的方案（可选，也可以不给）。
