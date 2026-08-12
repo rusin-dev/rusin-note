@@ -4,11 +4,12 @@ rusin-note - 极简在线笔记服务 (支持匿名公开笔记 /world/ 和私�
 - 公开笔记无需登录，直接访问 /world/<id> 即可编辑
 - 私有笔记需注册登录，路径 /user/<username>/<note_id>
 - 顶部导航栏，登录/注册/登出
-- 密码强度要求严格
+- 密码强度要求可配置
 - 支持纯数字ID自动重定向到公开笔记
 - 统计页面 /count
-- 免责声明 /disclaimer
+- 免责声明 /disclaimer，支持Markdown渲染
 - Cookie使用SHA-256哈希存储，会话支持超时清除
+- 支持将公开笔记渲染为 Markdown（只读）：/world/<id>/md
 """
 
 import os
@@ -42,6 +43,13 @@ DEFAULT_CONFIG = {
     "session_timeout": {
         "enabled": False,
         "minutes": 60
+    },
+    "password_policy": {
+        "min_length": 16,
+        "require_uppercase": True,
+        "require_lowercase": True,
+        "require_digits": True,
+        "require_special": True
     }
 }
 
@@ -81,6 +89,27 @@ if USE_DIGIT:
 if not _charset_parts:
     _charset_parts = [string.ascii_lowercase, string.digits]
 ID_CHARSET = ''.join(_charset_parts)
+
+# ---------- 密码策略配置 ----------
+PW_POLICY = config.get("password_policy", DEFAULT_CONFIG["password_policy"])
+PW_MIN_LENGTH = PW_POLICY.get("min_length", 16)
+PW_REQUIRE_UPPER = PW_POLICY.get("require_uppercase", True)
+PW_REQUIRE_LOWER = PW_POLICY.get("require_lowercase", True)
+PW_REQUIRE_DIGIT = PW_POLICY.get("require_digits", True)
+PW_REQUIRE_SPECIAL = PW_POLICY.get("require_special", True)
+
+def get_password_requirements_description():
+    parts = []
+    parts.append(f"至少 {PW_MIN_LENGTH} 位")
+    if PW_REQUIRE_UPPER:
+        parts.append("大写字母")
+    if PW_REQUIRE_LOWER:
+        parts.append("小写字母")
+    if PW_REQUIRE_DIGIT:
+        parts.append("数字")
+    if PW_REQUIRE_SPECIAL:
+        parts.append("特殊符号 (不含 / \\ ( ) \" ' )")
+    return "、".join(parts)
 
 # ---------- 用户与会话存储 ----------
 USER_FILE = "users.json"
@@ -190,21 +219,22 @@ def get_session_user(token: str) -> str | None:
                 return None
         return session["username"]
 
-# ---------- 密码复杂度检查 ----------
+# ---------- 密码复杂度检查（根据配置） ----------
 def check_password_complexity(password: str) -> bool:
-    if len(password) < 16:
+    if len(password) < PW_MIN_LENGTH:
         return False
-    if not re.search(r'[A-Z]', password):
+    if PW_REQUIRE_UPPER and not re.search(r'[A-Z]', password):
         return False
-    if not re.search(r'[a-z]', password):
+    if PW_REQUIRE_LOWER and not re.search(r'[a-z]', password):
         return False
-    if not re.search(r'[0-9]', password):
+    if PW_REQUIRE_DIGIT and not re.search(r'[0-9]', password):
         return False
-    # 特殊字符：至少一个，且排除 / \ ( ) " '
-    excluded = r'\/\(\)"\''
-    special_pattern = r'[^A-Za-z0-9' + re.escape(excluded) + r']'
-    if not re.search(special_pattern, password):
-        return False
+    if PW_REQUIRE_SPECIAL:
+        # 特殊字符：排除 / \ ( ) " '
+        excluded = r'\/\(\)"\''
+        special_pattern = r'[^A-Za-z0-9' + re.escape(excluded) + r']'
+        if not re.search(special_pattern, password):
+            return False
     return True
 
 # ---------- IP限流 ----------
@@ -421,7 +451,7 @@ class NoteHandler(BaseHTTPRequestHandler):
         self.send_header("Set-Cookie", "session=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax")
 
     # ---------- 通用 HTML 渲染 ----------
-    def _render_base(self, body: str, title="rusin-note", navbar=None):
+    def _render_base(self, body: str, title="rusin-note", navbar=None, extra_head=""):
         if navbar is None:
             navbar = self._get_navbar()
         return f"""<!DOCTYPE html>
@@ -512,11 +542,55 @@ class NoteHandler(BaseHTTPRequestHandler):
             padding: 20px;
             border-radius: 8px;
             border: 1px solid #eee;
-            white-space: pre-wrap;
-            font-family: inherit;
+        }}
+        .markdown-body {{
+            font-size: 16px;
             line-height: 1.6;
         }}
+        .markdown-body h1, .markdown-body h2, .markdown-body h3 {{
+            border-bottom: 1px solid #eee;
+            padding-bottom: 6px;
+        }}
+        .markdown-body ul, .markdown-body ol {{
+            padding-left: 2em;
+        }}
+        .markdown-body code {{
+            background: #f4f4f4;
+            padding: 2px 6px;
+            border-radius: 4px;
+        }}
+        .markdown-body pre {{
+            background: #f4f4f4;
+            padding: 12px;
+            border-radius: 4px;
+            overflow-x: auto;
+        }}
+        .markdown-body blockquote {{
+            border-left: 4px solid #ddd;
+            padding-left: 16px;
+            color: #666;
+        }}
+        .markdown-body a {{
+            color: #0366d6;
+        }}
+        .home-links {{
+            list-style: none;
+            padding: 0;
+            margin-top: 24px;
+        }}
+        .home-links li {{
+            margin: 12px 0;
+        }}
+        .home-links a {{
+            font-size: 18px;
+            color: #0366d6;
+            text-decoration: none;
+        }}
+        .home-links a:hover {{
+            text-decoration: underline;
+        }}
     </style>
+    {extra_head}
 </head>
 <body>
     {navbar}
@@ -530,18 +604,18 @@ class NoteHandler(BaseHTTPRequestHandler):
     def _render_home(self):
         body = """
             <h1>rusin-note</h1>
-            <p>安全、私密的在线笔记服务。</p>
-            <ul style="list-style: none; padding: 0; margin-top: 20px;">
-                <li><a href="/world/" style="font-size: 18px;">匿名公开笔记 (快速开始)</a></li>
-                <li><a href="/register" style="font-size: 18px;">注册私有账号</a></li>
-                <li><a href="/login" style="font-size: 18px;">登录已有账号</a></li>
-                <li><a href="/count" style="font-size: 18px;">统计信息</a></li>
-                <li><a href="/disclaimer" style="font-size: 18px;">免责声明</a></li>
+            <ul class="home-links">
+                <li><a href="/world/">公开笔记（匿名）</a></li>
+                <li><a href="/register">注册账号</a></li>
+                <li><a href="/login">登录</a></li>
+                <li><a href="/count">统计</a></li>
+                <li><a href="/disclaimer">免责声明</a></li>
             </ul>
         """
         return self._render_base(body, "首页")
 
     def _render_register_form(self, error=""):
+        req_desc = get_password_requirements_description()
         body = f"""
             <h1>注册</h1>
             {f'<p class="error">{html.escape(error)}</p>' if error else ''}
@@ -551,7 +625,7 @@ class NoteHandler(BaseHTTPRequestHandler):
                     <input type="text" name="username" required pattern="[a-zA-Z0-9_\\-]+">
                 </div>
                 <div class="form-group">
-                    <label>密码 (>=16位，含大小写字母、数字、特殊符号)</label>
+                    <label>密码 (要求: {req_desc})</label>
                     <input type="password" name="password" required>
                 </div>
                 <div class="form-group">
@@ -638,7 +712,7 @@ class NoteHandler(BaseHTTPRequestHandler):
         return self._render_base(body, "统计信息")
 
     def _render_disclaimer(self):
-        """读取 Disclaimer.md 并显示"""
+        """读取 Disclaimer.md 并渲染为 HTML（支持 Markdown）"""
         disclaimer_file = "Disclaimer.md"
         if os.path.exists(disclaimer_file):
             try:
@@ -648,12 +722,26 @@ class NoteHandler(BaseHTTPRequestHandler):
                 content = f"读取免责声明文件失败: {e}"
         else:
             content = "免责声明文件 (Disclaimer.md) 未找到。"
-        body = f"""
-            <h1>免责声明</h1>
-            <div class="disclaimer">{html.escape(content)}</div>
-            <p style="margin-top: 20px;"><a href="/">返回首页</a></p>
-        """
-        return self._render_base(body, "免责声明")
+
+        # 尝试使用 markdown 库渲染
+        try:
+            import markdown
+            html_content = markdown.markdown(content, extensions=['extra', 'codehilite'])
+            body = f"""
+                <h1>免责声明</h1>
+                <div class="disclaimer markdown-body">{html_content}</div>
+                <p style="margin-top: 20px;"><a href="/">返回首页</a></p>
+            """
+            return self._render_base(body, "免责声明", extra_head="")
+        except ImportError:
+            # 没有 markdown 库，降级为纯文本
+            body = f"""
+                <h1>免责声明</h1>
+                <div class="disclaimer">{html.escape(content)}</div>
+                <p style="margin-top: 20px;"><a href="/">返回首页</a></p>
+                <p style="color: #888; font-size: 14px;">提示: 安装 markdown 库以支持 Markdown 渲染 (pip install markdown)</p>
+            """
+            return self._render_base(body, "免责声明")
 
     def _render_note_page(self, note_id: str, content: str, username: str = None, is_world: bool = False):
         escaped_id = html.escape(note_id)
@@ -956,6 +1044,25 @@ class NoteHandler(BaseHTTPRequestHandler):
 </html>"""
         return page
 
+    # ---------- 新增：只读 Markdown 渲染页面 ----------
+    def _render_markdown_page(self, note_id: str, content: str):
+        # 尝试使用 markdown 库渲染
+        try:
+            import markdown
+            html_content = markdown.markdown(content, extensions=['extra', 'codehilite'])
+        except ImportError:
+            # 降级为纯文本，用 <pre> 包裹
+            html_content = f"<pre>{html.escape(content)}</pre>"
+        navbar = self._get_navbar()  # 匿名导航
+        body = f"""
+            <h1>公开笔记 · {html.escape(note_id)} <span style="font-size:0.6em; font-weight:400; color:#888;">只读</span></h1>
+            <div class="markdown-body" style="margin-top:20px; padding-bottom:40px;">
+                {html_content}
+            </div>
+            <p style="margin-top: 20px;"><a href="/world/{html.escape(note_id)}">返回编辑</a> · <a href="/">首页</a></p>
+        """
+        return self._render_base(body, f"Markdown - {note_id}", navbar)
+
     # ---------- GET 请求 ----------
     def do_GET(self):
         parsed = urllib.parse.urlparse(self.path)
@@ -1017,6 +1124,25 @@ class NoteHandler(BaseHTTPRequestHandler):
             self._clear_session_cookie()
             self.send_header("Location", "/")
             self.end_headers()
+            return
+
+        # ---------- 新增：公开笔记 Markdown 渲染 /world/<id>/md ----------
+        world_md_match = re.match(r'^/world/([^/]+)/md$', path)
+        if world_md_match:
+            note_id = world_md_match.group(1)
+            if not validate_note_id(note_id):
+                self.send_error(400, "Invalid note ID")
+                return
+            content = read_note("public", note_id)
+            if content == "":
+                # 如果笔记不存在，返回404或空内容？我们渲染空内容，但可提示
+                # 我们可以显示“笔记不存在”但也可以显示空内容，但为了友好，显示提示
+                pass
+            page = self._render_markdown_page(note_id, content)
+            self.send_response(200)
+            self.send_header("Content-Type", self._HTML_HEADER)
+            self.end_headers()
+            self.wfile.write(page.encode("utf-8"))
             return
 
         # 公开笔记路径：/world/ 或 /world/<note_id>
@@ -1133,11 +1259,12 @@ class NoteHandler(BaseHTTPRequestHandler):
                 return
 
             if not check_password_complexity(password):
+                req_desc = get_password_requirements_description()
                 self.send_response(200)
                 self.send_header("Content-Type", self._HTML_HEADER)
                 self.end_headers()
                 self.wfile.write(self._render_register_form(
-                    "密码必须>=16位，含大小写字母、数字、特殊符号（不含/\\()\"'）"
+                    f"密码不符合要求：{req_desc}"
                 ).encode("utf-8"))
                 return
 
@@ -1271,7 +1398,8 @@ def run_server(port=8080):
     print("[私有笔记] 注册登录后访问 /user/<username>/<id>")
     print("[快捷] 访问 /数字 自动重定向到 /world/数字")
     print("[统计] 访问 /count 查看笔记统计")
-    print("[免责] 访问 /disclaimer 查看免责声明")
+    print("[免责] 访问 /disclaimer 查看免责声明 (支持Markdown)")
+    print("[Markdown] 访问 /world/<id>/md 渲染公开笔记为只读 Markdown")
     if SESSION_TIMEOUT_ENABLED:
         print(f"[超时] 会话超时已启用，超时时间 {SESSION_TIMEOUT_MINUTES} 分钟")
     else:
