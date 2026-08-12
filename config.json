@@ -7,7 +7,11 @@
     "id_generation": {
         "length": 4,
         "use_uppercase": false,
-        "use_lowercase": false,
-        "use_digits": true
+        "use_lowercase": true,
+        "use_digits": false
+    },
+    "session_timeout": {
+        "enabled": false,
+        "minutes": 1440
     }
 }

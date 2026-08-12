@@ -7,6 +7,8 @@ rusin-note - 极简在线笔记服务 (支持匿名公开笔记 /world/ 和私�
 - 密码强度要求严格
 - 支持纯数字ID自动重定向到公开笔记
 - 统计页面 /count
+- 免责声明 /disclaimer
+- Cookie使用SHA-256哈希存储，会话支持超时清除
 """
 
 import os
@@ -36,6 +38,10 @@ DEFAULT_CONFIG = {
         "use_uppercase": True,
         "use_lowercase": True,
         "use_digits": True
+    },
+    "session_timeout": {
+        "enabled": False,
+        "minutes": 60
     }
 }
 
@@ -52,6 +58,11 @@ config = load_config()
 MAX_CONTENT_BYTES = config.get("max_note_size_mb", 5) * 1024 * 1024
 RATE_WINDOW = config.get("rate_limit", {}).get("window_seconds", 60)
 RATE_MAX = config.get("rate_limit", {}).get("max_requests", 30)
+
+# 会话超时配置
+SESSION_TIMEOUT_ENABLED = config.get("session_timeout", {}).get("enabled", False)
+SESSION_TIMEOUT_MINUTES = config.get("session_timeout", {}).get("minutes", 60)
+SESSION_TIMEOUT_SECONDS = SESSION_TIMEOUT_MINUTES * 60
 
 # ---------- ID生成配置 ----------
 ID_CFG = config.get("id_generation", DEFAULT_CONFIG["id_generation"])
@@ -78,7 +89,7 @@ NOTES_BASE = "notes"
 os.makedirs(NOTES_BASE, exist_ok=True)
 
 users = {}
-sessions = {}
+sessions = {}  # 格式: {sha256(token): {"username": str, "created_at": float}}
 users_lock = Lock()
 sessions_lock = Lock()
 
@@ -139,22 +150,45 @@ def verify_password(password: str, salt: str, hashed: str) -> bool:
 def generate_session_token():
     return secrets.token_hex(32)
 
+def hash_token(token: str) -> str:
+    """对token进行SHA-256哈希"""
+    return hashlib.sha256(token.encode()).hexdigest()
+
 def create_session(username: str) -> str:
+    """创建会话，返回原始token，存储时使用哈希作为键"""
     token = generate_session_token()
+    token_hash = hash_token(token)
     with sessions_lock:
-        sessions[token] = username
+        sessions[token_hash] = {
+            "username": username,
+            "created_at": time.time()
+        }
     save_sessions()
     return token
 
 def delete_session(token: str):
+    token_hash = hash_token(token)
     with sessions_lock:
-        if token in sessions:
-            del sessions[token]
+        if token_hash in sessions:
+            del sessions[token_hash]
     save_sessions()
 
 def get_session_user(token: str) -> str | None:
+    """验证token，返回用户名，若超时或不存在则返回None"""
+    token_hash = hash_token(token)
     with sessions_lock:
-        return sessions.get(token)
+        session = sessions.get(token_hash)
+        if not session:
+            return None
+        # 检查超时
+        if SESSION_TIMEOUT_ENABLED:
+            elapsed = time.time() - session["created_at"]
+            if elapsed > SESSION_TIMEOUT_SECONDS:
+                # 删除过期会话
+                del sessions[token_hash]
+                save_sessions()
+                return None
+        return session["username"]
 
 # ---------- 密码复杂度检查 ----------
 def check_password_complexity(password: str) -> bool:
@@ -271,14 +305,15 @@ def list_user_notes(username: str) -> list[str]:
 
 # ---------- 统计函数 ----------
 def get_stats():
-    """返回 (public_count, public_size, private_count, private_size)"""
+    """返回 (public_count, public_size, private_count, private_size, user_count)"""
     public_count = 0
     public_size = 0
     private_count = 0
     private_size = 0
+    user_count = len(users)
 
     if not os.path.exists(NOTES_BASE):
-        return (0, 0, 0, 0)
+        return (0, 0, 0, 0, user_count)
 
     for item in os.listdir(NOTES_BASE):
         item_path = os.path.join(NOTES_BASE, item)
@@ -300,7 +335,7 @@ def get_stats():
                         private_size += os.path.getsize(os.path.join(item_path, fname))
                     except:
                         pass
-    return (public_count, public_size, private_count, private_size)
+    return (public_count, public_size, private_count, private_size, user_count)
 
 # ---------- 随机ID生成 ----------
 def generate_random_id() -> str:
@@ -368,6 +403,7 @@ class NoteHandler(BaseHTTPRequestHandler):
                         <a href="/register">注册</a>
                         <a href="/login">登录</a>
                         <a href="/count">统计</a>
+                        <a href="/disclaimer">免责声明</a>
                     </span>
                 </div>
             """
@@ -447,7 +483,7 @@ class NoteHandler(BaseHTTPRequestHandler):
         .empty {{ color: #888; }}
         .stat-grid {{
             display: grid;
-            grid-template-columns: 1fr 1fr;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
             gap: 20px;
             margin-top: 20px;
         }}
@@ -471,6 +507,15 @@ class NoteHandler(BaseHTTPRequestHandler):
             font-size: 14px;
             margin-top: 4px;
         }}
+        .disclaimer {{
+            background: #f9f9f9;
+            padding: 20px;
+            border-radius: 8px;
+            border: 1px solid #eee;
+            white-space: pre-wrap;
+            font-family: inherit;
+            line-height: 1.6;
+        }}
     </style>
 </head>
 <body>
@@ -491,6 +536,7 @@ class NoteHandler(BaseHTTPRequestHandler):
                 <li><a href="/register" style="font-size: 18px;">注册私有账号</a></li>
                 <li><a href="/login" style="font-size: 18px;">登录已有账号</a></li>
                 <li><a href="/count" style="font-size: 18px;">统计信息</a></li>
+                <li><a href="/disclaimer" style="font-size: 18px;">免责声明</a></li>
             </ul>
         """
         return self._render_base(body, "首页")
@@ -557,8 +603,7 @@ class NoteHandler(BaseHTTPRequestHandler):
         return self._render_base(body, f"{username} 的笔记", navbar)
 
     def _render_count_page(self):
-        pub_cnt, pub_size, priv_cnt, priv_size = get_stats()
-        # 格式化大小
+        pub_cnt, pub_size, priv_cnt, priv_size, user_cnt = get_stats()
         def fmt_size(sz):
             if sz < 1024:
                 return f"{sz} B"
@@ -582,10 +627,33 @@ class NoteHandler(BaseHTTPRequestHandler):
                     <div class="number">{priv_cnt}</div>
                     <div class="detail">总大小: {fmt_size(priv_size)}</div>
                 </div>
+                <div class="stat-card">
+                    <h3>注册用户</h3>
+                    <div class="number">{user_cnt}</div>
+                    <div class="detail">已注册账号</div>
+                </div>
             </div>
             <p style="margin-top: 24px;"><a href="/">返回首页</a></p>
         """
         return self._render_base(body, "统计信息")
+
+    def _render_disclaimer(self):
+        """读取 Disclaimer.md 并显示"""
+        disclaimer_file = "Disclaimer.md"
+        if os.path.exists(disclaimer_file):
+            try:
+                with open(disclaimer_file, "r", encoding="utf-8") as f:
+                    content = f.read()
+            except Exception as e:
+                content = f"读取免责声明文件失败: {e}"
+        else:
+            content = "免责声明文件 (Disclaimer.md) 未找到。"
+        body = f"""
+            <h1>免责声明</h1>
+            <div class="disclaimer">{html.escape(content)}</div>
+            <p style="margin-top: 20px;"><a href="/">返回首页</a></p>
+        """
+        return self._render_base(body, "免责声明")
 
     def _render_note_page(self, note_id: str, content: str, username: str = None, is_world: bool = False):
         escaped_id = html.escape(note_id)
@@ -909,6 +977,14 @@ class NoteHandler(BaseHTTPRequestHandler):
             self.wfile.write(self._render_count_page().encode("utf-8"))
             return
 
+        # 免责声明
+        if path == "/disclaimer":
+            self.send_response(200)
+            self.send_header("Content-Type", self._HTML_HEADER)
+            self.end_headers()
+            self.wfile.write(self._render_disclaimer().encode("utf-8"))
+            return
+
         # 纯数字路径 -> 重定向到 /world/<数字>
         digit_match = re.match(r'^/(\d+)$', path)
         if digit_match:
@@ -932,7 +1008,7 @@ class NoteHandler(BaseHTTPRequestHandler):
             self.wfile.write(self._render_login_form().encode("utf-8"))
             return
 
-        # 登出（修复：正确设置响应头并重定向）
+        # 登出
         if path == "/logout":
             token = self.get_session_cookie()
             if token:
@@ -1195,6 +1271,11 @@ def run_server(port=8080):
     print("[私有笔记] 注册登录后访问 /user/<username>/<id>")
     print("[快捷] 访问 /数字 自动重定向到 /world/数字")
     print("[统计] 访问 /count 查看笔记统计")
+    print("[免责] 访问 /disclaimer 查看免责声明")
+    if SESSION_TIMEOUT_ENABLED:
+        print(f"[超时] 会话超时已启用，超时时间 {SESSION_TIMEOUT_MINUTES} 分钟")
+    else:
+        print("[超时] 会话超时未启用")
     print("[提示] 按 Ctrl+C 停止服务")
     try:
         httpd.serve_forever()
