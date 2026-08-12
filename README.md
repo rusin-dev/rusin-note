@@ -40,7 +40,13 @@ python 版本 $\geq 3.10$。
     cd rusin-note
     ```
 
-2. 启动服务
+2. 安装依赖
+   
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+3. 启动服务
 
     ```bash
     python3 main.py
@@ -59,7 +65,13 @@ python 版本 $\geq 3.10$。
     cd rusin-note
     ```
 
-2. 启动服务
+2. 安装依赖
+   
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+3. 启动服务
 
     ```bash
     python3 main.py
@@ -68,7 +80,7 @@ python 版本 $\geq 3.10$。
     nohup python3 rusin-note.py > app.log 2>&1 &
     ```
 
-3. 配置 Nginx（可选）
+4. 配置 Nginx（可选）
 
     创建站点配置
 

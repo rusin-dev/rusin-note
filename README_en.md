@@ -36,7 +36,13 @@ Python version $\geq 3.10$.
     cd rusin-note
     ```
 
-2. Start the server
+2. Dependency installation
+
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+3. Start the server
 
     ```bash
     python3 main.py
@@ -55,7 +61,12 @@ Connect to your server, then:
     cd rusin-note
     ```
 
-2. Start the server
+2. Dependency installation
+
+   ```bash
+   pip install -r requirements.txt
+   ```
+3. Start the server
 
     ```bash
     python3 main.py
@@ -64,7 +75,7 @@ Connect to your server, then:
     nohup python3 rusin-note.py > app.log 2>&1 &
     ```
 
-3. Configure Nginx (optional)
+4. Configure Nginx (optional)
 
     Create a site configuration:
 

@@ -1,0 +1,27 @@
+# Python 编译缓存
+__pycache__/
+*.pyc
+*.pyo
+
+# 虚拟环境
+venv/
+env/
+.venv/
+
+# 编辑器/IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# 环境变量 / 敏感信息
+.env
+*.local
+
+# 日志 / 临时文件
+*.log
+*.tmp
+
+# 本地 json
+sessions.json
+users.json
