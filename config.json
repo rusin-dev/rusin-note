@@ -3,5 +3,11 @@
     "rate_limit": {
         "window_seconds": 60,
         "max_requests": 30
+    },
+    "id_generation": {
+        "length": 4,
+        "use_uppercase": false,
+        "use_lowercase": false,
+        "use_digits": true
     }
 }

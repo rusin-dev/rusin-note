@@ -2,6 +2,7 @@
 """
 rusin-note - 极简在线笔记服务 (支持多线程并发、IP限流、配置文件)
 内存优化版本 - 支持 Ctrl+S 保存
+支持配置随机ID生成规则
 """
 
 import os
@@ -23,6 +24,12 @@ DEFAULT_CONFIG = {
     "rate_limit": {
         "window_seconds": 60,
         "max_requests": 30
+    },
+    "id_generation": {
+        "length": 6,
+        "use_uppercase": True,
+        "use_lowercase": True,
+        "use_digits": True
     }
 }
 
@@ -39,6 +46,25 @@ config = load_config()
 MAX_CONTENT_BYTES = config.get("max_note_size_mb", 5) * 1024 * 1024
 RATE_WINDOW = config.get("rate_limit", {}).get("window_seconds", 60)
 RATE_MAX = config.get("rate_limit", {}).get("max_requests", 30)
+
+# ---------- ID生成配置 ----------
+ID_CFG = config.get("id_generation", DEFAULT_CONFIG["id_generation"])
+ID_LENGTH = ID_CFG.get("length", 6)
+USE_UPPER = ID_CFG.get("use_uppercase", True)
+USE_LOWER = ID_CFG.get("use_lowercase", True)
+USE_DIGIT = ID_CFG.get("use_digits", True)
+
+# 构建字符集
+_charset_parts = []
+if USE_UPPER:
+    _charset_parts.append(string.ascii_uppercase)
+if USE_LOWER:
+    _charset_parts.append(string.ascii_lowercase)
+if USE_DIGIT:
+    _charset_parts.append(string.digits)
+if not _charset_parts:  # 全部关闭则回退到小写字母+数字
+    _charset_parts = [string.ascii_lowercase, string.digits]
+ID_CHARSET = ''.join(_charset_parts)
 
 # ---------- 笔记存储 ----------
 NOTES_DIR = "notes"
@@ -136,10 +162,9 @@ def write_note(note_id: str, content: str) -> bool:
         return False
 
 # ---------- 辅助函数 ----------
-def generate_random_id(length=6) -> str:
-    """生成包含大小写字母和数字的随机ID"""
-    chars = string.ascii_letters + string.digits
-    return ''.join(random.choices(chars, k=length))
+def generate_random_id() -> str:
+    """根据配置生成长度为 ID_LENGTH 的随机ID"""
+    return ''.join(random.choices(ID_CHARSET, k=ID_LENGTH))
 
 # ---------- HTTP 处理器 ----------
 class NoteHandler(BaseHTTPRequestHandler):
@@ -528,6 +553,8 @@ def run_server(port=8080):
     print(f"[目录] 笔记保存在 ./{NOTES_DIR}/")
     print(f"[限制] 每个笔记最大 {MAX_CONTENT_BYTES//1024//1024}MB")
     print(f"[限流] 每个IP {RATE_MAX} 次 / {RATE_WINDOW} 秒 (仅POST)")
+    # 打印ID生成配置
+    print(f"[ID生成] 长度={ID_LENGTH}, 字符集={ID_CHARSET}")
     print("[提示] 按 Ctrl+C 停止服务")
     print("[快捷键] 在笔记页面按 Ctrl+S 保存内容")
     try:
