@@ -48,6 +48,7 @@ except ImportError:
 CONFIG_FILE = "config.json"
 DEFAULT_CONFIG = {
     "max_note_size_mb": 5,
+    "sitename": "如形の笔记",
     "rate_limit": {
         "window_seconds": 60,
         "max_requests": 30
@@ -67,11 +68,11 @@ DEFAULT_CONFIG = {
         "minutes": 60
     },
     "password_policy": {
-        "min_length": 16,
-        "require_uppercase": True,
-        "require_lowercase": True,
-        "require_digits": True,
-        "require_special": True
+        "min_length": 8,
+        "require_uppercase": true,
+        "require_lowercase": true,
+        "require_digits": true,
+        "require_special": true
     }
 }
 
@@ -85,6 +86,7 @@ def load_config():
     return DEFAULT_CONFIG
 
 config = load_config()
+SITE_NAME = config.get("sitename", "") 
 MAX_CONTENT_BYTES = config.get("max_note_size_mb", 5) * 1024 * 1024
 RATE_WINDOW = config.get("rate_limit", {}).get("window_seconds", 60)
 RATE_MAX = config.get("rate_limit", {}).get("max_requests", 30)
@@ -555,6 +557,10 @@ class NoteHandler(BaseHTTPRequestHandler):
 
     # ---------- 通用 HTML 渲染 ----------
     def _render_base(self, body: str, title="rusin-note", navbar=None, extra_head=""):
+        if SITE_NAME:
+            full_title = f"{title} | {SITE_NAME}"
+        else:
+            full_title = title
         if navbar is None:
             navbar = self._get_navbar()
         return f"""<!DOCTYPE html>
@@ -562,7 +568,8 @@ class NoteHandler(BaseHTTPRequestHandler):
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{html.escape(title)}</title>
+    <title>{html.escape(full_title)}</title>
+    <link rel="icon" href="/favicon.ico" type="image/x-icon">
     <style>
         * {{ margin: 0; padding: 0; box-sizing: border-box; }}
         body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }}
@@ -854,13 +861,23 @@ class NoteHandler(BaseHTTPRequestHandler):
     def _render_note_page(self, note_id: str, content: str, username: str = None, is_world: bool = False):
         escaped_id = html.escape(note_id)
         escaped_content = html.escape(content)
+        
+        # ---- 生成标题 ----
+        if is_world:
+            title_base = "公开笔记"
+        else:
+            title_base = "私有笔记"
+        if SITE_NAME:
+            full_title = f"{title_base} {escaped_id} | {SITE_NAME}"
+        else:
+            full_title = f"{title_base} {escaped_id}"
+        # -----------------
+        
         if is_world:
             action_url = f"/world/{escaped_id}"
-            title = f"公开笔记 - {escaped_id}"
             navbar = self._get_navbar()
         else:
             action_url = f"/user/{html.escape(username)}/{escaped_id}"
-            title = f"私有笔记 - {escaped_id}"
             navbar = self._get_navbar(username)
 
         page = f"""<!DOCTYPE html>
@@ -868,7 +885,7 @@ class NoteHandler(BaseHTTPRequestHandler):
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>rusin-note - {html.escape(title)}</title>
+    <title>{html.escape(full_title)}</title>
     <style>
         * {{ margin: 0; padding: 0; box-sizing: border-box; }}
         body {{
@@ -1270,6 +1287,21 @@ class NoteHandler(BaseHTTPRequestHandler):
             self._clear_session_cookie()
             self.send_header("Location", "/")
             self.end_headers()
+            return
+        
+        # 处理 favicon.ico
+        if path == "/favicon.ico":
+            ico_path = "favicon.ico"  # 根目录下的 .ico 文件
+            if os.path.exists(ico_path):
+                with open(ico_path, "rb") as f:
+                    data = f.read()
+                self.send_response(200)
+                self.send_header("Content-Type", "image/x-icon")
+                self.send_header("Content-Length", str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
+            else:
+                self.send_error(404, "Favicon not found")
             return
 
         # ---------- 新增：公开笔记 Markdown 渲染 /world/<id>/md ----------
