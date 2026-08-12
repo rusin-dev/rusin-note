@@ -1,0 +1,36 @@
+name: Auto-merge dev to main (no PR)
+
+on:
+  schedule:
+    # 每天凌晨 2:00 (UTC) 运行，即北京时间上午 10:00
+    - cron: "0 2 * * *"
+  workflow_dispatch:  # 允许手动触发
+
+jobs:
+  merge:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.AUTO_MERGE_TOKEN }}  # 使用 PAT 而不是 GITHUB_TOKEN
+
+      - name: 配置 Git 用户
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: 合并 dev 到 main
+        run: |
+          # 切换到 main 分支
+          git checkout main
+          # 拉取最新的 dev
+          git fetch origin dev
+          # 合并 dev 到 main（使用 --no-ff 保留历史）
+          git merge origin/dev --no-ff -m "Auto-merge from dev"
+          # 推送到远程 main（此时会绕过 PR 要求，因为使用了 PAT）
+          git push origin main
