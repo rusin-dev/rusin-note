@@ -3,7 +3,7 @@
     <h1><b>Rusin-Note</b></h1>
     <p><em>🖊︎ A lightweight cloud clipboard project that resembles note.ms can be deployed by VPS.</em></p>
     <p>
-        <a href="https://github.com/MarSeventh/CloudFlare-ImgBed/blob/main/README.md">简体中文</a> | English | <a href="https://note.rusin7.com">Demo</a>
+        <a href="https://github.com/rusin-dev/rusin-note/blob/main/README.md">简体中文</a> | English | <a href="https://note.rusin7.com">Demo</a>
     </p>
     <p align="center">
         <a href="https://github.com/rusin-dev/rusin-note/blob/main/LICENSE"><img src="https://img.shields.io/github/license/rusin-dev/rusin-note" alt="License" /></a>
