@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """
-rusin-note - 极简在线笔记服务 (支持多线程并发、IP限流、配置文件)
-内存优化版本 - 支持 Ctrl+S 保存
-支持配置随机ID生成规则
+rusin-note - 极简在线笔记服务 (支持匿名公开笔记 /world/ 和私有用户笔记 /user/)
+- 公开笔记无需登录，直接访问 /world/<id> 即可编辑
+- 私有笔记需注册登录，路径 /user/<username>/<note_id>
+- 顶部导航栏，登录/注册/登出
+- 密码强度要求严格
 """
 
 import os
@@ -13,6 +15,8 @@ import html
 import random
 import string
 import urllib.parse
+import hashlib
+import secrets
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from collections import defaultdict
 from threading import Lock
@@ -54,7 +58,6 @@ USE_UPPER = ID_CFG.get("use_uppercase", True)
 USE_LOWER = ID_CFG.get("use_lowercase", True)
 USE_DIGIT = ID_CFG.get("use_digits", True)
 
-# 构建字符集
 _charset_parts = []
 if USE_UPPER:
     _charset_parts.append(string.ascii_uppercase)
@@ -62,21 +65,118 @@ if USE_LOWER:
     _charset_parts.append(string.ascii_lowercase)
 if USE_DIGIT:
     _charset_parts.append(string.digits)
-if not _charset_parts:  # 全部关闭则回退到小写字母+数字
+if not _charset_parts:
     _charset_parts = [string.ascii_lowercase, string.digits]
 ID_CHARSET = ''.join(_charset_parts)
 
-# ---------- 笔记存储 ----------
-NOTES_DIR = "notes"
-os.makedirs(NOTES_DIR, exist_ok=True)
+# ---------- 用户与会话存储 ----------
+USER_FILE = "users.json"
+SESSION_FILE = "sessions.json"
+NOTES_BASE = "notes"
+os.makedirs(NOTES_BASE, exist_ok=True)
 
-# ---------- IP限流数据结构（优化版：使用固定大小数组） ----------
+users = {}
+sessions = {}
+users_lock = Lock()
+sessions_lock = Lock()
+
+# 禁止的笔记ID（与路由冲突）
+FORBIDDEN_NOTE_IDS = {"user", "world"}
+
+def load_users():
+    global users
+    if os.path.exists(USER_FILE):
+        try:
+            with open(USER_FILE, "r", encoding="utf-8") as f:
+                users = json.load(f)
+        except Exception:
+            users = {}
+    else:
+        users = {}
+
+def save_users():
+    with users_lock:
+        try:
+            with open(USER_FILE, "w", encoding="utf-8") as f:
+                json.dump(users, f, indent=2, ensure_ascii=False)
+        except Exception as e:
+            print(f"[错误] 保存用户数据失败: {e}")
+
+def load_sessions():
+    global sessions
+    if os.path.exists(SESSION_FILE):
+        try:
+            with open(SESSION_FILE, "r", encoding="utf-8") as f:
+                sessions = json.load(f)
+        except Exception:
+            sessions = {}
+    else:
+        sessions = {}
+
+def save_sessions():
+    with sessions_lock:
+        try:
+            with open(SESSION_FILE, "w", encoding="utf-8") as f:
+                json.dump(sessions, f, indent=2, ensure_ascii=False)
+        except Exception as e:
+            print(f"[错误] 保存会话数据失败: {e}")
+
+load_users()
+load_sessions()
+
+# ---------- 密码与认证工具 ----------
+def generate_salt():
+    return secrets.token_hex(8)
+
+def hash_password(password: str, salt: str) -> str:
+    return hashlib.sha256((salt + password).encode()).hexdigest()
+
+def verify_password(password: str, salt: str, hashed: str) -> bool:
+    return hash_password(password, salt) == hashed
+
+def generate_session_token():
+    return secrets.token_hex(32)
+
+def create_session(username: str) -> str:
+    token = generate_session_token()
+    with sessions_lock:
+        sessions[token] = username
+    save_sessions()
+    return token
+
+def delete_session(token: str):
+    with sessions_lock:
+        if token in sessions:
+            del sessions[token]
+    save_sessions()
+
+def get_session_user(token: str) -> str | None:
+    with sessions_lock:
+        return sessions.get(token)
+
+# ---------- 密码复杂度检查 ----------
+def check_password_complexity(password: str) -> bool:
+    if len(password) < 16:
+        return False
+    if not re.search(r'[A-Z]', password):
+        return False
+    if not re.search(r'[a-z]', password):
+        return False
+    if not re.search(r'[0-9]', password):
+        return False
+    # 特殊字符：至少一个，且排除 / \ ( ) " '
+    excluded = r'\/\(\)"\''
+    special_pattern = r'[^A-Za-z0-9' + re.escape(excluded) + r']'
+    if not re.search(special_pattern, password):
+        return False
+    return True
+
+# ---------- IP限流（原样保留） ----------
 ip_requests = defaultdict(list)
 ip_lock = Lock()
-MAX_RECORDS_PER_IP = RATE_MAX * 2  # 限制每个IP最多保存的记录数
+MAX_RECORDS_PER_IP = RATE_MAX * 2
 
 def cleanup_old_records(records, cutoff):
-    """清理过期记录，使用手动遍历避免创建新列表"""
     i = 0
     while i < len(records):
         if records[i] <= cutoff:
@@ -85,37 +185,41 @@ def cleanup_old_records(records, cutoff):
             i += 1
 
 def is_rate_limited(ip: str) -> bool:
-    """检查IP是否超过限制，若未超则记录本次请求（内存优化版）"""
     now = time.time()
     with ip_lock:
         records = ip_requests[ip]
         cutoff = now - RATE_WINDOW
-        
-        # 清理过期记录（原地修改）
         cleanup_old_records(records, cutoff)
-        
-        # 判断是否已满
         if len(records) >= RATE_MAX:
             return True
-        
-        # 添加当前请求时间
         records.append(now)
-        
-        # 如果记录数超过限制，删除最旧的记录
         if len(records) > MAX_RECORDS_PER_IP:
             del records[:len(records) - MAX_RECORDS_PER_IP]
-        
         return False
 
-# ---------- 文件操作（优化版） ----------
-def get_note_path(note_id: str):
-    if not re.match(r'^[\w\-_\u4e00-\u9fff]+$', note_id):
-        return None
-    safe_id = os.path.basename(note_id)
-    return os.path.join(NOTES_DIR, f"{safe_id}.txt")
+# ---------- 笔记文件操作 ----------
+def validate_username(username: str) -> bool:
+    return bool(re.match(r'^[a-zA-Z0-9_\-]+$', username))
 
-def read_note(note_id: str) -> str:
-    path = get_note_path(note_id)
+def validate_note_id(note_id: str) -> bool:
+    if note_id in FORBIDDEN_NOTE_IDS:
+        return False
+    return bool(re.match(r'^[a-zA-Z0-9_\-]+$', note_id))
+
+def get_user_note_dir(username: str) -> str:
+    path = os.path.join(NOTES_BASE, username)
+    os.makedirs(path, exist_ok=True)
+    return path
+
+def get_note_path(username: str, note_id: str) -> str | None:
+    if not validate_username(username) or not validate_note_id(note_id):
+        return None
+    user_dir = get_user_note_dir(username)
+    safe_id = os.path.basename(note_id)
+    return os.path.join(user_dir, f"{safe_id}.txt")
+
+def read_note(username: str, note_id: str) -> str:
+    path = get_note_path(username, note_id)
     if path is None:
         return ""
     try:
@@ -126,16 +230,10 @@ def read_note(note_id: str) -> str:
     except (IOError, OSError):
         return ""
 
-def write_note(note_id: str, content: str) -> bool:
-    """
-    写入笔记内容。若 content 为空字符串，则删除对应的文件（如果存在）。
-    返回 True 表示操作成功，False 表示失败。
-    """
-    path = get_note_path(note_id)
+def write_note(username: str, note_id: str, content: str) -> bool:
+    path = get_note_path(username, note_id)
     if path is None:
         return False
-
-    # 空内容：删除文件
     if content == "":
         try:
             if os.path.exists(path):
@@ -143,8 +241,6 @@ def write_note(note_id: str, content: str) -> bool:
             return True
         except OSError:
             return False
-
-    # 非空内容：写入文件（原子替换）
     try:
         temp_path = path + ".tmp"
         with open(temp_path, "w", encoding="utf-8") as f:
@@ -161,22 +257,32 @@ def write_note(note_id: str, content: str) -> bool:
             pass
         return False
 
-# ---------- 辅助函数 ----------
+def list_user_notes(username: str) -> list[str]:
+    user_dir = get_user_note_dir(username)
+    notes = []
+    for fname in os.listdir(user_dir):
+        if fname.endswith(".txt"):
+            note_id = fname[:-4]
+            if validate_note_id(note_id):
+                notes.append(note_id)
+    return notes
+
+# ---------- 随机ID生成 ----------
 def generate_random_id() -> str:
-    """根据配置生成长度为 ID_LENGTH 的随机ID"""
-    return ''.join(random.choices(ID_CHARSET, k=ID_LENGTH))
+    while True:
+        rid = ''.join(random.choices(ID_CHARSET, k=ID_LENGTH))
+        if rid not in FORBIDDEN_NOTE_IDS:
+            return rid
 
 # ---------- HTTP 处理器 ----------
 class NoteHandler(BaseHTTPRequestHandler):
-    # 类级别缓存常用响应头
     _HTML_HEADER = "text/html; charset=utf-8"
-    
+
     def log_request(self, code='-', size='-'):
         if code != 200:
             super().log_request(code, size)
 
     def get_client_ip(self) -> str:
-        """从请求头获取真实IP，支持代理"""
         forwarded = self.headers.get("X-Forwarded-For")
         if forwarded:
             ip = forwarded.split(",", 1)[0].strip()
@@ -186,82 +292,230 @@ class NoteHandler(BaseHTTPRequestHandler):
             return real_ip.strip()
         return self.client_address[0]
 
+    def get_session_cookie(self) -> str | None:
+        cookie = self.headers.get("Cookie")
+        if cookie:
+            for pair in cookie.split(";"):
+                pair = pair.strip()
+                if pair.startswith("session="):
+                    return pair[len("session="):]
+        return None
+
+    def get_current_user(self) -> str | None:
+        token = self.get_session_cookie()
+        if token:
+            return get_session_user(token)
+        return None
+
+    def is_authenticated(self, username: str) -> bool:
+        return self.get_current_user() == username
+
+    # ---------- 导航栏 ----------
+    def _get_navbar(self, current_user=None) -> str:
+        """生成顶部导航栏 HTML"""
+        if current_user is None:
+            current_user = self.get_current_user()
+        if current_user:
+            return f"""
+                <div class="navbar">
+                    <span class="user-info">用户: {html.escape(current_user)}</span>
+                    <span class="nav-links">
+                        <a href="/user/{html.escape(current_user)}/">我的笔记</a>
+                        <a href="/user/{html.escape(current_user)}/new">新建笔记</a>
+                        <a href="/logout">登出</a>
+                    </span>
+                </div>
+            """
+        else:
+            return """
+                <div class="navbar">
+                    <span class="user-info">匿名</span>
+                    <span class="nav-links">
+                        <a href="/register">注册</a>
+                        <a href="/login">登录</a>
+                    </span>
+                </div>
+            """
+
+    # ---------- 辅助响应 ----------
     def _send_redirect(self, location):
-        """发送重定向响应"""
         self.send_response(302)
         self.send_header("Location", location)
         self.end_headers()
 
-    def do_GET(self):
-        parsed = urllib.parse.urlparse(self.path)
-        path = parsed.path
+    def _set_session_cookie(self, token: str):
+        self.send_header("Set-Cookie", f"session={token}; Path=/; HttpOnly; SameSite=Lax")
 
-        # 根路径：生成随机ID并重定向
-        if path == "/" or path == "":
-            random_id = generate_random_id()
-            self._send_redirect(f"/{random_id}")
-            return
+    def _clear_session_cookie(self):
+        self.send_header("Set-Cookie", "session=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax")
 
-        note_id = path.lstrip("/")
-        if not note_id:
-            self._send_redirect(f"/{generate_random_id()}")
-            return
-
-        if not re.match(r'^[\w\-_\u4e00-\u9fff]+$', note_id):
-            self.send_error(400, "Invalid note ID")
-            return
-
-        content = read_note(note_id)
-        html_page = self.render_page(note_id, content)
-        self.send_response(200)
-        self.send_header("Content-Type", self._HTML_HEADER)
-        self.end_headers()
-        self.wfile.write(html_page.encode("utf-8"))
-
-    def do_POST(self):
-        # ----- 限流检查 -----
-        client_ip = self.get_client_ip()
-        if is_rate_limited(client_ip):
-            self.send_error(429, f"Too many requests (max {RATE_MAX} per {RATE_WINDOW}s)")
-            return
-
-        parsed = urllib.parse.urlparse(self.path)
-        note_id = parsed.path.lstrip("/")
-        if not note_id:
-            self.send_error(400, "Missing note ID")
-            return
-        if not re.match(r'^[\w\-_\u4e00-\u9fff]+$', note_id):
-            self.send_error(400, "Invalid note ID")
-            return
-
-        content_length = int(self.headers.get("Content-Length", 0))
-        if content_length > MAX_CONTENT_BYTES:
-            self.send_error(413, f"Content too large (max {MAX_CONTENT_BYTES//1024//1024}MB)")
-            return
-
-        post_data = self.rfile.read(content_length).decode("utf-8")
-        form_data = urllib.parse.parse_qs(post_data, max_num_fields=10)
-        content = form_data.get("content", [""])[0]
-
-        # 写入笔记（若内容为空则删除文件）
-        if write_note(note_id, content):
-            self.send_response(302)
-            self.send_header("Location", f"/{note_id}")
-            self.end_headers()
-        else:
-            self.send_error(500, "Failed to save note")
-
-    def render_page(self, note_id: str, content: str) -> str:
-        """渲染HTML页面 - 包含 Ctrl+S 保存功能"""
-        escaped_content = html.escape(content)
-        escaped_id = html.escape(note_id)
-
+    # ---------- 通用 HTML 渲染 ----------
+    def _render_base(self, body: str, title="rusin-note", navbar=None):
+        if navbar is None:
+            navbar = self._get_navbar()
         return f"""<!DOCTYPE html>
 <html>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>rusin-note</title>
+    <title>{html.escape(title)}</title>
+    <style>
+        * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+        body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }}
+        .navbar {{
+            background: #f8f9fa;
+            padding: 10px 24px;
+            border-bottom: 1px solid #ddd;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            font-size: 14px;
+        }}
+        .navbar .user-info {{
+            font-weight: 500;
+        }}
+        .navbar .nav-links a {{
+            margin-left: 16px;
+            color: #0366d6;
+            text-decoration: none;
+        }}
+        .navbar .nav-links a:hover {{
+            text-decoration: underline;
+        }}
+        .container {{
+            max-width: 900px;
+            margin: 20px auto;
+            padding: 0 20px;
+        }}
+        h1 {{ font-weight: 400; border-bottom: 1px solid #eee; padding-bottom: 10px; }}
+        .form-group {{ margin-bottom: 16px; }}
+        label {{ display: block; margin-bottom: 4px; font-weight: 500; }}
+        input, button, textarea {{
+            width: 100%;
+            padding: 10px;
+            font-size: 16px;
+            box-sizing: border-box;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }}
+        button {{
+            background: #f0f0f0;
+            cursor: pointer;
+        }}
+        button:hover {{ background: #e0e0e0; }}
+        .error {{ color: #c00; }}
+        .note-list {{ list-style: none; padding: 0; }}
+        .note-list li {{ padding: 8px 0; border-bottom: 1px solid #eee; }}
+        .note-list a {{ color: #0366d6; text-decoration: none; }}
+        .note-list a:hover {{ text-decoration: underline; }}
+        .empty {{ color: #888; }}
+    </style>
+</head>
+<body>
+    {navbar}
+    <div class="container">
+        {body}
+    </div>
+</body>
+</html>"""
+
+    # ---------- 页面渲染 ----------
+    def _render_home(self):
+        body = """
+            <h1>rusin-note</h1>
+            <p>安全、私密的在线笔记服务。</p>
+            <ul style="list-style: none; padding: 0; margin-top: 20px;">
+                <li><a href="/world/" style="font-size: 18px;">匿名公开笔记 (快速开始)</a></li>
+                <li><a href="/register" style="font-size: 18px;">注册私有账号</a></li>
+                <li><a href="/login" style="font-size: 18px;">登录已有账号</a></li>
+            </ul>
+        """
+        return self._render_base(body, "首页")
+
+    def _render_register_form(self, error=""):
+        body = f"""
+            <h1>注册</h1>
+            {f'<p class="error">{html.escape(error)}</p>' if error else ''}
+            <form method="POST" action="/register">
+                <div class="form-group">
+                    <label>用户名 (字母数字下划线连字符)</label>
+                    <input type="text" name="username" required pattern="[a-zA-Z0-9_\\-]+">
+                </div>
+                <div class="form-group">
+                    <label>密码 (>=16位，含大小写字母、数字、特殊符号)</label>
+                    <input type="password" name="password" required>
+                </div>
+                <div class="form-group">
+                    <label>确认密码</label>
+                    <input type="password" name="confirm" required>
+                </div>
+                <button type="submit">注册</button>
+            </form>
+            <p style="margin-top:12px;"><a href="/login">已有账号？登录</a></p>
+        """
+        return self._render_base(body, "注册")
+
+    def _render_login_form(self, error=""):
+        body = f"""
+            <h1>登录</h1>
+            {f'<p class="error">{html.escape(error)}</p>' if error else ''}
+            <form method="POST" action="/login">
+                <div class="form-group">
+                    <label>用户名</label>
+                    <input type="text" name="username" required>
+                </div>
+                <div class="form-group">
+                    <label>密码</label>
+                    <input type="password" name="password" required>
+                </div>
+                <button type="submit">登录</button>
+            </form>
+            <p style="margin-top:12px;"><a href="/register">没有账号？注册</a></p>
+        """
+        return self._render_base(body, "登录")
+
+    def _render_user_list(self, username: str, notes: list[str]):
+        note_items = ""
+        if notes:
+            for nid in notes:
+                note_items += f'<li><a href="/user/{html.escape(username)}/{html.escape(nid)}">{html.escape(nid)}</a></li>'
+        else:
+            note_items = '<li class="empty">还没有笔记，创建一个吧</li>'
+        body = f"""
+            <h1>{html.escape(username)} 的笔记</h1>
+            <div style="margin-bottom: 16px;">
+                <a href="/user/{html.escape(username)}/new">+ 新建笔记</a>
+            </div>
+            <ul class="note-list">
+                {note_items}
+            </ul>
+        """
+        navbar = self._get_navbar(username)
+        return self._render_base(body, f"{username} 的笔记", navbar)
+
+    def _render_note_page(self, note_id: str, content: str, username: str = None, is_world: bool = False):
+        """
+        渲染笔记编辑页面，支持公开或私有。
+        username 为 None 表示公开笔记 (world)
+        """
+        escaped_id = html.escape(note_id)
+        escaped_content = html.escape(content)
+        if is_world:
+            action_url = f"/world/{escaped_id}"
+            title = f"公开笔记 - {escaped_id}"
+            navbar = self._get_navbar()  # 匿名导航
+        else:
+            action_url = f"/user/{html.escape(username)}/{escaped_id}"
+            title = f"私有笔记 - {escaped_id}"
+            navbar = self._get_navbar(username)
+
+        page = f"""<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>rusin-note - {html.escape(title)}</title>
     <style>
         * {{ margin: 0; padding: 0; box-sizing: border-box; }}
         body {{
@@ -270,11 +524,37 @@ class NoteHandler(BaseHTTPRequestHandler):
             overflow: hidden;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
         }}
+        .navbar {{
+            background: #f8f9fa;
+            padding: 8px 24px;
+            border-bottom: 1px solid #ddd;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            font-size: 14px;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 30;
+        }}
+        .navbar .user-info {{
+            font-weight: 500;
+        }}
+        .navbar .nav-links a {{
+            margin-left: 16px;
+            color: #0366d6;
+            text-decoration: none;
+        }}
+        .navbar .nav-links a:hover {{
+            text-decoration: underline;
+        }}
         form {{
             height: 100vh;
             display: flex;
             flex-direction: column;
-            position: relative;
+            padding-top: 50px; /* 为 navbar 腾空间 */
         }}
         textarea {{
             flex: 1;
@@ -401,11 +681,11 @@ class NoteHandler(BaseHTTPRequestHandler):
     </style>
 </head>
 <body>
-    <form method="POST" action="/{escaped_id}" id="noteForm">
+    {navbar}
+    <form method="POST" action="{action_url}" id="noteForm">
         <textarea name="content" id="noteContent" autofocus spellcheck="true">{escaped_content}</textarea>
         <button type="button" class="save-btn" id="saveBtn"> 保存</button>
     </form>
-    
     <div class="save-hint" id="saveHint">
          按 <kbd>Ctrl</kbd> + <kbd>S</kbd> 快速保存
     </div>
@@ -423,7 +703,6 @@ class NoteHandler(BaseHTTPRequestHandler):
             let hintTimeout = null;
             let isSaving = false;
 
-            // 显示保存提示
             function showHint(message) {{
                 if (message) {{
                     saveHint.innerHTML = message;
@@ -435,7 +714,6 @@ class NoteHandler(BaseHTTPRequestHandler):
                 }}, 4000);
             }}
 
-            // 显示保存状态
             function showStatus(message, type = '') {{
                 saveStatus.textContent = message;
                 saveStatus.className = 'save-status show';
@@ -448,12 +726,10 @@ class NoteHandler(BaseHTTPRequestHandler):
                 }}, 2500);
             }}
 
-            // 页面加载后显示提示
             setTimeout(function() {{
                 showHint(' 按 <kbd>Ctrl</kbd> + <kbd>S</kbd> 快速保存');
             }}, 600);
 
-            // 用户输入时显示提示
             let inputTimer = null;
             textarea.addEventListener('input', function() {{
                 clearTimeout(inputTimer);
@@ -462,25 +738,21 @@ class NoteHandler(BaseHTTPRequestHandler):
                 }}, 3000);
             }});
 
-            // 焦点进入文本框时显示提示
             textarea.addEventListener('focus', function() {{
                 showHint(' 按 <kbd>Ctrl</kbd> + <kbd>S</kbd> 快速保存');
             }});
 
-            // Ctrl+S 保存
             document.addEventListener('keydown', function(e) {{
                 if ((e.ctrlKey || e.metaKey) && e.key === 's') {{
                     e.preventDefault();
                     saveNote();
                 }}
-                // Escape 隐藏提示
                 if (e.key === 'Escape') {{
                     saveHint.classList.remove('show');
                     saveStatus.classList.remove('show');
                 }}
             }});
 
-            // 点击保存按钮
             saveBtn.addEventListener('click', function(e) {{
                 e.preventDefault();
                 saveNote();
@@ -489,13 +761,8 @@ class NoteHandler(BaseHTTPRequestHandler):
             function saveNote() {{
                 if (isSaving) return;
                 isSaving = true;
-                
-                // 显示保存中
                 showStatus(' 保存中...', 'saving');
-                
                 const content = textarea.value;
-                
-                // 使用 fetch 异步提交
                 fetch(window.location.href, {{
                     method: 'POST',
                     headers: {{
@@ -520,21 +787,297 @@ class NoteHandler(BaseHTTPRequestHandler):
                 }});
             }}
 
-            // 自动调整文本框高度（适应内容）
             function autoResize() {{
                 textarea.style.height = 'auto';
                 textarea.style.height = textarea.scrollHeight + 'px';
             }}
-            // 初始调整
             setTimeout(autoResize, 100);
             textarea.addEventListener('input', autoResize);
         }})();
     </script>
 </body>
 </html>"""
+        return page
+
+    # ---------- GET 请求 ----------
+    def do_GET(self):
+        parsed = urllib.parse.urlparse(self.path)
+        path = parsed.path
+
+        # 首页
+        if path == "/" or path == "":
+            self.send_response(200)
+            self.send_header("Content-Type", self._HTML_HEADER)
+            self.end_headers()
+            self.wfile.write(self._render_home().encode("utf-8"))
+            return
+
+        # 注册页面
+        if path == "/register":
+            self.send_response(200)
+            self.send_header("Content-Type", self._HTML_HEADER)
+            self.end_headers()
+            self.wfile.write(self._render_register_form().encode("utf-8"))
+            return
+
+        # 登录页面
+        if path == "/login":
+            self.send_response(200)
+            self.send_header("Content-Type", self._HTML_HEADER)
+            self.end_headers()
+            self.wfile.write(self._render_login_form().encode("utf-8"))
+            return
+
+        # 登出（修复：正确设置响应头并重定向）
+        if path == "/logout":
+            token = self.get_session_cookie()
+            if token:
+                delete_session(token)
+            self.send_response(302)
+            self._clear_session_cookie()
+            self.send_header("Location", "/")
+            self.end_headers()
+            return
+
+        # 公开笔记路径：/world/ 或 /world/<note_id>
+        world_match = re.match(r'^/world/([^/]+)?$', path)
+        if world_match:
+            note_id = world_match.group(1)
+            # 如果 /world/ 后面没有ID，生成随机ID并重定向
+            if note_id is None:
+                new_id = generate_random_id()
+                self._send_redirect(f"/world/{new_id}")
+                return
+
+            if not validate_note_id(note_id):
+                self.send_error(400, "Invalid note ID")
+                return
+
+            content = read_note("public", note_id)  # 公开笔记统一使用用户名 "public"
+            page = self._render_note_page(note_id, content, is_world=True)
+            self.send_response(200)
+            self.send_header("Content-Type", self._HTML_HEADER)
+            self.end_headers()
+            self.wfile.write(page.encode("utf-8"))
+            return
+
+        # 私有用户路径：/user/<username>[/<note_id>] 或 /user/<username>/new
+        user_match = re.match(r'^/user/([^/]+)(?:/([^/]+))?$', path)
+        if user_match:
+            username = user_match.group(1)
+            note_id = user_match.group(2)
+
+            if not validate_username(username):
+                self.send_error(400, "Invalid username")
+                return
+
+            # 认证检查
+            current_user = self.get_current_user()
+            if current_user != username:
+                # 未登录或用户名不匹配
+                self.send_response(401)
+                self.send_header("Content-Type", self._HTML_HEADER)
+                self.end_headers()
+                body = "<h1>需要登录</h1><p>请先 <a href=\"/login\">登录</a> 或 <a href=\"/register\">注册</a> 以访问您的私有笔记。</p>"
+                self.wfile.write(self._render_base(body, "请先登录").encode("utf-8"))
+                return
+
+            # 处理 /user/<username>/new -> 创建新笔记
+            if note_id == "new":
+                new_id = generate_random_id()
+                self._send_redirect(f"/user/{username}/{new_id}")
+                return
+
+            # 处理 /user/<username> -> 显示笔记列表
+            if note_id is None:
+                notes = list_user_notes(username)
+                self.send_response(200)
+                self.send_header("Content-Type", self._HTML_HEADER)
+                self.end_headers()
+                self.wfile.write(self._render_user_list(username, notes).encode("utf-8"))
+                return
+
+            # 处理 /user/<username>/<note_id> -> 显示笔记
+            if not validate_note_id(note_id):
+                self.send_error(400, "Invalid note ID")
+                return
+
+            content = read_note(username, note_id)
+            page = self._render_note_page(note_id, content, username=username, is_world=False)
+            self.send_response(200)
+            self.send_header("Content-Type", self._HTML_HEADER)
+            self.end_headers()
+            self.wfile.write(page.encode("utf-8"))
+            return
+
+        # 其他路径 -> 404
+        self.send_error(404, "Not found")
+
+    # ---------- POST 请求 ----------
+    def do_POST(self):
+        # 限流
+        client_ip = self.get_client_ip()
+        if is_rate_limited(client_ip):
+            self.send_error(429, f"Too many requests (max {RATE_MAX} per {RATE_WINDOW}s)")
+            return
+
+        parsed = urllib.parse.urlparse(self.path)
+        path = parsed.path
+
+        # 处理注册
+        if path == "/register":
+            content_length = int(self.headers.get("Content-Length", 0))
+            if content_length > 1024 * 10:
+                self.send_error(413, "Form too large")
+                return
+            post_data = self.rfile.read(content_length).decode("utf-8")
+            form = urllib.parse.parse_qs(post_data, max_num_fields=5)
+            username = form.get("username", [""])[0].strip()
+            password = form.get("password", [""])[0]
+            confirm = form.get("confirm", [""])[0]
+
+            if not validate_username(username):
+                self.send_response(200)
+                self.send_header("Content-Type", self._HTML_HEADER)
+                self.end_headers()
+                self.wfile.write(self._render_register_form("用户名只能包含字母、数字、下划线、连字符").encode("utf-8"))
+                return
+
+            with users_lock:
+                if username in users:
+                    self.send_response(200)
+                    self.send_header("Content-Type", self._HTML_HEADER)
+                    self.end_headers()
+                    self.wfile.write(self._render_register_form("用户名已存在").encode("utf-8"))
+                    return
+
+            if password != confirm:
+                self.send_response(200)
+                self.send_header("Content-Type", self._HTML_HEADER)
+                self.end_headers()
+                self.wfile.write(self._render_register_form("两次密码不一致").encode("utf-8"))
+                return
+
+            if not check_password_complexity(password):
+                self.send_response(200)
+                self.send_header("Content-Type", self._HTML_HEADER)
+                self.end_headers()
+                self.wfile.write(self._render_register_form(
+                    "密码必须>=16位，含大小写字母、数字、特殊符号（不含/\\()\"'）"
+                ).encode("utf-8"))
+                return
+
+            salt = generate_salt()
+            hashed = hash_password(password, salt)
+            with users_lock:
+                users[username] = {"salt": salt, "hash": hashed}
+            save_users()
+
+            # 自动登录
+            token = create_session(username)
+            self.send_response(302)
+            self._set_session_cookie(token)
+            self.send_header("Location", f"/user/{username}/new")
+            self.end_headers()
+            return
+
+        # 处理登录
+        if path == "/login":
+            content_length = int(self.headers.get("Content-Length", 0))
+            if content_length > 1024 * 10:
+                self.send_error(413, "Form too large")
+                return
+            post_data = self.rfile.read(content_length).decode("utf-8")
+            form = urllib.parse.parse_qs(post_data, max_num_fields=5)
+            username = form.get("username", [""])[0].strip()
+            password = form.get("password", [""])[0]
+
+            with users_lock:
+                user = users.get(username)
+            if not user:
+                self.send_response(200)
+                self.send_header("Content-Type", self._HTML_HEADER)
+                self.end_headers()
+                self.wfile.write(self._render_login_form("用户名或密码错误").encode("utf-8"))
+                return
+
+            salt = user["salt"]
+            hashed = user["hash"]
+            if not verify_password(password, salt, hashed):
+                self.send_response(200)
+                self.send_header("Content-Type", self._HTML_HEADER)
+                self.end_headers()
+                self.wfile.write(self._render_login_form("用户名或密码错误").encode("utf-8"))
+                return
+
+            token = create_session(username)
+            self.send_response(302)
+            self._set_session_cookie(token)
+            self.send_header("Location", f"/user/{username}/")
+            self.end_headers()
+            return
+
+        # 处理公开笔记保存：/world/<note_id>
+        world_match = re.match(r'^/world/([^/]+)$', path)
+        if world_match:
+            note_id = world_match.group(1)
+            if not validate_note_id(note_id):
+                self.send_error(400, "Invalid note ID")
+                return
+
+            content_length = int(self.headers.get("Content-Length", 0))
+            if content_length > MAX_CONTENT_BYTES:
+                self.send_error(413, f"Content too large (max {MAX_CONTENT_BYTES//1024//1024}MB)")
+                return
+
+            post_data = self.rfile.read(content_length).decode("utf-8")
+            form = urllib.parse.parse_qs(post_data, max_num_fields=10)
+            content = form.get("content", [""])[0]
+
+            if write_note("public", note_id, content):
+                self.send_response(302)
+                self.send_header("Location", f"/world/{note_id}")
+                self.end_headers()
+            else:
+                self.send_error(500, "Failed to save note")
+            return
+
+        # 处理私有笔记保存：/user/<username>/<note_id>
+        user_match = re.match(r'^/user/([^/]+)/([^/]+)$', path)
+        if user_match:
+            username = user_match.group(1)
+            note_id = user_match.group(2)
+
+            if not validate_username(username) or not validate_note_id(note_id):
+                self.send_error(400, "Invalid username or note ID")
+                return
+
+            # 认证
+            if not self.is_authenticated(username):
+                self.send_error(401, "Unauthorized")
+                return
+
+            content_length = int(self.headers.get("Content-Length", 0))
+            if content_length > MAX_CONTENT_BYTES:
+                self.send_error(413, f"Content too large (max {MAX_CONTENT_BYTES//1024//1024}MB)")
+                return
+
+            post_data = self.rfile.read(content_length).decode("utf-8")
+            form = urllib.parse.parse_qs(post_data, max_num_fields=10)
+            content = form.get("content", [""])[0]
+
+            if write_note(username, note_id, content):
+                self.send_response(302)
+                self.send_header("Location", f"/user/{username}/{note_id}")
+                self.end_headers()
+            else:
+                self.send_error(500, "Failed to save note")
+            return
+
+        # 其他POST -> 404
+        self.send_error(404, "Not found")
 
     def send_error(self, code, message=None, explain=None):
-        """优化错误响应"""
         self.log_error(f"code {code}, message {message}")
         self.send_response(code)
         self.send_header("Content-Type", "text/html; charset=utf-8")
@@ -548,15 +1091,14 @@ class NoteHandler(BaseHTTPRequestHandler):
 def run_server(port=8080):
     server_address = ("", port)
     httpd = ThreadingHTTPServer(server_address, NoteHandler)
-    print("[启动] rusin-note 服务已启动 (内存优化版)")
+    print("[启动] rusin-note 服务已启动 (公开+私有笔记)")
     print(f"[地址] http://localhost:{port}")
-    print(f"[目录] 笔记保存在 ./{NOTES_DIR}/")
+    print(f"[目录] 笔记保存在 ./{NOTES_BASE}/ (public/ 为公开笔记)")
     print(f"[限制] 每个笔记最大 {MAX_CONTENT_BYTES//1024//1024}MB")
     print(f"[限流] 每个IP {RATE_MAX} 次 / {RATE_WINDOW} 秒 (仅POST)")
-    # 打印ID生成配置
-    print(f"[ID生成] 长度={ID_LENGTH}, 字符集={ID_CHARSET}")
+    print("[公开笔记] 访问 /world/<id> 即可匿名编辑")
+    print("[私有笔记] 注册登录后访问 /user/<username>/<id>")
     print("[提示] 按 Ctrl+C 停止服务")
-    print("[快捷键] 在笔记页面按 Ctrl+S 保存内容")
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:
