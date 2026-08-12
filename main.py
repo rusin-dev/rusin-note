@@ -11,6 +11,8 @@ rusin-note - 极简在线笔记服务 (支持匿名公开笔记 /world/ 和私�
 - Cookie使用SHA-256哈希存储，会话支持超时清除
 - 支持将公开笔记渲染为 Markdown（只读）：/world/<id>/md
 - XSS防护：使用bleach清洗Markdown渲染后的HTML
+- GET请求独立限流（45次/分钟）
+- 编辑区 Tab 键插入 4 个空格
 """
 
 import os
@@ -50,6 +52,10 @@ DEFAULT_CONFIG = {
         "window_seconds": 60,
         "max_requests": 30
     },
+    "get_rate_limit": {                     # ADDED: GET请求独立限流
+        "window_seconds": 60,
+        "max_requests": 45
+    },
     "id_generation": {
         "length": 6,
         "use_uppercase": True,
@@ -82,6 +88,11 @@ config = load_config()
 MAX_CONTENT_BYTES = config.get("max_note_size_mb", 5) * 1024 * 1024
 RATE_WINDOW = config.get("rate_limit", {}).get("window_seconds", 60)
 RATE_MAX = config.get("rate_limit", {}).get("max_requests", 30)
+
+# GET限流配置
+GET_RATE_CFG = config.get("get_rate_limit", DEFAULT_CONFIG["get_rate_limit"])
+GET_RATE_WINDOW = GET_RATE_CFG.get("window_seconds", 60)
+GET_RATE_MAX = GET_RATE_CFG.get("max_requests", 45)
 
 # 会话超时配置
 SESSION_TIMEOUT_ENABLED = config.get("session_timeout", {}).get("enabled", False)
@@ -253,7 +264,7 @@ def check_password_complexity(password: str) -> bool:
             return False
     return True
 
-# ---------- IP限流 ----------
+# ---------- IP限流（POST） ----------
 ip_requests = defaultdict(list)
 ip_lock = Lock()
 MAX_RECORDS_PER_IP = RATE_MAX * 2
@@ -277,6 +288,24 @@ def is_rate_limited(ip: str) -> bool:
         records.append(now)
         if len(records) > MAX_RECORDS_PER_IP:
             del records[:len(records) - MAX_RECORDS_PER_IP]
+        return False
+
+# ---------- IP限流（GET） ---------- ADDED
+ip_get_requests = defaultdict(list)
+ip_get_lock = Lock()
+MAX_GET_RECORDS_PER_IP = GET_RATE_MAX * 2
+
+def is_get_rate_limited(ip: str) -> bool:
+    now = time.time()
+    with ip_get_lock:
+        records = ip_get_requests[ip]
+        cutoff = now - GET_RATE_WINDOW
+        cleanup_old_records(records, cutoff)  # 复用清理函数
+        if len(records) >= GET_RATE_MAX:
+            return True
+        records.append(now)
+        if len(records) > MAX_GET_RECORDS_PER_IP:
+            del records[:len(records) - MAX_GET_RECORDS_PER_IP]
         return False
 
 # ---------- 笔记文件操作 ----------
@@ -969,6 +998,17 @@ class NoteHandler(BaseHTTPRequestHandler):
             let hintTimeout = null;
             let isSaving = false;
 
+            // ADDED: Tab键插入4个空格
+            textarea.addEventListener('keydown', function(e) {{
+                if (e.key === 'Tab') {{
+                    e.preventDefault();
+                    const start = this.selectionStart;
+                    const end = this.selectionEnd;
+                    this.value = this.value.substring(0, start) + '    ' + this.value.substring(end);
+                    this.selectionStart = this.selectionEnd = start + 4;
+                }}
+            }});
+
             function showHint(message) {{
                 if (message) {{
                     saveHint.innerHTML = message;
@@ -1107,6 +1147,12 @@ class NoteHandler(BaseHTTPRequestHandler):
 
     # ---------- GET 请求 ----------
     def do_GET(self):
+        client_ip = self.get_client_ip()
+        # ADDED: GET独立限流
+        if is_get_rate_limited(client_ip):
+            self.send_error(429, f"Too many GET requests (max {GET_RATE_MAX} per {GET_RATE_WINDOW}s)")
+            return
+
         parsed = urllib.parse.urlparse(self.path)
         path = parsed.path
 
@@ -1206,7 +1252,8 @@ class NoteHandler(BaseHTTPRequestHandler):
             return
 
         # 私有用户路径：/user/<username>[/<note_id>] 或 /user/<username>/new
-        user_match = re.match(r'^/user/([^/]+)(?:/([^/]+))?$', path)
+        # MODIFIED: 允许尾部斜杠
+        user_match = re.match(r'^/user/([^/]+)(?:/([^/]+))?/?$', path)
         if user_match:
             username = user_match.group(1)
             note_id = user_match.group(2)
@@ -1432,7 +1479,8 @@ def run_server(port=8080):
     print(f"[地址] http://localhost:{port}")
     print(f"[目录] 笔记保存在 ./{NOTES_BASE}/ (public/ 为公开笔记)")
     print(f"[限制] 每个笔记最大 {MAX_CONTENT_BYTES//1024//1024}MB")
-    print(f"[限流] 每个IP {RATE_MAX} 次 / {RATE_WINDOW} 秒 (仅POST)")
+    print(f"[限流] POST: 每个IP {RATE_MAX} 次 / {RATE_WINDOW} 秒")
+    print(f"[限流] GET:  每个IP {GET_RATE_MAX} 次 / {GET_RATE_WINDOW} 秒")
     print("[公开笔记] 访问 /world/<id> 即可匿名编辑")
     print("[私有笔记] 注册登录后访问 /user/<username>/<id>")
     print("[快捷] 访问 /数字 自动重定向到 /world/数字")
