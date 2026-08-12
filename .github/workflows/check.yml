@@ -2,11 +2,11 @@ name: CI
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "main", "dev" ]
     paths-ignore:
       - '**.md'
   pull_request:
-    branches: [ "main" ]
+    branches: [ "main", "dev" ]
     paths-ignore:
       - '**.md'
 
@@ -27,7 +27,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           # 如果你的项目有 requirements.txt，请取消下一行注释
-          # pip install -r requirements.txt
+          pip install -r requirements.txt
 
       - name: 后台启动服务（监听 3000 端口）并健康检查
         run: |
