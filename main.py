@@ -9,6 +9,8 @@ import re
 import json
 import time
 import html
+import random
+import string
 import urllib.parse
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from collections import defaultdict
@@ -86,7 +88,6 @@ def get_note_path(note_id: str):
     safe_id = os.path.basename(note_id)
     return os.path.join(NOTES_DIR, f"{safe_id}.txt")
 
-
 def read_note(note_id: str) -> str:
     path = get_note_path(note_id)
     if path is None:
@@ -99,19 +100,31 @@ def read_note(note_id: str) -> str:
     except (IOError, OSError):
         return ""
 
-
 def write_note(note_id: str, content: str) -> bool:
+    """
+    写入笔记内容。若 content 为空字符串，则删除对应的文件（如果存在）。
+    返回 True 表示操作成功，False 表示失败。
+    """
     path = get_note_path(note_id)
     if path is None:
         return False
+
+    # 空内容：删除文件
+    if content == "":
+        try:
+            if os.path.exists(path):
+                os.remove(path)
+            return True
+        except OSError:
+            return False
+
+    # 非空内容：写入文件（原子替换）
     try:
-        # 使用临时文件写入，减少内存占用
         temp_path = path + ".tmp"
         with open(temp_path, "w", encoding="utf-8") as f:
             f.write(content)
             f.flush()
             os.fsync(f.fileno())
-        # 原子替换
         os.replace(temp_path, path)
         return True
     except (IOError, OSError):
@@ -121,6 +134,12 @@ def write_note(note_id: str, content: str) -> bool:
         except:
             pass
         return False
+
+# ---------- 辅助函数 ----------
+def generate_random_id(length=6) -> str:
+    """生成包含大小写字母和数字的随机ID"""
+    chars = string.ascii_letters + string.digits
+    return ''.join(random.choices(chars, k=length))
 
 # ---------- HTTP 处理器 ----------
 class NoteHandler(BaseHTTPRequestHandler):
@@ -152,13 +171,15 @@ class NoteHandler(BaseHTTPRequestHandler):
         parsed = urllib.parse.urlparse(self.path)
         path = parsed.path
 
+        # 根路径：生成随机ID并重定向
         if path == "/" or path == "":
-            self._send_redirect("/welcome")
+            random_id = generate_random_id()
+            self._send_redirect(f"/{random_id}")
             return
 
         note_id = path.lstrip("/")
         if not note_id:
-            self._send_redirect("/welcome")
+            self._send_redirect(f"/{generate_random_id()}")
             return
 
         if not re.match(r'^[\w\-_\u4e00-\u9fff]+$', note_id):
@@ -197,6 +218,7 @@ class NoteHandler(BaseHTTPRequestHandler):
         form_data = urllib.parse.parse_qs(post_data, max_num_fields=10)
         content = form_data.get("content", [""])[0]
 
+        # 写入笔记（若内容为空则删除文件）
         if write_note(note_id, content):
             self.send_response(302)
             self.send_header("Location", f"/{note_id}")
