@@ -10,6 +10,7 @@ rusin-note - 极简在线笔记服务 (支持匿名公开笔记 /world/ 和私�
 - 免责声明 /disclaimer，支持Markdown渲染
 - Cookie使用SHA-256哈希存储，会话支持超时清除
 - 支持将公开笔记渲染为 Markdown（只读）：/world/<id>/md
+- XSS防护：使用bleach清洗Markdown渲染后的HTML
 """
 
 import os
@@ -25,6 +26,21 @@ import secrets
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from collections import defaultdict
 from threading import Lock
+
+# ---------- 尝试导入 Markdown 和 Bleach（用于安全渲染） ----------
+try:
+    import markdown
+    MARKDOWN_AVAILABLE = True
+except ImportError:
+    markdown = None
+    MARKDOWN_AVAILABLE = False
+
+try:
+    import bleach
+    BLEACH_AVAILABLE = True
+except ImportError:
+    bleach = None
+    BLEACH_AVAILABLE = False
 
 # ---------- 加载配置 ----------
 CONFIG_FILE = "config.json"
@@ -723,25 +739,30 @@ class NoteHandler(BaseHTTPRequestHandler):
         else:
             content = "免责声明文件 (Disclaimer.md) 未找到。"
 
-        # 尝试使用 markdown 库渲染
-        try:
-            import markdown
-            html_content = markdown.markdown(content, extensions=['extra', 'codehilite'])
-            body = f"""
-                <h1>免责声明</h1>
-                <div class="disclaimer markdown-body">{html_content}</div>
-                <p style="margin-top: 20px;"><a href="/">返回首页</a></p>
-            """
-            return self._render_base(body, "免责声明", extra_head="")
-        except ImportError:
-            # 没有 markdown 库，降级为纯文本
-            body = f"""
-                <h1>免责声明</h1>
-                <div class="disclaimer">{html.escape(content)}</div>
-                <p style="margin-top: 20px;"><a href="/">返回首页</a></p>
-                <p style="color: #888; font-size: 14px;">提示: 安装 markdown 库以支持 Markdown 渲染 (pip install markdown)</p>
-            """
-            return self._render_base(body, "免责声明")
+        # 尝试使用 markdown 库渲染（同样需要安全清洗，但此处内容由管理员控制，风险较低，不过仍建议统一使用安全渲染）
+        if MARKDOWN_AVAILABLE and BLEACH_AVAILABLE:
+            try:
+                raw_html = markdown.markdown(content, extensions=['extra', 'codehilite'])
+                ALLOWED_TAGS = ['p', 'br', 'strong', 'em', 'u', 'strike', 'a', 'ul', 'ol', 'li', 'blockquote', 'pre', 'code', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'hr', 'table', 'thead', 'tbody', 'tr', 'th', 'td', 'div', 'span']
+                ALLOWED_ATTRS = {'*': ['class'], 'a': ['href', 'title', 'target']}
+                html_content = bleach.clean(raw_html, tags=ALLOWED_TAGS, attributes=ALLOWED_ATTRS, strip=True)
+                body = f"""
+                    <h1>免责声明</h1>
+                    <div class="disclaimer markdown-body">{html_content}</div>
+                    <p style="margin-top: 20px;"><a href="/">返回首页</a></p>
+                """
+                return self._render_base(body, "免责声明", extra_head="")
+            except Exception:
+                pass  # 降级到纯文本
+
+        # 降级：纯文本（安全）
+        body = f"""
+            <h1>免责声明</h1>
+            <div class="disclaimer">{html.escape(content)}</div>
+            <p style="margin-top: 20px;"><a href="/">返回首页</a></p>
+            <p style="color: #888; font-size: 14px;">提示: 安装 markdown 和 bleach 库以支持安全 Markdown 渲染 (pip install markdown bleach)</p>
+        """
+        return self._render_base(body, "免责声明")
 
     def _render_note_page(self, note_id: str, content: str, username: str = None, is_world: bool = False):
         escaped_id = html.escape(note_id)
@@ -1044,15 +1065,36 @@ class NoteHandler(BaseHTTPRequestHandler):
 </html>"""
         return page
 
-    # ---------- 新增：只读 Markdown 渲染页面 ----------
+    # ---------- 新增：只读 Markdown 渲染页面（安全清洗） ----------
     def _render_markdown_page(self, note_id: str, content: str):
-        # 尝试使用 markdown 库渲染
-        try:
-            import markdown
-            html_content = markdown.markdown(content, extensions=['extra', 'codehilite'])
-        except ImportError:
-            # 降级为纯文本，用 <pre> 包裹
+        """
+        渲染公开笔记为 Markdown 只读页面。
+        使用 bleach 清洗 HTML，防止 XSS。
+        """
+        # 如果 markdown 和 bleach 都可用，则安全渲染
+        if MARKDOWN_AVAILABLE and BLEACH_AVAILABLE:
+            try:
+                raw_html = markdown.markdown(content, extensions=['extra', 'codehilite'])
+                # 定义白名单标签和属性
+                ALLOWED_TAGS = [
+                    'p', 'br', 'strong', 'em', 'u', 'strike', 'a',
+                    'ul', 'ol', 'li', 'blockquote', 'pre', 'code',
+                    'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'hr',
+                    'table', 'thead', 'tbody', 'tr', 'th', 'td',
+                    'div', 'span'  # 允许容器标签
+                ]
+                ALLOWED_ATTRS = {
+                    '*': ['class'],          # 允许 class（用于代码高亮等）
+                    'a': ['href', 'title', 'target']
+                }
+                html_content = bleach.clean(raw_html, tags=ALLOWED_TAGS, attributes=ALLOWED_ATTRS, strip=True)
+            except Exception:
+                # 渲染失败，降级为纯文本
+                html_content = f"<pre>{html.escape(content)}</pre>"
+        else:
+            # 缺少依赖，降级为纯文本（安全）
             html_content = f"<pre>{html.escape(content)}</pre>"
+
         navbar = self._get_navbar()  # 匿名导航
         body = f"""
             <h1>公开笔记 · {html.escape(note_id)} <span style="font-size:0.6em; font-weight:400; color:#888;">只读</span></h1>
@@ -1134,10 +1176,7 @@ class NoteHandler(BaseHTTPRequestHandler):
                 self.send_error(400, "Invalid note ID")
                 return
             content = read_note("public", note_id)
-            if content == "":
-                # 如果笔记不存在，返回404或空内容？我们渲染空内容，但可提示
-                # 我们可以显示“笔记不存在”但也可以显示空内容，但为了友好，显示提示
-                pass
+            # 即使内容为空也渲染（显示空白）
             page = self._render_markdown_page(note_id, content)
             self.send_response(200)
             self.send_header("Content-Type", self._HTML_HEADER)
@@ -1399,11 +1438,18 @@ def run_server(port=8080):
     print("[快捷] 访问 /数字 自动重定向到 /world/数字")
     print("[统计] 访问 /count 查看笔记统计")
     print("[免责] 访问 /disclaimer 查看免责声明 (支持Markdown)")
-    print("[Markdown] 访问 /world/<id>/md 渲染公开笔记为只读 Markdown")
+    print("[Markdown] 访问 /world/<id>/md 渲染公开笔记为只读 Markdown (已启用XSS防护)")
     if SESSION_TIMEOUT_ENABLED:
         print(f"[超时] 会话超时已启用，超时时间 {SESSION_TIMEOUT_MINUTES} 分钟")
     else:
         print("[超时] 会话超时未启用")
+
+    # 检查依赖状态
+    if not MARKDOWN_AVAILABLE:
+        print("[警告] Markdown 库未安装，Markdown 渲染功能将降级为纯文本 (pip install markdown)")
+    if not BLEACH_AVAILABLE:
+        print("[警告] Bleach 库未安装，Markdown 渲染将不进行安全清洗，请尽快安装 (pip install bleach)")
+
     print("[提示] 按 Ctrl+C 停止服务")
     try:
         httpd.serve_forever()
