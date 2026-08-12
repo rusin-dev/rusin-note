@@ -148,7 +148,7 @@ rusin-note:.
 
 - `session_timeout`：Session timeout configuration.
     - `enabled`：Enable session timeout, default `false`.
-    - `minutes`：Timeout duration (in **seconds**), default `1440`.
+    - `minutes`：Timeout duration (in **minutes**), default $15$.
 
     Visitors will be logged out when the session exceeds the configured time.
 - `password_policy`: password policy, defining the complexity requirements for guest passwords.  
