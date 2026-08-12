@@ -137,6 +137,7 @@ rusin-note:.
 ### 配置项解析
 
 - `max_note_size_mb`：笔记最大大小（单位：**MB**）默认 $1$。
+- `sitename`：网页名称。填你的站点名。
 - `rate_limit` 速率限制。
    
    - `window_seconds` ： 时间 $t$，默认 $60$；

@@ -132,6 +132,7 @@ rusin-note:.
 ### Configuration Options
 
 - `max_note_size_mb`：Maximum note size (in **MB**), default `1`.
+- `sitename`: Website name. Enter your site name.
 - `rate_limit`：Rate limiting configuration.
 
     - `window_seconds`：Time window $t$, default `60`.
