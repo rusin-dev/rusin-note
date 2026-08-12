@@ -17,7 +17,7 @@
   },
   "session_timeout": {
     "enabled": false,
-    "minutes": 60
+    "minutes": 1440
   },
   "password_policy": {
     "min_length": 8,

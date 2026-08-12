@@ -10,6 +10,9 @@ rusin-note - 极简在线笔记服务 (支持匿名公开笔记 /world/ 和私�
 - 免责声明 /disclaimer，支持Markdown渲染
 - Cookie使用SHA-256哈希存储，会话支持超时清除
 - 支持将公开笔记渲染为 Markdown（只读）：/world/<id>/md
+- 支持将私有笔记渲染为 Markdown（仅本人）：/user/<用户名>/<笔记ID>/md
+- 分享功能：私有笔记可生成 64 位分享链接 /share/<token>（支持只读/可编辑）
+- 分享管理：/user/<用户名>/shares/（创建/删除/查看次数）
 - XSS防护：使用bleach清洗Markdown渲染后的HTML
 - GET请求独立限流（45次/分钟）
 - 编辑区 Tab 键插入 4 个空格
@@ -69,10 +72,10 @@ DEFAULT_CONFIG = {
     },
     "password_policy": {
         "min_length": 8,
-        "require_uppercase": true,
-        "require_lowercase": true,
-        "require_digits": true,
-        "require_special": true
+        "require_uppercase": True,
+        "require_lowercase": True,
+        "require_digits": True,
+        "require_special": True
     }
 }
 
@@ -126,7 +129,7 @@ ID_CHARSET = ''.join(_charset_parts)
 
 # ---------- 密码策略配置 ----------
 PW_POLICY = config.get("password_policy", DEFAULT_CONFIG["password_policy"])
-PW_MIN_LENGTH = PW_POLICY.get("min_length", 16)
+PW_MIN_LENGTH = PW_POLICY.get("min_length", 8)
 PW_REQUIRE_UPPER = PW_POLICY.get("require_uppercase", True)
 PW_REQUIRE_LOWER = PW_POLICY.get("require_lowercase", True)
 PW_REQUIRE_DIGIT = PW_POLICY.get("require_digits", True)
@@ -157,7 +160,7 @@ users_lock = Lock()
 sessions_lock = Lock()
 
 # 禁止的笔记ID（与路由冲突）
-FORBIDDEN_NOTE_IDS = {"user", "world"}
+FORBIDDEN_NOTE_IDS = {"user", "world", "shares"}
 
 def load_users():
     global users
@@ -199,6 +202,81 @@ def save_sessions():
 
 load_users()
 load_sessions()
+
+# ---------- 分享存储 ----------
+SHARE_FILE = "shares.json"
+# 分享链接 token：64 位大小写字母+数字（防爆破）
+SHARE_TOKEN_LENGTH = 64
+SHARE_TOKEN_CHARSET = string.ascii_letters + string.digits
+
+shares = {}  # 格式: {token: {"owner": str, "note_id": str, "created_at": float, "editable": bool, "views": int}}
+shares_lock = Lock()
+
+def load_shares():
+    global shares
+    if os.path.exists(SHARE_FILE):
+        try:
+            with open(SHARE_FILE, "r", encoding="utf-8") as f:
+                shares = json.load(f)
+        except Exception:
+            shares = {}
+    else:
+        shares = {}
+
+def save_shares():
+    with shares_lock:
+        try:
+            with open(SHARE_FILE, "w", encoding="utf-8") as f:
+                json.dump(shares, f, indent=2, ensure_ascii=False)
+        except Exception as e:
+            print(f"[错误] 保存分享数据失败: {e}")
+
+def generate_share_token() -> str:
+    return ''.join(secrets.choice(SHARE_TOKEN_CHARSET) for _ in range(SHARE_TOKEN_LENGTH))
+
+def create_share(username: str, note_id: str, editable: bool) -> str:
+    """创建分享，返回 64 位分享 token"""
+    token = generate_share_token()
+    with shares_lock:
+        shares[token] = {
+            "owner": username,
+            "note_id": note_id,
+            "created_at": time.time(),
+            "editable": bool(editable),
+            "views": 0,
+        }
+    save_shares()
+    return token
+
+def get_share(token: str) -> dict | None:
+    with shares_lock:
+        return shares.get(token)
+
+def delete_share(username: str, token: str) -> bool:
+    """仅分享者本人可删除，返回是否删除成功"""
+    with shares_lock:
+        share = shares.get(token)
+        if share is None or share["owner"] != username:
+            return False
+        del shares[token]
+    save_shares()
+    return True
+
+def increment_share_views(token: str):
+    """每次访问分享链接时计数（持久化到 shares.json）"""
+    with shares_lock:
+        share = shares.get(token)
+        if share is None:
+            return
+        share["views"] = share.get("views", 0) + 1
+    save_shares()
+
+def list_user_shares(username: str) -> list:
+    """返回该用户创建的所有分享 [(token, share), ...]"""
+    with shares_lock:
+        return [(tok, dict(s)) for tok, s in shares.items() if s.get("owner") == username]
+
+load_shares()
 
 # ---------- 密码与认证工具 ----------
 def generate_salt():
@@ -526,6 +604,7 @@ class NoteHandler(BaseHTTPRequestHandler):
                     <span class="nav-links">
                         <a href="/user/{html.escape(current_user)}/">我的笔记</a>
                         <a href="/user/{html.escape(current_user)}/new">新建笔记</a>
+                        <a href="/user/{html.escape(current_user)}/shares/">分享管理</a>
                         <a href="/logout">登出</a>
                     </span>
                 </div>
@@ -858,27 +937,27 @@ class NoteHandler(BaseHTTPRequestHandler):
         """
         return self._render_base(body, "免责声明")
 
-    def _render_note_page(self, note_id: str, content: str, username: str = None, is_world: bool = False):
+    def _render_note_page(self, note_id: str, content: str, username: str = None, is_world: bool = False,
+                          action_url: str = None, navbar: str = None, title_prefix: str = None,
+                          hint_text: str = None):
         escaped_id = html.escape(note_id)
         escaped_content = html.escape(content)
-        
+
         # ---- 生成标题 ----
-        if is_world:
-            title_base = "公开笔记"
-        else:
-            title_base = "私有笔记"
+        if title_prefix is None:
+            title_prefix = "公开笔记" if is_world else "私有笔记"
         if SITE_NAME:
-            full_title = f"{title_base} {escaped_id} | {SITE_NAME}"
+            full_title = f"{title_prefix} {escaped_id} | {SITE_NAME}"
         else:
-            full_title = f"{title_base} {escaped_id}"
+            full_title = f"{title_prefix} {escaped_id}"
         # -----------------
-        
-        if is_world:
-            action_url = f"/world/{escaped_id}"
-            navbar = self._get_navbar()
-        else:
-            action_url = f"/user/{html.escape(username)}/{escaped_id}"
-            navbar = self._get_navbar(username)
+
+        if action_url is None:
+            action_url = f"/world/{escaped_id}" if is_world else f"/user/{html.escape(username)}/{escaped_id}"
+        if navbar is None:
+            navbar = self._get_navbar() if is_world else self._get_navbar(username)
+        if hint_text is None:
+            hint_text = ' 按 <kbd>Ctrl</kbd> + <kbd>S</kbd> 快速保存'
 
         page = f"""<!DOCTYPE html>
 <html>
@@ -1072,6 +1151,7 @@ class NoteHandler(BaseHTTPRequestHandler):
             let statusTimeout = null;
             let hintTimeout = null;
             let isSaving = false;
+            const DEFAULT_HINT = '{hint_text}';
 
             // ADDED: Tab键插入4个空格
             textarea.addEventListener('keydown', function(e) {{
@@ -1108,19 +1188,19 @@ class NoteHandler(BaseHTTPRequestHandler):
             }}
 
             setTimeout(function() {{
-                showHint(' 按 <kbd>Ctrl</kbd> + <kbd>S</kbd> 快速保存');
+                showHint(DEFAULT_HINT);
             }}, 600);
 
             let inputTimer = null;
             textarea.addEventListener('input', function() {{
                 clearTimeout(inputTimer);
                 inputTimer = setTimeout(function() {{
-                    showHint(' 按 <kbd>Ctrl</kbd> + <kbd>S</kbd> 快速保存');
+                    showHint(DEFAULT_HINT);
                 }}, 3000);
             }});
 
             textarea.addEventListener('focus', function() {{
-                showHint(' 按 <kbd>Ctrl</kbd> + <kbd>S</kbd> 快速保存');
+                showHint(DEFAULT_HINT);
             }});
 
             document.addEventListener('keydown', function(e) {{
@@ -1180,10 +1260,11 @@ class NoteHandler(BaseHTTPRequestHandler):
 </html>"""
         return page
 
-    # ---------- 新增：只读 Markdown 渲染页面（安全清洗） ----------
-    def _render_markdown_page(self, note_id: str, content: str):
+    # ---------- 只读 Markdown 渲染页面（安全清洗） ----------
+    def _render_markdown_page(self, note_id: str, content: str, title_label: str = "公开笔记",
+                              back_url: str = None, back_label: str = "返回编辑", navbar: str = None):
         """
-        渲染公开笔记为 Markdown 只读页面。
+        渲染笔记为 Markdown 只读页面（公开/私有/分享通用）。
         使用 bleach 清洗 HTML，防止 XSS。
         """
         # 如果 markdown 和 bleach 都可用，则安全渲染
@@ -1210,15 +1291,101 @@ class NoteHandler(BaseHTTPRequestHandler):
             # 缺少依赖，降级为纯文本（安全）
             html_content = f"<pre>{html.escape(content)}</pre>"
 
-        navbar = self._get_navbar()  # 匿名导航
+        if back_url is None:
+            back_url = f"/world/{note_id}"
+        if navbar is None:
+            navbar = self._get_navbar()  # 匿名导航
         body = f"""
-            <h1>公开笔记 · {html.escape(note_id)} <span style="font-size:0.6em; font-weight:400; color:#888;">只读</span></h1>
+            <h1>{html.escape(title_label)} · {html.escape(note_id)} <span style="font-size:0.6em; font-weight:400; color:#888;">只读</span></h1>
             <div class="markdown-body" style="margin-top:20px; padding-bottom:40px;">
                 {html_content}
             </div>
-            <p style="margin-top: 20px;"><a href="/world/{html.escape(note_id)}">返回编辑</a> · <a href="/">首页</a></p>
+            <p style="margin-top: 20px;"><a href="{html.escape(back_url)}">{html.escape(back_label)}</a> · <a href="/">首页</a></p>
         """
         return self._render_base(body, f"Markdown - {note_id}", navbar)
+
+    # ---------- 分享管理页面 ----------
+    def _render_shares_page(self, username: str, error=""):
+        my_shares = list_user_shares(username)
+        notes = list_user_notes(username)
+
+        note_options = ""
+        if notes:
+            for nid in notes:
+                note_options += f'<option value="{html.escape(nid)}">{html.escape(nid)}</option>'
+        else:
+            note_options = '<option value="">（暂无笔记，请先创建笔记）</option>'
+
+        rows = ""
+        if my_shares:
+            for tok, s in sorted(my_shares, key=lambda kv: kv[1].get("created_at", 0), reverse=True):
+                nid = s.get("note_id", "")
+                editable = "可编辑" if s.get("editable") else "只读"
+                rows += f"""
+                    <tr>
+                        <td>{html.escape(nid)}</td>
+                        <td><a class="share-link" href="/share/{tok}" target="_blank">/share/{tok}</a></td>
+                        <td>{editable}</td>
+                        <td>{s.get("views", 0)}</td>
+                        <td>
+                            <form method="POST" action="/user/{html.escape(username)}/shares/delete" style="display:inline;">
+                                <input type="hidden" name="token" value="{tok}">
+                                <button type="submit" class="btn-sm">删除</button>
+                            </form>
+                        </td>
+                    </tr>"""
+        else:
+            rows = '<tr><td colspan="5" class="empty">还没有分享链接，创建第一个吧</td></tr>'
+
+        body = f"""
+            <h1>分享管理</h1>
+            {f'<p class="error">{html.escape(error)}</p>' if error else ''}
+            <div style="margin: 20px 0;">
+                <h2 style="border:none; margin-bottom: 12px;">创建分享</h2>
+                <form method="POST" action="/user/{html.escape(username)}/shares/" style="max-width: 420px;">
+                    <div class="form-group">
+                        <label>选择要分享的笔记</label>
+                        <select name="note_id">{note_options}</select>
+                    </div>
+                    <div class="form-group" style="display:flex; align-items:center; gap:8px;">
+                        <input type="checkbox" name="editable" value="1" id="editable_cb" style="width:auto;">
+                        <label for="editable_cb" style="margin:0;">允许编辑（访客保存将修改我的原笔记）</label>
+                    </div>
+                    <button type="submit">创建分享</button>
+                </form>
+            </div>
+            <h2 style="border:none; margin-bottom: 12px;">我的分享（{len(my_shares)}）</h2>
+            <table class="share-table">
+                <thead>
+                    <tr><th>笔记</th><th>分享链接</th><th>权限</th><th>查看次数</th><th>操作</th></tr>
+                </thead>
+                <tbody>{rows}</tbody>
+            </table>
+            <p style="margin-top: 24px;"><a href="/user/{html.escape(username)}/">返回我的笔记</a></p>
+        """
+        # 分享页专用样式
+        share_css = """
+            <style>
+                .share-table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+                .share-table th, .share-table td { border: 1px solid #ddd; padding: 8px 10px; text-align: left; font-size: 14px; word-break: break-all; }
+                .share-table th { background: #f8f9fa; font-weight: 500; }
+                .share-link { font-family: Consolas, monospace; font-size: 12px; color: #0366d6; }
+                .btn-sm { width: auto; padding: 4px 14px; font-size: 13px; }
+                select { width: 100%; padding: 10px; font-size: 16px; border: 1px solid #ccc; border-radius: 4px; }
+            </style>
+        """
+        navbar = self._get_navbar(username)
+        return self._render_base(body, "分享管理", navbar, extra_head=share_css)
+
+    # ---------- 可编辑分享页面 ----------
+    def _render_share_edit_page(self, token: str, note_id: str, content: str, owner: str):
+        return self._render_note_page(
+            note_id, content,
+            action_url=f"/share/{token}",
+            navbar=self._get_navbar(),
+            title_prefix="分享笔记",
+            hint_text=' 可编辑分享：保存后将写入分享者原笔记',
+        )
 
     # ---------- GET 请求 ----------
     def do_GET(self):
@@ -1320,6 +1487,57 @@ class NoteHandler(BaseHTTPRequestHandler):
             self.wfile.write(page.encode("utf-8"))
             return
 
+        # ---------- 分享只读 Markdown：/share/<token>/md ----------
+        share_md_match = re.match(r'^/share/([A-Za-z0-9]{64})/md$', path)
+        if share_md_match:
+            token = share_md_match.group(1)
+            share = get_share(token)
+            if share is None:
+                self.send_error(404, "Share not found")
+                return
+            increment_share_views(token)
+            note_id = share["note_id"]
+            content = read_note(share["owner"], note_id)
+            page = self._render_markdown_page(
+                note_id, content,
+                title_label="分享笔记",
+                back_url=f"/share/{token}",
+                back_label="返回分享",
+                navbar=self._get_navbar(),
+            )
+            self.send_response(200)
+            self.send_header("Content-Type", self._HTML_HEADER)
+            self.end_headers()
+            self.wfile.write(page.encode("utf-8"))
+            return
+
+        # ---------- 分享查看/编辑：/share/<token> ----------
+        share_match = re.match(r'^/share/([A-Za-z0-9]{64})$', path)
+        if share_match:
+            token = share_match.group(1)
+            share = get_share(token)
+            if share is None:
+                self.send_error(404, "Share not found")
+                return
+            increment_share_views(token)
+            note_id = share["note_id"]
+            content = read_note(share["owner"], note_id)
+            if share.get("editable"):
+                page = self._render_share_edit_page(token, note_id, content, share["owner"])
+            else:
+                page = self._render_markdown_page(
+                    note_id, content,
+                    title_label="分享笔记",
+                    back_url=f"/share/{token}",
+                    back_label="刷新",
+                    navbar=self._get_navbar(),
+                )
+            self.send_response(200)
+            self.send_header("Content-Type", self._HTML_HEADER)
+            self.end_headers()
+            self.wfile.write(page.encode("utf-8"))
+            return
+
         # 公开笔记路径：/world/ 或 /world/<note_id>
         world_match = re.match(r'^/world/([^/]+)?$', path)
         if world_match:
@@ -1335,6 +1553,56 @@ class NoteHandler(BaseHTTPRequestHandler):
 
             content = read_note("public", note_id)
             page = self._render_note_page(note_id, content, is_world=True)
+            self.send_response(200)
+            self.send_header("Content-Type", self._HTML_HEADER)
+            self.end_headers()
+            self.wfile.write(page.encode("utf-8"))
+            return
+
+        # ---------- 私有笔记 Markdown：/user/<用户名>/<笔记ID>/md（需登录） ----------
+        user_md_match = re.match(r'^/user/([^/]+)/([^/]+)/md$', path)
+        if user_md_match:
+            username = user_md_match.group(1)
+            note_id = user_md_match.group(2)
+            if not validate_username(username) or not validate_note_id(note_id):
+                self.send_error(400, "Invalid username or note ID")
+                return
+            if not self.is_authenticated(username):
+                self.send_response(401)
+                self.send_header("Content-Type", self._HTML_HEADER)
+                self.end_headers()
+                body = "<h1>需要登录</h1><p>请先 <a href=\"/login\">登录</a> 或 <a href=\"/register\">注册</a> 以访问您的私有笔记。</p>"
+                self.wfile.write(self._render_base(body, "请先登录").encode("utf-8"))
+                return
+            content = read_note(username, note_id)
+            page = self._render_markdown_page(
+                note_id, content,
+                title_label="私有笔记",
+                back_url=f"/user/{username}/{note_id}",
+                back_label="返回编辑",
+                navbar=self._get_navbar(username),
+            )
+            self.send_response(200)
+            self.send_header("Content-Type", self._HTML_HEADER)
+            self.end_headers()
+            self.wfile.write(page.encode("utf-8"))
+            return
+
+        # ---------- 分享管理页面：/user/<用户名>/shares/（需登录） ----------
+        shares_page_match = re.match(r'^/user/([^/]+)/shares/?$', path)
+        if shares_page_match:
+            username = shares_page_match.group(1)
+            if not validate_username(username):
+                self.send_error(400, "Invalid username")
+                return
+            if not self.is_authenticated(username):
+                self.send_response(401)
+                self.send_header("Content-Type", self._HTML_HEADER)
+                self.end_headers()
+                body = "<h1>需要登录</h1><p>请先 <a href=\"/login\">登录</a> 或 <a href=\"/register\">注册</a> 以访问您的分享管理。</p>"
+                self.wfile.write(self._render_base(body, "请先登录").encode("utf-8"))
+                return
+            page = self._render_shares_page(username)
             self.send_response(200)
             self.send_header("Content-Type", self._HTML_HEADER)
             self.end_headers()
@@ -1493,6 +1761,98 @@ class NoteHandler(BaseHTTPRequestHandler):
             self.end_headers()
             return
 
+        # ---------- 创建分享：/user/<用户名>/shares/ ----------
+        shares_create_match = re.match(r'^/user/([^/]+)/shares/?$', path)
+        if shares_create_match:
+            username = shares_create_match.group(1)
+            if not validate_username(username):
+                self.send_error(400, "Invalid username")
+                return
+            if not self.is_authenticated(username):
+                self.send_error(401, "Unauthorized")
+                return
+            content_length = int(self.headers.get("Content-Length", 0))
+            if content_length > 1024 * 10:
+                self.send_error(413, "Form too large")
+                return
+            post_data = self.rfile.read(content_length).decode("utf-8")
+            form = urllib.parse.parse_qs(post_data, max_num_fields=5)
+            note_id = form.get("note_id", [""])[0].strip()
+            editable = form.get("editable", ["0"])[0] in ("1", "on", "true")
+
+            if not validate_note_id(note_id):
+                self.send_response(200)
+                self.send_header("Content-Type", self._HTML_HEADER)
+                self.end_headers()
+                self.wfile.write(self._render_shares_page(username, "请选择有效的笔记").encode("utf-8"))
+                return
+            note_path = get_note_path(username, note_id)
+            if note_path is None or not os.path.exists(note_path):
+                self.send_response(200)
+                self.send_header("Content-Type", self._HTML_HEADER)
+                self.end_headers()
+                self.wfile.write(self._render_shares_page(username, "笔记不存在，请选择已有的笔记").encode("utf-8"))
+                return
+
+            token = create_share(username, note_id, editable)
+            self.send_response(302)
+            self.send_header("Location", f"/user/{username}/shares/")
+            self.end_headers()
+            return
+
+        # ---------- 删除分享：/user/<用户名>/shares/delete ----------
+        shares_delete_match = re.match(r'^/user/([^/]+)/shares/delete$', path)
+        if shares_delete_match:
+            username = shares_delete_match.group(1)
+            if not validate_username(username):
+                self.send_error(400, "Invalid username")
+                return
+            if not self.is_authenticated(username):
+                self.send_error(401, "Unauthorized")
+                return
+            content_length = int(self.headers.get("Content-Length", 0))
+            if content_length > 1024 * 10:
+                self.send_error(413, "Form too large")
+                return
+            post_data = self.rfile.read(content_length).decode("utf-8")
+            form = urllib.parse.parse_qs(post_data, max_num_fields=5)
+            token = form.get("token", [""])[0].strip()
+            if not re.match(r'^[A-Za-z0-9]{64}$', token):
+                self.send_error(400, "Invalid share token")
+                return
+            delete_share(username, token)
+            self.send_response(302)
+            self.send_header("Location", f"/user/{username}/shares/")
+            self.end_headers()
+            return
+
+        # ---------- 保存可编辑分享：/share/<token>（写回分享者原笔记） ----------
+        share_save_match = re.match(r'^/share/([A-Za-z0-9]{64})$', path)
+        if share_save_match:
+            token = share_save_match.group(1)
+            share = get_share(token)
+            if share is None:
+                self.send_error(404, "Share not found")
+                return
+            if not share.get("editable"):
+                self.send_error(403, "This share is read-only")
+                return
+            content_length = int(self.headers.get("Content-Length", 0))
+            if content_length > MAX_CONTENT_BYTES:
+                self.send_error(413, f"Content too large (max {MAX_CONTENT_BYTES//1024//1024}MB)")
+                return
+            post_data = self.rfile.read(content_length).decode("utf-8")
+            form = urllib.parse.parse_qs(post_data, max_num_fields=10)
+            content = form.get("content", [""])[0]
+            # 写回分享者的原笔记
+            if write_note(share["owner"], share["note_id"], content):
+                self.send_response(302)
+                self.send_header("Location", f"/share/{token}")
+                self.end_headers()
+            else:
+                self.send_error(500, "Failed to save note")
+            return
+
         # 处理公开笔记保存：/world/<note_id>
         world_match = re.match(r'^/world/([^/]+)$', path)
         if world_match:
@@ -1589,6 +1949,9 @@ def run_server(port=8080):
     print("[统计] 访问 /count 查看笔记统计")
     print("[免责] 访问 /disclaimer 查看免责声明 (支持Markdown)")
     print("[Markdown] 访问 /world/<id>/md 渲染公开笔记为只读 Markdown (已启用XSS防护)")
+    print("[Markdown] 访问 /user/<用户名>/<笔记ID>/md 渲染私有笔记为只读 Markdown (需登录)")
+    print("[分享] 访问 /user/<用户名>/shares/ 管理分享链接 (创建/删除/查看次数)")
+    print("[分享] 分享链接: /share/<64位token> (只读或可编辑，保存将写回分享者原笔记)")
     if SESSION_TIMEOUT_ENABLED:
         print(f"[超时] 会话超时已启用，超时时间 {SESSION_TIMEOUT_MINUTES} 分钟")
     else:
