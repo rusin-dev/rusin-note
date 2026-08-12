@@ -22,14 +22,35 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-
-      - name: 合并 dev 到 main
+      - name: 合并 dev 到 main（强制保留 ci.yml）
         run: |
-          # 切换到 main 分支
+          # 1. 切换到 main 分支并拉取最新
           git checkout main
-          # 拉取最新的 dev
           git fetch origin dev
-          # 合并 dev 到 main（使用 --no-ff 保留历史）
-          git merge origin/dev --no-ff -m "Auto-merge from dev"
-          # 推送到远程 main（此时会绕过 PR 要求，因为使用了 PAT）
+
+          # 2. 备份当前 main 上的 ci.yml 内容（强制保留它）
+          if [ -f .github/workflows/ci.yml ]; then
+            cp .github/workflows/ci.yml /tmp/ci.yml.backup
+          fi
+
+          # 3. 执行合并（允许自动合并不冲突的部分）
+          # 如果发生冲突，git merge 会返回非0，但我们用 "|| true" 让脚本继续跑
+          git merge origin/dev --no-ff -m "Auto-merge from dev" || true
+
+          # 4. 核心操作：强制把备份的 ci.yml 恢复回来（覆盖掉 dev 带来的“删除”意图）
+          if [ -f /tmp/ci.yml.backup ]; then
+            cp /tmp/ci.yml.backup .github/workflows/ci.yml
+            rm /tmp/ci.yml.backup
+            # 将恢复的文件加入暂存区，标记冲突已解决
+            git add .github/workflows/ci.yml
+          fi
+
+          # 5. 检查是否有冲突未解决（除了 ci.yml 之外的其他文件冲突）
+          # 如果有其他冲突，这里会阻止提交，并显示错误信息，你需要手动处理
+          git status
+
+          # 6. 提交合并（如果存在未提交的更改）
+          git commit --no-edit --allow-empty
+
+          # 7. 推送到远程 main
           git push origin main

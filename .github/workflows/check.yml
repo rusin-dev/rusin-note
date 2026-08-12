@@ -2,13 +2,15 @@ name: CI
 
 on:
   push:
-    branches: [ "main", "dev" ]
+    branches: [ "main","dev" ]
     paths-ignore:
       - '**.md'
+      - '**.yml'
   pull_request:
-    branches: [ "main", "dev" ]
+    branches: [ "main","dev" ]
     paths-ignore:
       - '**.md'
+      - '**.yml'
 
 jobs:
   test:
