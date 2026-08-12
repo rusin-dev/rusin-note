@@ -1,9 +1,9 @@
 <div align="center">
-    <a href="https://github.com/rusin-dev/rusin-note"><img width="15%" alt="logo" src="./image/logo.png" /></a>
+    <a href="https://github.com/rusin-dev/rusin-note"><img width="10%" alt="logo" src="./image/logo.png" /></a>
     <h1><b>Rusin-Note</b></h1>
-    <p><em>🖊︎ 一个受 note.ms 启发的轻量级云端剪贴板项目，专为 VPS 部署设计，开箱即用。</em></p>
+    <p><em>🖊︎ A lightweight cloud clipboard project that resembles note.ms can be deployed by VPS.</em></p>
     <p>
-        简体中文 | <a href="https://github.com/MarSeventh/CloudFlare-ImgBed/blob/main/README_en.md">English</a> | <a href="https://note.rusin7.com">Demo</a>
+        <a href="https://github.com/MarSeventh/CloudFlare-ImgBed/blob/main/README.md">简体中文</a> | English | <a href="https://note.rusin7.com">Demo</a>
     </p>
     <p align="center">
         <a href="https://github.com/rusin-dev/rusin-note/blob/main/LICENSE"><img src="https://img.shields.io/github/license/rusin-dev/rusin-note" alt="License" /></a>
@@ -21,58 +21,58 @@
     </p>
 </div>
 
-## 快速开始
+## Quick Start
 
-### 要求
+### Requirements
 
-python 版本 $\geq 3.10$。
+Python version $\geq 3.10$.
 
-### 本地开发
+### Local Development
 
-1. 克隆代码
-
-    ```bash
-    git clone https://github.com/rusin-dev/rusin-note.git
-    cd rusin-note
-    ```
-
-2. 启动服务
-
-    ```bash
-    python3 main.py
-    ```
-
-    然后打开 <https://localhost:8080> 查看效果。
-
-### 线上部署
-
-连接你的服务器，然后
-
-1. 克隆代码
+1. Clone the repository
 
     ```bash
     git clone https://github.com/rusin-dev/rusin-note.git
     cd rusin-note
     ```
 
-2. 启动服务
+2. Start the server
+
+    ```bash
+    python3 main.py
+    ```
+
+    Then open <https://localhost:8080> to view the result.
+
+### Production Deployment
+
+Connect to your server, then:
+
+1. Clone the repository
+
+    ```bash
+    git clone https://github.com/rusin-dev/rusin-note.git
+    cd rusin-note
+    ```
+
+2. Start the server
 
     ```bash
     python3 main.py
 
-    # 后台运行
+    # Run in the background
     nohup python3 rusin-note.py > app.log 2>&1 &
     ```
 
-3. 配置 Nginx（可选）
+3. Configure Nginx (optional)
 
-    创建站点配置
+    Create a site configuration:
 
     ```bash
     sudo nano /etc/nginx/sites-available/rusin-note
     ```
 
-    复制以下内容：
+    Copy the following content:
 
     ```nginx
     server {
@@ -88,36 +88,38 @@ python 版本 $\geq 3.10$。
     ```
 
     ```bash
-    # 启用并重载
+    # Enable and reload
     sudo ln -s /etc/nginx/sites-available/rusin-note /etc/nginx/sites-enabled
     sudo nginx -t && sudo systemctl reload nginx
     sudo ufw allow 'Nginx Full'
     ```
 
-## 项目结构
+## Project Structure
 
 ```plaintext
----config.json （配置项）
+---config.json (Configuration)
   |
-  --main.py （核心代码）
+  --main.py (Core code)
 ```
 
-### 配置项解析
+### Configuration Options
 
-- `max_note_size_mb`：笔记最大大小（单位：**MB**）默认 $1$。
-- `rate_limit` 速率限制。
-   
-   - `window_seconds` ： 时间 $t$，默认 $60$；
-   - `max_requests` ：请求数 $s$，默认 $30$;
+- `max_note_size_mb`：Maximum note size (in **MB**), default `1`.
+- `rate_limit`：Rate limiting configuration.
 
-   $t$ 秒内最大请求 $s$ 次。
-- `id_generation` 随机 url 配置。
-   - `length` ：长度，默认 $4$；
-   - `use_uppercase` ：是否使用大写字母，默认 `false`；
-   - `use_lowercase` ：是否使用小写字母，默认 `true`；
-   - `use_digits` ：是否使用数字，默认 `false`；
-- `session_timeout` 单次会话时间。
-   - `enabled` ：是否开启，默认 `false`；
-   - `minutes` ：设定时长，（单位：**秒**）默认 $1440$；
+    - `window_seconds`：Time window $t$, default `60`.
+    - `max_requests`：Maximum number of requests $s$, default `30`.
 
-   当时间超过设定时，将登出访客账号。
+    Maximum $s$ requests allowed within $t$ seconds.
+
+- `id_generation`：Random URL generation configuration.
+    - `length`：URL length, default `4`.
+    - `use_uppercase`：Use uppercase letters, default `false`.
+    - `use_lowercase`：Use lowercase letters, default `true`.
+    - `use_digits`：Use digits, default `false`.
+
+- `session_timeout`：Session timeout configuration.
+    - `enabled`：Enable session timeout, default `false`.
+    - `minutes`：Timeout duration (in **seconds**), default `1440`.
+
+    Visitors will be logged out when the session exceeds the configured time.
