@@ -4,6 +4,10 @@
     "window_seconds": 60,
     "max_requests": 30
   },
+  "get_rate_limit": {
+    "window_seconds": 60,
+    "max_requests": 45
+  },
   "id_generation": {
     "length": 4,
     "use_uppercase": false,
@@ -15,7 +19,7 @@
     "minutes": 1440
   },
   "password_policy": {
-    "min_length": 8,
+    "min_length": 16,
     "require_uppercase": true,
     "require_lowercase": true,
     "require_digits": true,
