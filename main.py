@@ -27,7 +27,7 @@ import hashlib
 import secrets
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from collections import defaultdict
-from threading import Lock
+from threading import Lock, Thread
 
 # ---------- 尝试导入 Markdown 和 Bleach（用于安全渲染） ----------
 try:
@@ -98,6 +98,11 @@ GET_RATE_MAX = GET_RATE_CFG.get("max_requests", 45)
 SESSION_TIMEOUT_ENABLED = config.get("session_timeout", {}).get("enabled", False)
 SESSION_TIMEOUT_MINUTES = config.get("session_timeout", {}).get("minutes", 60)
 SESSION_TIMEOUT_SECONDS = SESSION_TIMEOUT_MINUTES * 60
+
+# socket 超时（秒）：防止慢速连接长期占用线程（BUG-008）
+SOCKET_TIMEOUT = 60
+# 后台会话清理线程的间隔（秒）（BUG-013）
+SESSION_CLEANUP_INTERVAL = 300
 
 # ---------- ID生成配置 ----------
 ID_CFG = config.get("id_generation", DEFAULT_CONFIG["id_generation"])
@@ -246,6 +251,34 @@ def get_session_user(token: str) -> str | None:
                 return None
         return session["username"]
 
+# ---------- 过期会话清理（BUG-013） ----------
+def purge_expired_sessions() -> int:
+    """删除已过期的会话，返回删除数量（仅在启用会话超时时生效）"""
+    if not SESSION_TIMEOUT_ENABLED:
+        return 0
+    now = time.time()
+    cutoff = now - SESSION_TIMEOUT_SECONDS
+    expired = []
+    with sessions_lock:
+        for token_hash, sess in sessions.items():
+            if sess["created_at"] < cutoff:
+                expired.append(token_hash)
+        for token_hash in expired:
+            del sessions[token_hash]
+    if expired:
+        save_sessions()
+        print(f"[清理] 已清除 {len(expired)} 个过期会话")
+    return len(expired)
+
+def session_cleanup_loop():
+    """后台线程：定时清除过期会话"""
+    while True:
+        time.sleep(SESSION_CLEANUP_INTERVAL)
+        try:
+            purge_expired_sessions()
+        except Exception as e:
+            print(f"[错误] 会话清理失败: {e}")
+
 # ---------- 密码复杂度检查（根据配置） ----------
 def check_password_complexity(password: str) -> bool:
     if len(password) < PW_MIN_LENGTH:
@@ -268,6 +301,7 @@ def check_password_complexity(password: str) -> bool:
 ip_requests = defaultdict(list)
 ip_lock = Lock()
 MAX_RECORDS_PER_IP = RATE_MAX * 2
+IP_SWEEP_INTERVAL = 500  # 每 N 次请求清理一次已空的 IP 键，防止字典无限增长（BUG-011）
 
 def cleanup_old_records(records, cutoff):
     i = 0
@@ -277,7 +311,19 @@ def cleanup_old_records(records, cutoff):
         else:
             i += 1
 
+def _sweep_rate_limit_entries(records_dict, window_seconds):
+    """清理所有 IP 的过期记录，并删除已无记录的键（调用方须已持有对应锁）"""
+    cutoff = time.time() - window_seconds
+    for key in list(records_dict.keys()):
+        records = records_dict[key]
+        cleanup_old_records(records, cutoff)
+        if not records:
+            del records_dict[key]
+
+_ip_post_sweep_counter = 0
+
 def is_rate_limited(ip: str) -> bool:
+    global _ip_post_sweep_counter
     now = time.time()
     with ip_lock:
         records = ip_requests[ip]
@@ -288,14 +334,22 @@ def is_rate_limited(ip: str) -> bool:
         records.append(now)
         if len(records) > MAX_RECORDS_PER_IP:
             del records[:len(records) - MAX_RECORDS_PER_IP]
+        _ip_post_sweep_counter += 1
+        if _ip_post_sweep_counter >= IP_SWEEP_INTERVAL:
+            _ip_post_sweep_counter = 0
+            _sweep_rate_limit_entries(ip_requests, RATE_WINDOW)
         return False
 
-# ---------- IP限流（GET） ---------- ADDED
+# ---------- IP限流（GET） ----------
 ip_get_requests = defaultdict(list)
 ip_get_lock = Lock()
 MAX_GET_RECORDS_PER_IP = GET_RATE_MAX * 2
+GET_SWEEP_INTERVAL = 500  # 每 N 次请求清理一次已空的 IP 键（BUG-011）
+
+_ip_get_sweep_counter = 0
 
 def is_get_rate_limited(ip: str) -> bool:
+    global _ip_get_sweep_counter
     now = time.time()
     with ip_get_lock:
         records = ip_get_requests[ip]
@@ -306,6 +360,10 @@ def is_get_rate_limited(ip: str) -> bool:
         records.append(now)
         if len(records) > MAX_GET_RECORDS_PER_IP:
             del records[:len(records) - MAX_GET_RECORDS_PER_IP]
+        _ip_get_sweep_counter += 1
+        if _ip_get_sweep_counter >= GET_SWEEP_INTERVAL:
+            _ip_get_sweep_counter = 0
+            _sweep_rate_limit_entries(ip_get_requests, GET_RATE_WINDOW)
         return False
 
 # ---------- 笔记文件操作 ----------
@@ -1472,15 +1530,27 @@ class NoteHandler(BaseHTTPRequestHandler):
 
 
 # ---------- 启动服务器 ----------
+class TimedThreadingHTTPServer(ThreadingHTTPServer):
+    """带 socket 超时的 ThreadingHTTPServer，防止慢速连接挂起线程（BUG-008）"""
+
+    def get_request(self):
+        sock, addr = super().get_request()
+        sock.settimeout(SOCKET_TIMEOUT)
+        return sock, addr
+
 def run_server(port=8080):
     server_address = ("", port)
-    httpd = ThreadingHTTPServer(server_address, NoteHandler)
+    httpd = TimedThreadingHTTPServer(server_address, NoteHandler)
+    if SESSION_TIMEOUT_ENABLED:
+        purge_expired_sessions()  # 启动时清理一次过期会话
+        Thread(target=session_cleanup_loop, daemon=True).start()
     print("[启动] rusin-note 服务已启动 (公开+私有笔记)")
     print(f"[地址] http://localhost:{port}")
     print(f"[目录] 笔记保存在 ./{NOTES_BASE}/ (public/ 为公开笔记)")
     print(f"[限制] 每个笔记最大 {MAX_CONTENT_BYTES//1024//1024}MB")
     print(f"[限流] POST: 每个IP {RATE_MAX} 次 / {RATE_WINDOW} 秒")
     print(f"[限流] GET:  每个IP {GET_RATE_MAX} 次 / {GET_RATE_WINDOW} 秒")
+    print(f"[连接] socket 超时: {SOCKET_TIMEOUT} 秒 (防止慢速连接挂起线程)")
     print("[公开笔记] 访问 /world/<id> 即可匿名编辑")
     print("[私有笔记] 注册登录后访问 /user/<username>/<id>")
     print("[快捷] 访问 /数字 自动重定向到 /world/数字")
