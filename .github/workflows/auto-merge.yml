@@ -23,44 +23,27 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-      - name: 合并 dev 到 main
+      - name: 合并 dev 到 main（保留 .github）
         run: |
           git checkout main
           git fetch origin dev
 
-          # 创建临时分支保存 main 状态
-          git checkout -b temp-merge
-          
-          # 合并 dev
-          set +e
-          git merge origin/dev --no-ff -m "Auto-merge from dev"
-          if [ $? -ne 0 ]; then
-            echo "检测到冲突，手动解决..."
-            
-            # 对于所有冲突文件，使用 main 的版本
-            git status --porcelain | grep "^UU" | while read status file; do
-              echo "保留 main 版本: $file"
-              git checkout --ours -- "$file"
-              git add "$file"
-            done
-            
-            # 如果有删除冲突（dev删除了但main保留）
-            git status --porcelain | grep "^DU" | while read status file; do
-              echo "恢复被删除的文件: $file"
-              git checkout HEAD -- "$file"
-              git add "$file"
-            done
-            
-            git commit -m "Auto-merge from dev (resolved conflicts)"
+          # 备份 .github
+          if [ -d .github ]; then
+            mkdir -p /tmp/backup
+            cp -r .github /tmp/backup/
           fi
-          set -e
 
-          # 切回 main 并合并临时分支
-          git checkout main
-          git merge temp-merge --no-ff -m "Merge dev to main"
-          
-          # 删除临时分支
-          git branch -d temp-merge
+          # 硬重置到 dev（main 完全变成 dev 的内容）
+          git reset --hard origin/dev
 
-          # 推送
-          git push origin main
+          # 恢复 .github
+          if [ -d /tmp/backup/.github ]; then
+            rm -rf .github
+            cp -r /tmp/backup/.github .github
+            git add .github
+            git commit -m "Restore .github from main after syncing with dev"
+          fi
+
+          # 强制推送
+          git push origin main --force
