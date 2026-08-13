@@ -28,6 +28,7 @@ import re
 import json
 import time
 import html
+import hmac
 import random
 import string
 import urllib.parse
@@ -65,6 +66,12 @@ DEFAULT_CONFIG = {
         "window_seconds": 60,
         "max_requests": 45
     },
+    "save_rate_limit": {                    # 保存类 POST 独立限流（避免与全局 POST 限流冲突）
+        "window_seconds": 60,
+        "max_requests": 120
+    },
+    "trust_proxy_headers": False,           # 仅当部署在可信反向代理之后才置 True，否则一律用直连 IP
+    "secure_cookies": False,                # HTTPS 部署时置 True，为会话 Cookie 添加 Secure 标志
     "id_generation": {
         "length": 6,
         "use_uppercase": True,
@@ -117,6 +124,19 @@ RATE_MAX = config.get("rate_limit", {}).get("max_requests", 30)
 GET_RATE_CFG = config.get("get_rate_limit", DEFAULT_CONFIG["get_rate_limit"])
 GET_RATE_WINDOW = GET_RATE_CFG.get("window_seconds", 60)
 GET_RATE_MAX = GET_RATE_CFG.get("max_requests", 45)
+
+# 保存类 POST 独立限流配置（BUG-14：与全局 POST 限流解耦）
+SAVE_RATE_CFG = config.get("save_rate_limit", DEFAULT_CONFIG["save_rate_limit"])
+SAVE_RATE_WINDOW = SAVE_RATE_CFG.get("window_seconds", 60)
+SAVE_RATE_MAX = SAVE_RATE_CFG.get("max_requests", 120)
+
+# 可信代理配置（BUG-3：默认不信任 X-Forwarded-For / X-Real-IP，防止伪造头绕过限流）
+TRUST_PROXY_HEADERS = bool(config.get("trust_proxy_headers", False))
+
+# Cookie 安全配置（BUG-13）
+SECURE_COOKIES = bool(config.get("secure_cookies", False))
+# 会话 Cookie 的 Max-Age：与服务器端会话超时保持一致；未启用超时时默认 30 天
+COOKIE_MAX_AGE_DEFAULT = 30 * 24 * 3600
 
 # 会话超时配置
 SESSION_TIMEOUT_ENABLED = config.get("session_timeout", {}).get("enabled", False)
@@ -200,6 +220,26 @@ RESERVED_USERNAMES = {"register", "login", "logout", "count", "disclaimer",
                       "favicon", "share", "shares", "world", "user", "new", "md",
                       "public"}
 
+def _atomic_json_dump(path: str, data: dict) -> bool:
+    """原子写入 JSON 文件：临时文件 + flush + fsync + os.replace（BUG-6）
+    防止写入中途崩溃/断电导致整个文件损坏、数据全部丢失"""
+    try:
+        temp_path = path + ".tmp"
+        with open(temp_path, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(temp_path, path)
+        return True
+    except Exception as e:
+        print(f"[错误] 原子写入 {path} 失败: {e}")
+        try:
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
+        except OSError:
+            pass
+        return False
+
 def load_users():
     global users
     if os.path.exists(USER_FILE):
@@ -213,11 +253,7 @@ def load_users():
 
 def save_users():
     with users_lock:
-        try:
-            with open(USER_FILE, "w", encoding="utf-8") as f:
-                json.dump(users, f, indent=2, ensure_ascii=False)
-        except Exception as e:
-            print(f"[错误] 保存用户数据失败: {e}")
+        _atomic_json_dump(USER_FILE, users)
 
 def load_sessions():
     global sessions
@@ -232,11 +268,7 @@ def load_sessions():
 
 def save_sessions():
     with sessions_lock:
-        try:
-            with open(SESSION_FILE, "w", encoding="utf-8") as f:
-                json.dump(sessions, f, indent=2, ensure_ascii=False)
-        except Exception as e:
-            print(f"[错误] 保存会话数据失败: {e}")
+        _atomic_json_dump(SESSION_FILE, sessions)
 
 load_users()
 load_sessions()
@@ -279,11 +311,7 @@ def load_shares():
 
 def save_shares():
     with shares_lock:
-        try:
-            with open(SHARE_FILE, "w", encoding="utf-8") as f:
-                json.dump(shares, f, indent=2, ensure_ascii=False)
-        except Exception as e:
-            print(f"[错误] 保存分享数据失败: {e}")
+        _atomic_json_dump(SHARE_FILE, shares)
 
 def generate_share_token() -> str:
     return ''.join(secrets.choice(SHARE_TOKEN_CHARSET) for _ in range(SHARE_TOKEN_LENGTH))
@@ -303,14 +331,20 @@ def create_share(username: str, note_id: str, editable: bool) -> str:
     return token
 
 def get_share(token: str) -> dict | None:
+    """返回分享条目；对损坏/旧版数据（缺 owner/note_id）返回 None，避免 KeyError（BUG-7）"""
     with shares_lock:
-        return shares.get(token)
+        share = shares.get(token)
+        if not share or not isinstance(share, dict):
+            return None
+        if not share.get("owner") or not share.get("note_id"):
+            return None
+        return share
 
 def delete_share(username: str, token: str) -> bool:
     """仅分享者本人可删除，返回是否删除成功"""
     with shares_lock:
         share = shares.get(token)
-        if share is None or share["owner"] != username:
+        if share is None or share.get("owner") != username:
             return False
         del shares[token]
     save_shares()
@@ -320,7 +354,7 @@ def increment_share_views(token: str):
     """每次访问分享链接时计数（持久化到 shares.json）"""
     with shares_lock:
         share = shares.get(token)
-        if share is None:
+        if not isinstance(share, dict):
             return
         share["views"] = share.get("views", 0) + 1
     save_shares()
@@ -328,19 +362,47 @@ def increment_share_views(token: str):
 def list_user_shares(username: str) -> list:
     """返回该用户创建的所有分享 [(token, share), ...]"""
     with shares_lock:
-        return [(tok, dict(s)) for tok, s in shares.items() if s.get("owner") == username]
+        return [(tok, dict(s)) for tok, s in shares.items()
+                if isinstance(s, dict) and s.get("owner") == username]
 
 load_shares()
 
 # ---------- 密码与认证工具 ----------
+# BUG-9: 使用 PBKDF2-HMAC-SHA256 慢哈希（≥10 万次迭代），并加大盐长度。
+# 旧版单轮 SHA-256 哈希通过 verify_password 的向后兼容逻辑继续可验证（登录成功后自然升级）。
+PBKDF2_ITERATIONS = 100000
+PBKDF2_PREFIX = "pbkdf2_sha256"
+
 def generate_salt():
-    return secrets.token_hex(8)
+    return secrets.token_hex(16)
 
 def hash_password(password: str, salt: str) -> str:
-    return hashlib.sha256((salt + password).encode()).hexdigest()
+    """生成 PBKDF2 格式哈希：pbkdf2_sha256$<迭代次数>$<十六进制摘要>"""
+    digest = hashlib.pbkdf2_hmac(
+        "sha256", password.encode("utf-8"), bytes.fromhex(salt), PBKDF2_ITERATIONS
+    ).hex()
+    return f"{PBKDF2_PREFIX}${PBKDF2_ITERATIONS}${digest}"
 
 def verify_password(password: str, salt: str, hashed: str) -> bool:
-    return hash_password(password, salt) == hashed
+    """常量时间比较。兼容旧版单轮 SHA-256 哈希（64 位十六进制串）。"""
+    try:
+        if isinstance(hashed, str) and hashed.startswith(PBKDF2_PREFIX + "$"):
+            try:
+                _, iterations_str, digest = hashed.split("$")
+                iterations = int(iterations_str)
+                computed = hashlib.pbkdf2_hmac(
+                    "sha256", password.encode("utf-8"), bytes.fromhex(salt), iterations
+                ).hex()
+                return hmac.compare_digest(computed, digest)
+            except (ValueError, TypeError):
+                return False
+        # 旧版格式（单轮 SHA-256）
+        if isinstance(hashed, str) and isinstance(salt, str):
+            legacy = hashlib.sha256((salt + password).encode("utf-8")).hexdigest()
+            return hmac.compare_digest(legacy, hashed)
+    except Exception:
+        return False
+    return False
 
 def generate_session_token():
     return secrets.token_hex(32)
@@ -373,17 +435,21 @@ def get_session_user(token: str) -> str | None:
     token_hash = hash_token(token)
     with sessions_lock:
         session = sessions.get(token_hash)
-        if not session:
+        if not session or not isinstance(session, dict):
+            return None
+        username = session.get("username")
+        if not username:
             return None
         # 检查超时
-        if SESSION_TIMEOUT_ENABLED:
-            elapsed = time.time() - session["created_at"]
+        created_at = session.get("created_at")
+        if SESSION_TIMEOUT_ENABLED and isinstance(created_at, (int, float)):
+            elapsed = time.time() - created_at
             if elapsed > SESSION_TIMEOUT_SECONDS:
                 # 删除过期会话
                 del sessions[token_hash]
                 save_sessions()
                 return None
-        return session["username"]
+        return username
 
 # ---------- 过期会话清理（BUG-013） ----------
 def purge_expired_sessions() -> int:
@@ -395,7 +461,12 @@ def purge_expired_sessions() -> int:
     expired = []
     with sessions_lock:
         for token_hash, sess in sessions.items():
-            if sess["created_at"] < cutoff:
+            if not isinstance(sess, dict):
+                continue
+            created_at = sess.get("created_at")
+            if not isinstance(created_at, (int, float)):
+                continue  # 损坏/旧版数据，跳过（BUG-7）
+            if created_at < cutoff:
                 expired.append(token_hash)
         for token_hash in expired:
             del sessions[token_hash]
@@ -531,6 +602,32 @@ def is_get_rate_limited(ip: str) -> bool:
             _sweep_rate_limit_entries(ip_get_requests, GET_RATE_WINDOW)
         return False
 
+# ---------- IP限流（保存类 POST，独立于全局 POST 限流，BUG-14） ----------
+ip_save_requests = defaultdict(list)
+ip_save_lock = Lock()
+MAX_SAVE_RECORDS_PER_IP = SAVE_RATE_MAX * 2
+SAVE_SWEEP_INTERVAL = 500
+
+_save_sweep_counter = 0
+
+def is_save_rate_limited(ip: str) -> bool:
+    global _save_sweep_counter
+    now = time.time()
+    with ip_save_lock:
+        records = ip_save_requests[ip]
+        cutoff = now - SAVE_RATE_WINDOW
+        cleanup_old_records(records, cutoff)
+        if len(records) >= SAVE_RATE_MAX:
+            return True
+        records.append(now)
+        if len(records) > MAX_SAVE_RECORDS_PER_IP:
+            del records[:len(records) - MAX_SAVE_RECORDS_PER_IP]
+        _save_sweep_counter += 1
+        if _save_sweep_counter >= SAVE_SWEEP_INTERVAL:
+            _save_sweep_counter = 0
+            _sweep_rate_limit_entries(ip_save_requests, SAVE_RATE_WINDOW)
+        return False
+
 # ---------- 笔记文件操作 ----------
 def validate_username(username: str) -> bool:
     if username.lower() in RESERVED_USERNAMES:
@@ -607,38 +704,50 @@ def list_user_notes(username: str) -> list[str]:
     return notes
 
 # ---------- 统计函数 ----------
+# BUG-16: 统计结果缓存（TTL 30 秒），避免每次 /count 请求全目录遍历
+STATS_CACHE_TTL = 30
+_stats_cache = None
+_stats_cache_time = 0.0
+
 def get_stats():
     """返回 (public_count, public_size, private_count, private_size, user_count)"""
+    global _stats_cache, _stats_cache_time
+    now = time.time()
+    if _stats_cache is not None and now - _stats_cache_time < STATS_CACHE_TTL:
+        return _stats_cache
+
     public_count = 0
     public_size = 0
     private_count = 0
     private_size = 0
     user_count = len(users)
 
-    if not os.path.exists(NOTES_BASE):
-        return (0, 0, 0, 0, user_count)
+    if os.path.exists(NOTES_BASE):
+        for item in os.listdir(NOTES_BASE):
+            item_path = os.path.join(NOTES_BASE, item)
+            if not os.path.isdir(item_path):
+                continue
+            if item == "public":
+                for fname in os.listdir(item_path):
+                    if fname.endswith(".txt"):
+                        public_count += 1
+                        try:
+                            public_size += os.path.getsize(os.path.join(item_path, fname))
+                        except:
+                            pass
+            else:
+                for fname in os.listdir(item_path):
+                    if fname.endswith(".txt"):
+                        private_count += 1
+                        try:
+                            private_size += os.path.getsize(os.path.join(item_path, fname))
+                        except:
+                            pass
 
-    for item in os.listdir(NOTES_BASE):
-        item_path = os.path.join(NOTES_BASE, item)
-        if not os.path.isdir(item_path):
-            continue
-        if item == "public":
-            for fname in os.listdir(item_path):
-                if fname.endswith(".txt"):
-                    public_count += 1
-                    try:
-                        public_size += os.path.getsize(os.path.join(item_path, fname))
-                    except:
-                        pass
-        else:
-            for fname in os.listdir(item_path):
-                if fname.endswith(".txt"):
-                    private_count += 1
-                    try:
-                        private_size += os.path.getsize(os.path.join(item_path, fname))
-                    except:
-                        pass
-    return (public_count, public_size, private_count, private_size, user_count)
+    result = (public_count, public_size, private_count, private_size, user_count)
+    _stats_cache = result
+    _stats_cache_time = now
+    return result
 
 # ---------- 随机ID生成 ----------
 def generate_random_id() -> str:
@@ -722,6 +831,19 @@ THEME_SCRIPT = """
 
 THEME_TOGGLE_BTN = '<button type="button" id="themeBtn" class="theme-toggle" onclick="toggleTheme()">暗色</button>'
 
+# ---------- favicon 缓存（BUG-16：避免每次请求读磁盘） ----------
+_FAVICON_CACHE = None
+
+def get_favicon() -> bytes | None:
+    global _FAVICON_CACHE
+    if _FAVICON_CACHE is None:
+        try:
+            with open("favicon.ico", "rb") as f:
+                _FAVICON_CACHE = f.read()
+        except (IOError, OSError):
+            _FAVICON_CACHE = b""
+    return _FAVICON_CACHE or None
+
 # ---------- HTTP 处理器 ----------
 class NoteHandler(BaseHTTPRequestHandler):
     _HTML_HEADER = "text/html; charset=utf-8"
@@ -731,13 +853,20 @@ class NoteHandler(BaseHTTPRequestHandler):
             super().log_request(code, size)
 
     def get_client_ip(self) -> str:
-        forwarded = self.headers.get("X-Forwarded-For")
-        if forwarded:
-            ip = forwarded.split(",", 1)[0].strip()
-            return ip
-        real_ip = self.headers.get("X-Real-IP")
-        if real_ip:
-            return real_ip.strip()
+        """获取客户端 IP。
+        BUG-3: 仅当显式配置了可信代理（trust_proxy_headers=true）时才信任
+        X-Forwarded-For / X-Real-IP 头，否则一律使用 TCP 对端地址，防止伪造头绕过限流。"""
+        if TRUST_PROXY_HEADERS:
+            forwarded = self.headers.get("X-Forwarded-For")
+            if forwarded:
+                ip = forwarded.split(",", 1)[0].strip()
+                if ip:
+                    return ip
+            real_ip = self.headers.get("X-Real-IP")
+            if real_ip:
+                real_ip = real_ip.strip()
+                if real_ip:
+                    return real_ip
         return self.client_address[0]
 
     def get_session_cookie(self) -> str | None:
@@ -790,16 +919,52 @@ class NoteHandler(BaseHTTPRequestHandler):
             """
 
     # ---------- 辅助响应 ----------
+    def _read_form_body(self, max_bytes: int, max_fields: int = 10) -> dict | None:
+        """安全读取并解析 POST 表单体。失败时直接发送 4xx 响应并返回 None。
+        BUG-1: decode 使用 errors="replace"，非法 UTF-8 不再抛 UnicodeDecodeError；
+        BUG-2: parse_qs 超限抛 ValueError 时返回 400；
+        BUG-10: Content-Length 非数字/负数时返回 400。"""
+        try:
+            content_length = int(self.headers.get("Content-Length", 0))
+        except (TypeError, ValueError):
+            self.send_error(400, "Invalid Content-Length")
+            return None
+        if content_length < 0:
+            self.send_error(400, "Invalid Content-Length")
+            return None
+        if content_length > max_bytes:
+            self.send_error(413, "Request body too large")
+            return None
+        raw = self.rfile.read(content_length)
+        post_data = raw.decode("utf-8", errors="replace")
+        try:
+            return urllib.parse.parse_qs(post_data, max_num_fields=max_fields)
+        except ValueError:
+            self.send_error(400, "Too many form fields")
+            return None
+
     def _send_redirect(self, location):
         self.send_response(302)
         self.send_header("Location", location)
         self.end_headers()
 
     def _set_session_cookie(self, token: str):
-        self.send_header("Set-Cookie", f"session={token}; Path=/; HttpOnly; SameSite=Lax")
+        # BUG-13: Max-Age 与服务器端会话超时一致（未启用超时时为 30 天）；
+        # Secure 标志由配置 secure_cookies 控制（仅 HTTPS 部署时开启）
+        if SESSION_TIMEOUT_ENABLED:
+            max_age = int(SESSION_TIMEOUT_SECONDS)
+        else:
+            max_age = COOKIE_MAX_AGE_DEFAULT
+        cookie = f"session={token}; Path=/; Max-Age={max_age}; HttpOnly; SameSite=Lax"
+        if SECURE_COOKIES:
+            cookie += "; Secure"
+        self.send_header("Set-Cookie", cookie)
 
     def _clear_session_cookie(self):
-        self.send_header("Set-Cookie", "session=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax")
+        cookie = "session=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax"
+        if SECURE_COOKIES:
+            cookie += "; Secure"
+        self.send_header("Set-Cookie", cookie)
 
     # ---------- 通用 HTML 渲染 ----------
     def _render_base(self, body: str, title="rusin-note", navbar=None, extra_head=""):
@@ -1343,7 +1508,8 @@ class NoteHandler(BaseHTTPRequestHandler):
             let statusTimeout = null;
             let hintTimeout = null;
             let isSaving = false;
-            const DEFAULT_HINT = '{hint_text}';
+            // BUG-12: 使用 json.dumps 生成合法的 JS 字符串字面量，防止 hint 含引号/反斜杠时破坏脚本或注入
+            const DEFAULT_HINT = {json.dumps(hint_text, ensure_ascii=False)};
 
             // ADDED: Tab键插入4个空格
             textarea.addEventListener('keydown', function(e) {{
@@ -1667,10 +1833,8 @@ class NoteHandler(BaseHTTPRequestHandler):
         
         # 处理 favicon.ico
         if path == "/favicon.ico":
-            ico_path = "favicon.ico"  # 根目录下的 .ico 文件
-            if os.path.exists(ico_path):
-                with open(ico_path, "rb") as f:
-                    data = f.read()
+            data = get_favicon()  # BUG-16: 内存缓存，避免每次请求读磁盘
+            if data:
                 self.send_response(200)
                 self.send_header("Content-Type", "image/x-icon")
                 self.send_header("Content-Length", str(len(data)))
@@ -1748,8 +1912,8 @@ class NoteHandler(BaseHTTPRequestHandler):
                 self.send_error(404, "Share not found")
                 return
             increment_share_views(token)
-            note_id = share["note_id"]
-            content = read_note(share["owner"], note_id)
+            note_id = share.get("note_id", "")
+            content = read_note(share.get("owner", ""), note_id)
             page = self._render_markdown_page(
                 note_id, content,
                 title_label="分享笔记",
@@ -1772,8 +1936,8 @@ class NoteHandler(BaseHTTPRequestHandler):
                 self.send_error(404, "Share not found")
                 return
             increment_share_views(token)
-            note_id = share["note_id"]
-            content = read_note(share["owner"], note_id)
+            note_id = share.get("note_id", "")
+            content = read_note(share.get("owner", ""), note_id)
             page = self._render_markdown_page(
                 note_id, content,
                 title_label="分享笔记",
@@ -1796,10 +1960,10 @@ class NoteHandler(BaseHTTPRequestHandler):
                 self.send_error(404, "Share not found")
                 return
             increment_share_views(token)
-            note_id = share["note_id"]
-            content = read_note(share["owner"], note_id)
+            note_id = share.get("note_id", "")
+            content = read_note(share.get("owner", ""), note_id)
             if share.get("editable"):
-                page = self._render_share_edit_page(token, note_id, content, share["owner"])
+                page = self._render_share_edit_page(token, note_id, content, share.get("owner", ""))
             else:
                 page = self._render_markdown_page(
                     note_id, content,
@@ -1814,8 +1978,9 @@ class NoteHandler(BaseHTTPRequestHandler):
             self.wfile.write(page.encode("utf-8"))
             return
 
-        # 公开笔记路径：/world/ 或 /world/<note_id>
-        world_match = re.match(r'^/world/([^/]+)?$', path)
+        # 公开笔记路径：/world、/world/ 或 /world/<note_id>
+        # BUG-4: 无斜杠 /world 与带斜杠 /world/ 行为一致（新建笔记）
+        world_match = re.match(r'^/world(?:/([^/]+))?/?$', path)
         if world_match:
             note_id = world_match.group(1)
             if note_id is None:
@@ -1972,29 +2137,41 @@ class NoteHandler(BaseHTTPRequestHandler):
         self.send_error(404, "Not found")
 
     # ---------- POST 请求 ----------
+    def _is_save_path(self, path: str) -> bool:
+        """是否为"保存笔记"类端点（BUG-14：走独立限流，避免与全局 POST 限流冲突）。
+        排除 /user/<u>/shares(/delete) 管理端点。"""
+        if re.match(r'^/world/[^/]+/?$', path):
+            return True
+        if re.match(r'^/share/[A-Za-z0-9]+/?$', path):
+            return True
+        if re.match(r'^/user/[^/]+/(?!shares)[^/]+/?$', path):
+            return True
+        return False
+
     def do_POST(self):
         client_ip = self.get_client_ip()
-        if is_rate_limited(client_ip):
-            self.send_error(429, f"Too many requests (max {RATE_MAX} per {RATE_WINDOW}s)")
-            return
-
         parsed = urllib.parse.urlparse(self.path)
         path = parsed.path
 
+        if self._is_save_path(path):
+            if is_save_rate_limited(client_ip):
+                self.send_error(429, f"Too many saves (max {SAVE_RATE_MAX} per {SAVE_RATE_WINDOW}s)")
+                return
+        elif is_rate_limited(client_ip):
+            self.send_error(429, f"Too many requests (max {RATE_MAX} per {RATE_WINDOW}s)")
+            return
+
         # 处理注册
         if path == "/register":
-            content_length = int(self.headers.get("Content-Length", 0))
-            if content_length > 1024 * 10:
-                self.send_error(413, "Form too large")
+            form = self._read_form_body(1024 * 10, max_fields=5)
+            if form is None:
                 return
-            post_data = self.rfile.read(content_length).decode("utf-8")
-            form = urllib.parse.parse_qs(post_data, max_num_fields=5)
             username = form.get("username", [""])[0].strip()
             password = form.get("password", [""])[0]
             confirm = form.get("confirm", [""])[0]
 
             if not validate_username(username):
-                self.send_response(200)
+                self.send_response(400)
                 self.send_header("Content-Type", self._HTML_HEADER)
                 self.end_headers()
                 if username.lower() in RESERVED_USERNAMES:
@@ -2004,16 +2181,8 @@ class NoteHandler(BaseHTTPRequestHandler):
                 self.wfile.write(self._render_register_form(error_msg).encode("utf-8"))
                 return
 
-            with users_lock:
-                if username in users:
-                    self.send_response(200)
-                    self.send_header("Content-Type", self._HTML_HEADER)
-                    self.end_headers()
-                    self.wfile.write(self._render_register_form("用户名已存在").encode("utf-8"))
-                    return
-
             if password != confirm:
-                self.send_response(200)
+                self.send_response(400)
                 self.send_header("Content-Type", self._HTML_HEADER)
                 self.end_headers()
                 self.wfile.write(self._render_register_form("两次密码不一致").encode("utf-8"))
@@ -2021,7 +2190,7 @@ class NoteHandler(BaseHTTPRequestHandler):
 
             if not check_password_complexity(password):
                 req_desc = get_password_requirements_description()
-                self.send_response(200)
+                self.send_response(400)
                 self.send_header("Content-Type", self._HTML_HEADER)
                 self.end_headers()
                 self.wfile.write(self._render_register_form(
@@ -2029,9 +2198,17 @@ class NoteHandler(BaseHTTPRequestHandler):
                 ).encode("utf-8"))
                 return
 
-            salt = generate_salt()
-            hashed = hash_password(password, salt)
+            # BUG-5: 检查与插入放在同一次持锁内，杜绝并发注册同名竞态；
+            # BUG-11: 已存在统一提示"用户名不可用"，避免枚举已注册账号。
             with users_lock:
+                if username in users:
+                    self.send_response(400)
+                    self.send_header("Content-Type", self._HTML_HEADER)
+                    self.end_headers()
+                    self.wfile.write(self._render_register_form("用户名不可用").encode("utf-8"))
+                    return
+                salt = generate_salt()
+                hashed = hash_password(password, salt)
                 users[username] = {"salt": salt, "hash": hashed}
             save_users()
 
@@ -2044,28 +2221,22 @@ class NoteHandler(BaseHTTPRequestHandler):
 
         # 处理登录
         if path == "/login":
-            content_length = int(self.headers.get("Content-Length", 0))
-            if content_length > 1024 * 10:
-                self.send_error(413, "Form too large")
+            form = self._read_form_body(1024 * 10, max_fields=5)
+            if form is None:
                 return
-            post_data = self.rfile.read(content_length).decode("utf-8")
-            form = urllib.parse.parse_qs(post_data, max_num_fields=5)
             username = form.get("username", [""])[0].strip()
             password = form.get("password", [""])[0]
 
             with users_lock:
                 user = users.get(username)
-            if not user:
-                self.send_response(200)
-                self.send_header("Content-Type", self._HTML_HEADER)
-                self.end_headers()
-                self.wfile.write(self._render_login_form("用户名或密码错误").encode("utf-8"))
-                return
-
-            salt = user["salt"]
-            hashed = user["hash"]
-            if not verify_password(password, salt, hashed):
-                self.send_response(200)
+            # BUG-7: 损坏/旧版用户数据（缺 salt/hash）按凭证错误处理，不崩线程
+            salt = user.get("salt") if isinstance(user, dict) else None
+            hashed = user.get("hash") if isinstance(user, dict) else None
+            if not salt or not hashed or not isinstance(salt, str) or not isinstance(hashed, str):
+                salt, hashed = None, None
+            if salt is None or not verify_password(password, salt, hashed):
+                # BUG-11: 登录失败返回 401（语义正确），避免返回 200 让客户端误判成功
+                self.send_response(401)
                 self.send_header("Content-Type", self._HTML_HEADER)
                 self.end_headers()
                 self.wfile.write(self._render_login_form("用户名或密码错误").encode("utf-8"))
@@ -2088,24 +2259,21 @@ class NoteHandler(BaseHTTPRequestHandler):
             if not self.is_authenticated(username):
                 self.send_error(401, "Unauthorized")
                 return
-            content_length = int(self.headers.get("Content-Length", 0))
-            if content_length > 1024 * 10:
-                self.send_error(413, "Form too large")
+            form = self._read_form_body(1024 * 10, max_fields=5)
+            if form is None:
                 return
-            post_data = self.rfile.read(content_length).decode("utf-8")
-            form = urllib.parse.parse_qs(post_data, max_num_fields=5)
             note_id = form.get("note_id", [""])[0].strip()
             editable = form.get("editable", ["0"])[0] in ("1", "on", "true")
 
             if not validate_note_id(note_id):
-                self.send_response(200)
+                self.send_response(400)
                 self.send_header("Content-Type", self._HTML_HEADER)
                 self.end_headers()
                 self.wfile.write(self._render_shares_page(username, "请选择有效的笔记").encode("utf-8"))
                 return
             note_path = get_note_path(username, note_id)
             if note_path is None or not os.path.exists(note_path):
-                self.send_response(200)
+                self.send_response(400)
                 self.send_header("Content-Type", self._HTML_HEADER)
                 self.end_headers()
                 self.wfile.write(self._render_shares_page(username, "笔记不存在，请选择已有的笔记").encode("utf-8"))
@@ -2127,24 +2295,27 @@ class NoteHandler(BaseHTTPRequestHandler):
             if not self.is_authenticated(username):
                 self.send_error(401, "Unauthorized")
                 return
-            content_length = int(self.headers.get("Content-Length", 0))
-            if content_length > 1024 * 10:
-                self.send_error(413, "Form too large")
+            form = self._read_form_body(1024 * 10, max_fields=5)
+            if form is None:
                 return
-            post_data = self.rfile.read(content_length).decode("utf-8")
-            form = urllib.parse.parse_qs(post_data, max_num_fields=5)
             token = form.get("token", [""])[0].strip()
             if not re.match(f'^{SHARE_TOKEN_PATTERN}$', token):
                 self.send_error(400, "Invalid share token")
                 return
-            delete_share(username, token)
+            # BUG-15: 检查删除结果，未删除成功（不存在/非本人）时提示错误
+            if not delete_share(username, token):
+                self.send_response(400)
+                self.send_header("Content-Type", self._HTML_HEADER)
+                self.end_headers()
+                self.wfile.write(self._render_shares_page(username, "删除失败：分享不存在或无权删除").encode("utf-8"))
+                return
             self.send_response(302)
             self.send_header("Location", f"/user/{username}/shares/")
             self.end_headers()
             return
 
         # ---------- 保存可编辑分享：/share/<token>（写回分享者原笔记） ----------
-        share_save_match = re.match(f'^/share/({SHARE_TOKEN_PATTERN})$', path)
+        share_save_match = re.match(f'^/share/({SHARE_TOKEN_PATTERN})/?$', path)
         if share_save_match:
             token = share_save_match.group(1)
             share = get_share(token)
@@ -2154,15 +2325,12 @@ class NoteHandler(BaseHTTPRequestHandler):
             if not share.get("editable"):
                 self.send_error(403, "This share is read-only")
                 return
-            content_length = int(self.headers.get("Content-Length", 0))
-            if content_length > MAX_CONTENT_BYTES:
-                self.send_error(413, f"Content too large (max {MAX_CONTENT_BYTES//1024}KB)")
+            form = self._read_form_body(MAX_CONTENT_BYTES, max_fields=10)
+            if form is None:
                 return
-            post_data = self.rfile.read(content_length).decode("utf-8")
-            form = urllib.parse.parse_qs(post_data, max_num_fields=10)
             content = form.get("content", [""])[0]
             # 写回分享者的原笔记
-            if write_note(share["owner"], share["note_id"], content):
+            if write_note(share.get("owner", ""), share.get("note_id", ""), content):
                 self.send_response(302)
                 self.send_header("Location", f"/share/{token}")
                 self.end_headers()
@@ -2171,7 +2339,8 @@ class NoteHandler(BaseHTTPRequestHandler):
             return
 
         # 处理公开笔记保存：/world/<note_id>
-        world_match = re.match(r'^/world/([^/]+)$', path)
+        # BUG-4: 允许尾部斜杠（GET 页面与 POST 保存行为一致）
+        world_match = re.match(r'^/world/([^/]+)/?$', path)
         if world_match:
             note_id = world_match.group(1)
             if not validate_note_id(note_id):
@@ -2182,13 +2351,9 @@ class NoteHandler(BaseHTTPRequestHandler):
                     self.send_error(400, "Invalid note ID")
                 return
 
-            content_length = int(self.headers.get("Content-Length", 0))
-            if content_length > MAX_CONTENT_BYTES:
-                self.send_error(413, f"Content too large (max {MAX_CONTENT_BYTES//1024}KB)")
+            form = self._read_form_body(MAX_CONTENT_BYTES, max_fields=10)
+            if form is None:
                 return
-
-            post_data = self.rfile.read(content_length).decode("utf-8")
-            form = urllib.parse.parse_qs(post_data, max_num_fields=10)
             content = form.get("content", [""])[0]
 
             if write_note("public", note_id, content):
@@ -2200,7 +2365,7 @@ class NoteHandler(BaseHTTPRequestHandler):
             return
 
         # 处理私有笔记保存：/user/<username>/<note_id>
-        user_match = re.match(r'^/user/([^/]+)/([^/]+)$', path)
+        user_match = re.match(r'^/user/([^/]+)/([^/]+)/?$', path)
         if user_match:
             username = user_match.group(1)
             note_id = user_match.group(2)
@@ -2217,13 +2382,9 @@ class NoteHandler(BaseHTTPRequestHandler):
                 self.send_error(401, "Unauthorized")
                 return
 
-            content_length = int(self.headers.get("Content-Length", 0))
-            if content_length > MAX_CONTENT_BYTES:
-                self.send_error(413, f"Content too large (max {MAX_CONTENT_BYTES//1024}KB)")
+            form = self._read_form_body(MAX_CONTENT_BYTES, max_fields=10)
+            if form is None:
                 return
-
-            post_data = self.rfile.read(content_length).decode("utf-8")
-            form = urllib.parse.parse_qs(post_data, max_num_fields=10)
             content = form.get("content", [""])[0]
 
             if write_note(username, note_id, content):
@@ -2240,15 +2401,21 @@ class NoteHandler(BaseHTTPRequestHandler):
         self.log_error(f"code {code}, message {message}")
         self.send_response(code)
         self.send_header("Content-Type", "text/html; charset=utf-8")
-        self.end_headers()
+        # BUG-17: message 做 HTML 转义防止注入；有响应体时设置 Content-Length
         if message:
+            safe_message = html.escape(str(message))
             response = (f"<html><head><title>Error {code}</title>{THEME_SCRIPT}"
                         f"<style>{THEME_VARS}"
                         f"body {{ background: var(--bg); color: var(--text); font-family: -apple-system, sans-serif; padding: 40px; }}"
                         f"h1 {{ font-weight: 400; border-bottom: 1px solid var(--heading-border); padding-bottom: 10px; }}"
                         f"</style></head>"
-                        f"<body><h1>{code} {message}</h1></body></html>")
-            self.wfile.write(response.encode("utf-8"))
+                        f"<body><h1>{code} {safe_message}</h1></body></html>")
+            body = response.encode("utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+        else:
+            self.end_headers()
 
 
 # ---------- 启动服务器 ----------
@@ -2263,9 +2430,10 @@ class TimedThreadingHTTPServer(ThreadingHTTPServer):
 def run_server(port=8080):
     server_address = ("", port)
     httpd = TimedThreadingHTTPServer(server_address, NoteHandler)
-    if SESSION_TIMEOUT_ENABLED:
-        purge_expired_sessions()  # 启动时清理一次过期会话
-        Thread(target=session_cleanup_loop, daemon=True).start()
+    # BUG-8: 清理线程无条件启动（仅启用会话超时时执行删除逻辑），
+    # 避免 sessions.json 在超时关闭时无限增长
+    purge_expired_sessions()  # 启动时清理一次过期会话
+    Thread(target=session_cleanup_loop, daemon=True).start()
     if NOTE_EXPIRATION_ENABLED:
         purge_expired_notes()  # 启动时清理一次过期笔记
         Thread(target=note_cleanup_loop, daemon=True).start()
@@ -2275,6 +2443,7 @@ def run_server(port=8080):
     print(f"[限制] 每个笔记最大 {MAX_CONTENT_BYTES//1024}KB")
     print(f"[限流] POST: 每个IP {RATE_MAX} 次 / {RATE_WINDOW} 秒")
     print(f"[限流] GET:  每个IP {GET_RATE_MAX} 次 / {GET_RATE_WINDOW} 秒")
+    print(f"[限流] 保存: 每个IP {SAVE_RATE_MAX} 次 / {SAVE_RATE_WINDOW} 秒 (笔记保存独立限流)")
     print(f"[连接] socket 超时: {SOCKET_TIMEOUT} 秒 (防止慢速连接挂起线程)")
     print("[公开笔记] 访问 /world/<id> 即可匿名编辑")
     print("[私有笔记] 注册登录后访问 /user/<username>/<id>")
