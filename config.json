@@ -1,8 +1,13 @@
 {
   "max_note_size_mb": 1,
+  "sitename": "如形の笔记",
   "rate_limit": {
     "window_seconds": 60,
     "max_requests": 30
+  },
+  "get_rate_limit": {
+    "window_seconds": 60,
+    "max_requests": 45
   },
   "id_generation": {
     "length": 4,
@@ -15,7 +20,7 @@
     "minutes": 1440
   },
   "password_policy": {
-    "min_length": 16,
+    "min_length": 8,
     "require_uppercase": true,
     "require_lowercase": true,
     "require_digits": true,
