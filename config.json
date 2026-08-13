@@ -9,6 +9,12 @@
     "window_seconds": 60,
     "max_requests": 45
   },
+  "save_rate_limit": {
+    "window_seconds": 60,
+    "max_requests": 120
+  },
+  "trust_proxy_headers": false,
+  "secure_cookies": false,
   "id_generation": {
     "length": 4,
     "use_uppercase": false,
