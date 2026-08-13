@@ -22,6 +22,10 @@
     </p>
 </div>
 
+> [!TIP]
+>
+> [**Detailed documentation** is available in the wiki](/rusin-dev/rusin-note/wiki)
+
 ## Quick Start
 
 ### Requirements

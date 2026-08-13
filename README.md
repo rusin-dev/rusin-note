@@ -26,6 +26,10 @@
     </p>
 </div>
 
+> [!TIP]
+>
+> [**详细文档**参见 wiki](/rusin-dev/rusin-note/wiki)
+
 ## 快速开始
 
 ### 要求
