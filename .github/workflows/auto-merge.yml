@@ -29,11 +29,24 @@ jobs:
           git checkout main
           git fetch origin dev
 
-          # 使用 ours 策略合并，遇到冲突时保留 main 的版本
-          # 这样即使 dev 删除了 .github 文件夹，main 也会保留
-          git merge origin/dev --no-ff \
-            --strategy-option=ours \
-            -m "Auto-merge from dev (keep main's files when conflict)"
+          # 先尝试普通合并，允许失败
+          set +e
+          git merge origin/dev --no-ff -m "Auto-merge from dev"
+          MERGE_EXIT=$?
+          set -e
+
+          # 如果合并失败（有冲突）
+          if [ $MERGE_EXIT -ne 0 ]; then
+            echo "合并有冲突，使用 ours 策略解决..."
+            
+            # 中止当前合并
+            git merge --abort
+            
+            # 重新合并，使用 ours 策略
+            git merge origin/dev --no-ff \
+              --strategy-option=ours \
+              -m "Auto-merge from dev (resolved with ours strategy)"
+          fi
 
           # 推送合并结果
           git push origin main
