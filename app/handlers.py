@@ -76,6 +76,19 @@ class NoteHandler(BaseHTTPRequestHandler):
                     return pair[len("session="):]
         return None
 
+    def get_theme(self) -> str | None:
+        """从 Cookie 读取主题偏好（rusin-theme），供服务端直接渲染 data-theme，
+        避免暗色模式下慢网速切换页面时闪白屏。仅接受合法值，视为不可信输入。"""
+        cookie = self.headers.get("Cookie")
+        if cookie:
+            for pair in cookie.split(";"):
+                pair = pair.strip()
+                if pair.startswith("rusin-theme="):
+                    value = pair[len("rusin-theme="):]
+                    if value in ("dark", "light"):
+                        return value
+        return None
+
     def get_current_user(self) -> str | None:
         token = self.get_session_cookie()
         if token:
@@ -767,8 +780,10 @@ class NoteHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", "text/html; charset=utf-8")
         # BUG-17: message 做 HTML 转义防止注入；有响应体时设置 Content-Length
         if message:
+            theme = self.get_theme()
+            theme_attr = f' data-theme="{theme}"' if theme else ""
             safe_message = html.escape(str(message))
-            response = (f"<html><head><title>Error {code}</title>{THEME_SCRIPT}"
+            response = (f"<html{theme_attr}><head><title>Error {code}</title>{THEME_SCRIPT}"
                         f"<style>{THEME_VARS}"
                         f"body {{ background: var(--bg); color: var(--text); font-family: -apple-system, sans-serif; padding: 40px; }}"
                         f"h1 {{ font-weight: 400; border-bottom: 1px solid var(--heading-border); padding-bottom: 10px; }}"

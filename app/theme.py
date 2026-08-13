@@ -1,6 +1,8 @@
 """暗色模式主题样式/脚本与 favicon 缓存"""
 # ---------- 暗色模式（CSS 变量 + 切换脚本，所有页面共用） ----------
 THEME_VARS = """:root {
+    color-scheme: light dark;
+    background-color: var(--bg);
     --bg: #ffffff;
     --text: #111111;
     --heading-border: #eeeeee;
@@ -26,6 +28,7 @@ THEME_VARS = """:root {
     --status-bg: rgba(255, 255, 255, 0.95);
 }
 [data-theme="dark"] {
+    color-scheme: dark;
     --bg: #1a1a1a;
     --text: #e6e6e6;
     --heading-border: #333333;
@@ -52,21 +55,28 @@ THEME_VARS = """:root {
 }
 """
 
-# 主题切换脚本：放在 <head> 最前避免闪烁；优先 localStorage，其次跟随系统偏好
+# 主题切换脚本：放在 <head> 最前避免闪烁；优先服务器渲染的主题（Cookie），其次 localStorage，最后跟随系统偏好。
+# 切换时同时写入 Cookie（服务端据此直接渲染 data-theme，慢网速下切页不再闪白屏）与 localStorage。
 THEME_SCRIPT = """
 <script>
 (function() {
+    function setCookie(t) {
+        document.cookie = 'rusin-theme=' + t + '; Path=/; Max-Age=31536000; SameSite=Lax';
+    }
     function apply(t) {
         document.documentElement.setAttribute('data-theme', t);
         var b = document.getElementById('themeBtn');
         if (b) b.textContent = t === 'dark' ? '亮色' : '暗色';
         try { localStorage.setItem('rusin-theme', t); } catch (e) {}
+        setCookie(t);
     }
     window.toggleTheme = function() {
         apply(document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
     };
     var saved = null;
     try { saved = localStorage.getItem('rusin-theme'); } catch (e) {}
+    var serverTheme = document.documentElement.getAttribute('data-theme');
+    if (serverTheme) saved = serverTheme;
     apply(saved || (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'));
 })();
 </script>

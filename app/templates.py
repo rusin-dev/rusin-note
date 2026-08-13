@@ -42,7 +42,10 @@ def get_navbar(handler, current_user=None) -> str:
 
 
 # ---------- 通用 HTML 渲染 ----------
-def render_base(handler, body: str, title="rusin-note", navbar=None, extra_head=""):
+def render_base(handler, body: str, title="rusin-note", navbar=None, extra_head="", theme=None):
+    if theme is None:
+        theme = handler.get_theme()
+    theme_attr = f' data-theme="{theme}"' if theme else ""
     if config.SITE_NAME:
         full_title = f"{title} | {config.SITE_NAME}"
     else:
@@ -50,7 +53,7 @@ def render_base(handler, body: str, title="rusin-note", navbar=None, extra_head=
     if navbar is None:
         navbar = get_navbar(handler)
     return f"""<!DOCTYPE html>
-<html>
+<html{theme_attr}>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -364,7 +367,7 @@ def render_disclaimer(handler):
 
 def render_note_page(handler, note_id: str, content: str, username: str = None, is_world: bool = False,
                      action_url: str = None, navbar: str = None, title_prefix: str = None,
-                     hint_text: str = None):
+                     hint_text: str = None, theme=None):
     escaped_id = html.escape(note_id)
     escaped_content = html.escape(content)
 
@@ -383,9 +386,12 @@ def render_note_page(handler, note_id: str, content: str, username: str = None, 
         navbar = get_navbar(handler) if is_world else get_navbar(handler, username)
     if hint_text is None:
         hint_text = ' 按 <kbd>Ctrl</kbd> + <kbd>S</kbd> 快速保存'
+    if theme is None:
+        theme = handler.get_theme()
+    theme_attr = f' data-theme="{theme}"' if theme else ""
 
     page = f"""<!DOCTYPE html>
-<html>
+<html{theme_attr}>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
