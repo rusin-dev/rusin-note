@@ -5,7 +5,8 @@ rusin-note - 极简在线笔记服务 (支持匿名公开笔记 /world/ 和私�
 - 私有笔记需注册登录，路径 /user/<username>/<note_id>
 - 顶部导航栏，登录/注册/登出
 - 密码强度要求可配置
-- 支持纯数字ID自动重定向到公开笔记
+- 支持 /<剪贴板名称> 短链接自动重定向到公开笔记 /world/<剪贴板名称>
+- 保留关键词（login/logout 等）禁止注册为用户名
 - 统计页面 /count
 - 免责声明 /disclaimer，支持Markdown渲染
 - Cookie使用SHA-256哈希存储，会话支持超时清除
@@ -161,6 +162,12 @@ sessions_lock = Lock()
 
 # 禁止的笔记ID（与路由冲突）
 FORBIDDEN_NOTE_IDS = {"user", "world", "shares"}
+
+# 保留用户名（与固定路由或 notes/ 目录冲突，禁止注册）
+# 注意：public 与公开笔记存储目录 notes/public/ 冲突，必须保留
+RESERVED_USERNAMES = {"register", "login", "logout", "count", "disclaimer",
+                      "favicon", "share", "shares", "world", "user", "new", "md",
+                      "public"}
 
 def load_users():
     global users
@@ -448,6 +455,8 @@ def is_get_rate_limited(ip: str) -> bool:
 
 # ---------- 笔记文件操作 ----------
 def validate_username(username: str) -> bool:
+    if username.lower() in RESERVED_USERNAMES:
+        return False
     return bool(re.match(r'^[a-zA-Z0-9_\-]+$', username))
 
 def validate_note_id(note_id: str) -> bool:
@@ -810,7 +819,7 @@ class NoteHandler(BaseHTTPRequestHandler):
             {f'<p class="error">{html.escape(error)}</p>' if error else ''}
             <form method="POST" action="/register">
                 <div class="form-group">
-                    <label>用户名 (字母数字下划线连字符)</label>
+                    <label>用户名 (字母数字下划线连字符，不可使用 login/logout 等系统关键词)</label>
                     <input type="text" name="username" required pattern="[a-zA-Z0-9_\\-]+">
                 </div>
                 <div class="form-group">
@@ -1422,13 +1431,6 @@ class NoteHandler(BaseHTTPRequestHandler):
             self.wfile.write(self._render_disclaimer().encode("utf-8"))
             return
 
-        # 纯数字路径 -> 重定向到 /world/<数字>
-        digit_match = re.match(r'^/(\d+)$', path)
-        if digit_match:
-            note_id = digit_match.group(1)
-            self._send_redirect(f"/world/{note_id}")
-            return
-
         # 注册页面
         if path == "/register":
             self.send_response(200)
@@ -1470,6 +1472,15 @@ class NoteHandler(BaseHTTPRequestHandler):
             else:
                 self.send_error(404, "Favicon not found")
             return
+
+        # 单段短链接 -> 重定向到 /world/<名称>
+        # 注意：必须放在所有固定路由（/register /login /logout /favicon.ico 等）之后
+        short_link_match = re.match(r'^/([^/]+)$', path)
+        if short_link_match:
+            note_id = short_link_match.group(1)
+            if validate_note_id(note_id):
+                self._send_redirect(f"/world/{note_id}")
+                return
 
         # ---------- 新增：公开笔记 Markdown 渲染 /world/<id>/md ----------
         world_md_match = re.match(r'^/world/([^/]+)/md$', path)
@@ -1684,7 +1695,11 @@ class NoteHandler(BaseHTTPRequestHandler):
                 self.send_response(200)
                 self.send_header("Content-Type", self._HTML_HEADER)
                 self.end_headers()
-                self.wfile.write(self._render_register_form("用户名只能包含字母、数字、下划线、连字符").encode("utf-8"))
+                if username.lower() in RESERVED_USERNAMES:
+                    error_msg = "该用户名是系统保留关键词，请更换（如 login/logout/register 等）"
+                else:
+                    error_msg = "用户名只能包含字母、数字、下划线、连字符"
+                self.wfile.write(self._render_register_form(error_msg).encode("utf-8"))
                 return
 
             with users_lock:
@@ -1945,7 +1960,7 @@ def run_server(port=8080):
     print(f"[连接] socket 超时: {SOCKET_TIMEOUT} 秒 (防止慢速连接挂起线程)")
     print("[公开笔记] 访问 /world/<id> 即可匿名编辑")
     print("[私有笔记] 注册登录后访问 /user/<username>/<id>")
-    print("[快捷] 访问 /数字 自动重定向到 /world/数字")
+    print("[快捷] 访问 /<名称> 自动重定向到 /world/<名称> (如 /数字 或 /abc)")
     print("[统计] 访问 /count 查看笔记统计")
     print("[免责] 访问 /disclaimer 查看免责声明 (支持Markdown)")
     print("[Markdown] 访问 /world/<id>/md 渲染公开笔记为只读 Markdown (已启用XSS防护)")
@@ -1962,6 +1977,12 @@ def run_server(port=8080):
         print("[警告] Markdown 库未安装，Markdown 渲染功能将降级为纯文本 (pip install markdown)")
     if not BLEACH_AVAILABLE:
         print("[警告] Bleach 库未安装，Markdown 渲染将不进行安全清洗，请尽快安装 (pip install bleach)")
+
+    # 检查历史遗留的 public 用户（与公开笔记目录冲突，需手动移除）
+    for bad_name in ("public",):
+        if bad_name in users:
+            print(f"[严重警告] users.json 中存在用户名 '{bad_name}'，它与公开笔记存储目录冲突，"
+                  f"请立即手动从 users.json 中删除该用户！")
 
     print("[提示] 按 Ctrl+C 停止服务")
     try:
