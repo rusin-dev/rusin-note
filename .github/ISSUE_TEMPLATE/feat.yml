@@ -1,0 +1,61 @@
+name: 新增功能
+description: 用于反馈文档中的一些问题
+title: "[Feature] \"标题\""
+labels: ["documentation"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ↑ 请将上方的 Title 中的 “标题” 替换成您实际的新增功能的概述。
+  - type: checkboxes
+    id: checkagain
+    attributes:
+      label: 请确认以下事项
+      description: |
+        1. 此新增功能不会干扰原功能或造成新的 Bug，能改善用户体验。
+        2. 您暂时没有可行的代码（如果有请交 PR）。
+      options:
+        - label: 我已确认以上事项
+          required: true
+  - type: checkboxes
+    id: place
+    attributes:
+      label: 可实践性
+      description: |
+        您提出的新增功能的实现的难易程度
+      options:
+        - label: 简单，只需做细微的修改
+        - label: 较简单，需改动 10~20 行
+        - label: 难，需大量改动 1 个文件或修改多个文件
+        - label: 难，需大量改动多个文件或重构整个项目（一般不接受）
+        - label: 其它
+  - type: input
+    id: otherplace
+    attributes:
+      label: 更具体的可实践性性
+      description: |
+        如果您的重要性选择了「其它」，请在这里告诉我们具体的影响。
+  - type: input
+    id: name
+    attributes:
+      label: 需修改的文件（非必须）
+      description: 格式：“文件目录”
+      placeholder: 例：./README.md
+  - type: dropdown 
+    id: content
+    attributes:
+      label: 错误类型
+      description: |
+        请在此选择错误类型。
+      options:
+        - 语法错误
+        - 文章结构混乱
+        - 未正确使用 Markdown 格式。
+    validations:
+      required: true
+  - type: input
+    id: remark
+    attributes:
+      label: 详细错误原因及修改方案
+      description: |
+        为什么错误呢？怎么修改？给出你的方案（可选，也可以不给）。
