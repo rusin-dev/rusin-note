@@ -1,6 +1,9 @@
+![欢迎访问本项目](https://stai.rusin7.com/p/us1xHRs8q)
+
 > [!IMPORTANT]
 >
 > 注：如果你是 rusin-dev（本组织）的成员，想要贡献，请参见[协作指南](https://github.com/rusin-dev/rusin-note/blob/main/contribute.md)。
+
 
 <div align="center">
     <a href="https://github.com/rusin-dev/rusin-note"><img width="15%" alt="logo" src="./image/logo.png" /></a>
