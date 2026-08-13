@@ -1,4 +1,4 @@
-name: Auto-merge dev to main (no PR)
+name: Auto-merge dev to main (with merge commit)
 
 on:
   schedule:
@@ -23,27 +23,52 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-      - name: 合并 dev 到 main（保留 .github）
+      - name: 在临时分支上合并 dev → main（保留 .github）
         run: |
+          git fetch origin main dev
           git checkout main
-          git fetch origin dev
+          git reset --hard origin/main
 
-          # 备份 .github
+          # 创建临时分支
+          git checkout -b tmp-merge
+
+          # 备份 main 的 .github（即使合并失败也可恢复）
           if [ -d .github ]; then
             mkdir -p /tmp/backup
             cp -r .github /tmp/backup/
           fi
 
-          # 硬重置到 dev（main 完全变成 dev 的内容）
-          git reset --hard origin/dev
+          # 执行合并（使用 ours 策略，但允许冲突不中止）
+          set +e
+          git merge origin/dev --no-ff --strategy-option=ours -m "Merge dev into tmp-branch"
+          MERGE_EXIT=$?
+          set -e
 
-          # 恢复 .github
-          if [ -d /tmp/backup/.github ]; then
-            rm -rf .github
-            cp -r /tmp/backup/.github .github
+          # 如果合并失败（有冲突），手动解决
+          if [ $MERGE_EXIT -ne 0 ]; then
+            echo "合并有冲突，正在解决..."
+            # 中止当前合并
+            git merge --abort
+            # 重新合并，但加上 --no-commit，以便手动处理
+            git merge origin/dev --no-ff --no-commit --strategy-option=ours
+            # 此时所有冲突已按 ours 策略暂存，但工作区可能仍有删除文件
+            # 强制恢复 .github（从备份或从 HEAD 恢复）
+            if [ -d /tmp/backup/.github ]; then
+              rm -rf .github
+              cp -r /tmp/backup/.github .github
+            else
+              # 如果备份不存在，从当前 HEAD 恢复（即 main 的版本）
+              git checkout HEAD -- .github 2>/dev/null || echo "No .github to restore"
+            fi
             git add .github
-            git commit -m "Restore .github from main after syncing with dev"
+            git commit -m "Merge dev into tmp (resolved conflicts, keep .github)"
           fi
 
-          # 强制推送
-          git push origin main --force
+          # 切回 main 并合并 tmp-merge（会生成合并提交）
+          git checkout main
+          git merge tmp-merge --no-ff -m "Merge tmp-merge into main (sync from dev)"
+          # 推送（非强制）
+          git push origin main
+
+          # 清理临时分支
+          git branch -D tmp-merge

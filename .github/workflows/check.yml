@@ -1,16 +1,16 @@
-name: CI
-
 on:
   push:
-    branches: [ "main","dev" ]
+    branches: [ "main", "dev" ]
     paths-ignore:
       - '**.md'
       - '**.yml'
+      - '.github/**'          # 忽略 .github 目录下所有文件
   pull_request:
-    branches: [ "main","dev" ]
+    branches: [ "main", "dev" ]
     paths-ignore:
       - '**.md'
       - '**.yml'
+      - '.github/**'
 
 jobs:
   test:
