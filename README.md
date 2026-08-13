@@ -152,7 +152,7 @@ rusin-note:.
 
 ### 配置项解析
 
-- `max_note_size_kb`：笔记最大大小（单位：**KB**）默认 $512$（即 $0.5$MB）。
+- `max_note_size_kb`：笔记最大大小（单位：**KB**）默认 $512$（即 $0.5$ MB）。
 - `sitename`：网页名称。填你的站点名。
 - `rate_limit` 速率限制。
    
