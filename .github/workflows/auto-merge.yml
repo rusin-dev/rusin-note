@@ -25,28 +25,42 @@ jobs:
 
       - name: 合并 dev 到 main
         run: |
-          # 切换到 main 分支
           git checkout main
           git fetch origin dev
 
-          # 先尝试普通合并，允许失败
+          # 创建临时分支保存 main 状态
+          git checkout -b temp-merge
+          
+          # 合并 dev
           set +e
           git merge origin/dev --no-ff -m "Auto-merge from dev"
-          MERGE_EXIT=$?
+          if [ $? -ne 0 ]; then
+            echo "检测到冲突，手动解决..."
+            
+            # 对于所有冲突文件，使用 main 的版本
+            git status --porcelain | grep "^UU" | while read status file; do
+              echo "保留 main 版本: $file"
+              git checkout --ours -- "$file"
+              git add "$file"
+            done
+            
+            # 如果有删除冲突（dev删除了但main保留）
+            git status --porcelain | grep "^DU" | while read status file; do
+              echo "恢复被删除的文件: $file"
+              git checkout HEAD -- "$file"
+              git add "$file"
+            done
+            
+            git commit -m "Auto-merge from dev (resolved conflicts)"
+          fi
           set -e
 
-          # 如果合并失败（有冲突）
-          if [ $MERGE_EXIT -ne 0 ]; then
-            echo "合并有冲突，使用 ours 策略解决..."
-            
-            # 中止当前合并
-            git merge --abort
-            
-            # 重新合并，使用 ours 策略
-            git merge origin/dev --no-ff \
-              --strategy-option=ours \
-              -m "Auto-merge from dev (resolved with ours strategy)"
-          fi
+          # 切回 main 并合并临时分支
+          git checkout main
+          git merge temp-merge --no-ff -m "Merge dev to main"
+          
+          # 删除临时分支
+          git branch -d temp-merge
 
-          # 推送合并结果
+          # 推送
           git push origin main
