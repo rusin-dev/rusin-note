@@ -1,10 +1,12 @@
+name: CI
+
 on:
   push:
     branches: [ "main", "dev" ]
     paths-ignore:
       - '**.md'
       - '**.yml'
-      - '.github/**'          # 忽略 .github 目录下所有文件
+      - '.github/**'
   pull_request:
     branches: [ "main", "dev" ]
     paths-ignore:
