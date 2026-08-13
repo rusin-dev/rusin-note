@@ -46,7 +46,7 @@ Python version $\geq 3.10$.
 3. Start the server
 
     ```bash
-    python3 main.py
+    python3 -m app
     ```
 
     Then open <https://localhost:8080> to view the result.
@@ -70,10 +70,10 @@ Connect to your server, then:
 3. Start the server
 
     ```bash
-    python3 main.py
+    python3 -m app
 
     # Run in the background
-    nohup python3 rusin-note.py > app.log 2>&1 &
+    nohup python3 -m app > app.log 2>&1 &
     ```
 
 4. Configure Nginx (optional)
@@ -118,10 +118,22 @@ rusin-note:.
 │  config.json (configuration)
 │  Disclaimer.md (disclaimer)
 │  LICENSE
-│  main.py (core code)
 │  README.md
 │  contribute.md (collaboration guide)
 │  
+├─app (core code)
+│  │  __init__.py
+│  │  __main__.py (entry: python3 -m app)
+│  │  config.py (configuration loading & global constants)
+│  │  store.py (users/sessions/shares data storage)
+│  │  auth.py (password hashing & session auth)
+│  │  notes.py (note file operations & stats)
+│  │  ratelimit.py (IP rate limiting)
+│  │  theme.py (dark mode & favicon)
+│  │  templates.py (page rendering)
+│  │  handlers.py (HTTP routing)
+│  │  server.py (server startup)
+│  │
 ├─image
 │      logo.png
 │      

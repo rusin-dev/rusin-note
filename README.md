@@ -50,7 +50,7 @@ python 版本 $\geq 3.10$。
 3. 启动服务
 
     ```bash
-    python3 main.py
+    python3 -m app
     ```
 
     然后打开 <https://localhost:8080> 查看效果。
@@ -75,10 +75,10 @@ python 版本 $\geq 3.10$。
 3. 启动服务
 
     ```bash
-    python3 main.py
+    python3 -m app
 
     # 后台运行
-    nohup python3 rusin-note.py > app.log 2>&1 &
+    nohup python3 -m app > app.log 2>&1 &
     ```
 
 4. 配置 Nginx（可选）
@@ -122,10 +122,22 @@ rusin-note:.
 │  config.json（配置项）
 │  Disclaimer.md（免责声明）
 │  LICENSE
-│  main.py（核心代码）
 │  README.md
 │  contribute.md（协作指南）
 │  
+├─app（核心代码）
+│  │  __init__.py
+│  │  __main__.py（入口：python3 -m app）
+│  │  config.py（配置加载与全局常量）
+│  │  store.py（用户/会话/分享数据存储）
+│  │  auth.py（密码哈希与会话认证）
+│  │  notes.py（笔记文件操作与统计）
+│  │  ratelimit.py（IP 限流）
+│  │  theme.py（暗色模式与 favicon）
+│  │  templates.py（页面渲染）
+│  │  handlers.py（HTTP 路由处理）
+│  │  server.py（服务器启动）
+│  │
 ├─image
 │      logo.png
 │      
