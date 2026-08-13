@@ -22,10 +22,6 @@
     </p>
 </div>
 
-> [!TIP]
->
-> [**Detailed documentation** is available in the wiki](/rusin-dev/rusin-note/wiki)
-
 ## Quick Start
 
 ### Requirements
@@ -103,6 +99,10 @@ Connect to your server, then:
     }
     ```
 
+    > After setting up the Nginx reverse proxy, set `trust_proxy_headers` to `true` in
+    > `config.json` so the server trusts the `X-Real-IP` header for rate limiting by the
+    > real client IP (disabled by default to prevent header-forging bypasses).
+
     ```bash
     # Enable and reload
     sudo ln -s /etc/nginx/sites-available/rusin-note /etc/nginx/sites-enabled
@@ -144,6 +144,26 @@ rusin-note:.
     - `max_requests`：Maximum number of requests $s$, default `30`.
 
     Maximum $s$ requests allowed within $t$ seconds.
+
+- `get_rate_limit`：Independent rate limiting for GET requests.
+    - `window_seconds`：Time window $t$, default `60`.
+    - `max_requests`：Maximum number of requests $s$, default `45`.
+
+    Maximum $s$ GET requests (page loads, favicon, etc.) within $t$ seconds.
+
+- `save_rate_limit`：Independent rate limiting for save-type POST requests (note saves / share write-backs).
+    - `window_seconds`：Time window $t$, default `60`.
+    - `max_requests`：Maximum number of requests $s$, default `120`.
+
+    Maximum $s$ note saves within $t$ seconds, decoupled from the global POST limit (`rate_limit`) so frequent saves are not throttled.
+
+- `trust_proxy_headers`：Whether to trust `X-Forwarded-For` / `X-Real-IP` headers set by a reverse proxy, default `false`.
+
+    **Security note**: Disabled by default — rate limiting is always based on the direct TCP peer IP to prevent clients from forging headers to bypass limits. Only set to `true` when deployed behind a trusted reverse proxy (e.g. Nginx).
+
+- `secure_cookies`：Whether to add the `Secure` flag to the session cookie, default `false`.
+
+    **Security note**: Only set to `true` when the site is served over HTTPS; otherwise browsers will refuse to send the cookie over HTTP.
 
 - `id_generation`：Random URL generation configuration.
     - `length`：URL length, default `4`.

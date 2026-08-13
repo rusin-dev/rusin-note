@@ -1,8 +1,6 @@
-![欢迎访问本项目](https://stai.rusin7.com/p/us1xHRs8q)
-
 > [!IMPORTANT]
 >
-> 注：如果你是 rusin-dev（本组织）的成员，想要贡献，请参见[协作指南](https://github.com/rusin-dev/rusin-note/blob/main/contribute.md)。
+> 注：如果您是 rusin-dev（本组织）的成员，想要贡献，请参见[协作指南](https://github.com/rusin-dev/rusin-note/blob/main/contributing.md)，如果您不是本组织的，可以加入或开个 Issue。
 
 <div align="center">
     <a href="https://github.com/rusin-dev/rusin-note"><img width="15%" alt="logo" src="./image/logo.png" /></a>
@@ -27,10 +25,6 @@
         </a>
     </p>
 </div>
-
-> [!TIP]
->
-> [**详细文档**参见 wiki](/rusin-dev/rusin-note/wiki)
 
 ## 快速开始
 
@@ -110,6 +104,9 @@ python 版本 $\geq 3.10$。
     }
     ```
 
+    > 使用 Nginx 反代后，请将 `config.json` 中的 `trust_proxy_headers` 设为 `true`，
+    > 服务端才会信任 `X-Real-IP` 头按真实客户端 IP 限流（默认关闭以杜绝伪造头绕过限流）。
+
     ```bash
     # 启用并重载
     sudo ln -s /etc/nginx/sites-available/rusin-note /etc/nginx/sites-enabled
@@ -151,6 +148,22 @@ rusin-note:.
    - `max_requests` ：请求数 $s$，默认 $30$;
 
    $t$ 秒内最大请求 $s$ 次。
+- `get_rate_limit` GET 请求独立限流。
+   - `window_seconds` ：时间 $t$，默认 $60$；
+   - `max_requests` ：请求数 $s$，默认 $45$;
+
+   $t$ 秒内 GET 请求最大 $s$ 次（含页面加载、favicon 等）。
+- `save_rate_limit` 保存类 POST 独立限流（笔记保存/分享写回）。
+   - `window_seconds` ：时间 $t$，默认 $60$；
+   - `max_requests` ：请求数 $s$，默认 $120$;
+
+   $t$ 秒内保存笔记最多 $s$ 次，与全局 POST 限流（`rate_limit`）互不干扰，避免频繁保存被误伤。
+- `trust_proxy_headers`：是否信任反向代理传递的 `X-Forwarded-For` / `X-Real-IP` 头，默认 `false`。
+  
+  **安全说明**：默认关闭，限流一律基于 TCP 直连 IP，防止客户端伪造请求头绕过限流。仅当部署在可信反向代理（如 Nginx）之后才置为 `true`。
+- `secure_cookies`：会话 Cookie 是否附加 `Secure` 标志，默认 `false`。
+
+  **安全说明**：仅当通过 HTTPS 访问时置为 `true`，否则浏览器会拒绝在 HTTP 下回传 Cookie。
 - `id_generation` 随机 url 配置。
    - `length` ：长度，默认 $4$；
    - `use_uppercase` ：是否使用大写字母，默认 `false`；
