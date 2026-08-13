@@ -15,8 +15,10 @@
         <a href="https://github.com/rusin-dev/rusin-note/releases"><img src="https://img.shields.io/github/downloads/rusin-dev/rusin-note/total?color=%239F7AEA&logo=github" alt="Downloads" /></a>
         <a href="https://github.com/rusin-dev/rusin-note/stargazers"><img src="https://img.shields.io/github/stars/rusin-dev/rusin-note" alt="Stars" /></a>
         <a href="https://github.com/rusin-dev/rusin-note/network/members"><img src="https://img.shields.io/github/forks/rusin-dev/rusin-note" alt="Forks" /></a>
-        <a href="https://github.com/rusin-dev/rusin-note/actions/workflows/check.yml?query=branch%3Amain">
-        <img src="https://img.shields.io/github/actions/workflow/status/rusin-dev/rusin-note/check.yml?branch=main&label=tests" alt="CI Build"></a>
+        <a href="https://github.com/rusin-dev/rusin-note/actions/workflows/check.yml">
+        <img src="https://github.com/rusin-dev/rusin-note/actions/workflows/check.yml/badge.svg" alt="CI Build"></a>
+        <a href="https://github.com/rusin-dev/rusin-note/actions/workflows/auto-merge.yml">
+        <img src="https://github.com/rusin-dev/rusin-note/actions/workflows/auto-merge.yml/badge.svg?branch=main" alt="Auto merge"></a>
         <a href="https://pypi.org/project/pandera/"><img src="https://img.shields.io/pypi/v/pandera.svg" alt="PyPI version shields.io"></a>
         <a href="https://www.repostatus.org/#active"><img src="https://img.shields.io/badge/repo%20status-Active-Green" alt="Project Status: Active – The project has reached a stable, usable state and is being actively developed."></a>
         <a href="https://pypi.python.org/pypi/pandera/"><img src="https://img.shields.io/pypi/pyversions/pandera.svg" alt="PyPI pyversions">
@@ -135,7 +137,7 @@ rusin-note:.
 
 ### 配置项解析
 
-- `max_note_size_mb`：笔记最大大小（单位：**MB**）默认 $1$。
+- `max_note_size_kb`：笔记最大大小（单位：**KB**）默认 $512$（即 $0.5$MB）。
 - `sitename`：网页名称。填你的站点名。
 - `rate_limit` 速率限制。
    
@@ -148,11 +150,26 @@ rusin-note:.
    - `use_uppercase` ：是否使用大写字母，默认 `false`；
    - `use_lowercase` ：是否使用小写字母，默认 `true`；
    - `use_digits` ：是否使用数字，默认 `false`；
+- `share_token` 分享链接 token 配置。
+   - `length` ：长度，默认 $64$；
+   - `use_uppercase` ：是否使用大写字母，默认 `true`；
+   - `use_lowercase` ：是否使用小写字母，默认 `true`；
+   - `use_digits` ：是否使用数字，默认 `true`；
 - `session_timeout` 单次会话时间。
    - `enabled` ：是否开启，默认 `false`；
    - `minutes` ：设定时长，（单位：**分钟**）默认 $15$；
 
-   当时间超过设定时，将登出访客账号。
+    当时间超过设定时，将登出访客账号。
+- `note_expiration` 笔记自动清除（剪贴板超过保存时间自动删除）。
+   - `enabled` ：是否开启，默认 `false`；
+   - `hours` ：保存时长（单位：**小时**）默认 $24$；
+
+    开启后，超过设定小时数未被修改的剪贴板（公开+私有）将被后台线程自动删除，每 30 分钟扫描一次。
+- `latex_render` LaTeX 公式渲染。
+   - `enabled` ：是否开启，默认 `true`；
+   - `cdn` ：KaTeX 静态文件基础目录，默认 jsdelivr（国内可换用 BootCDN：`https://cdn.bootcdn.net/ajax/libs/katex/0.16.11`）；
+
+    开启后，Markdown 只读页面支持 `$...$` 行内公式与 `$$...$$` 块级公式（KaTeX 洛谷同款，客户端渲染，无需服务端依赖）。
 - `password_policy`：密码策略，定义访客密码的复杂度要求。  
    - `min_length`：密码最小长度，默认 `8`；  
    - `require_uppercase`：是否必须包含大写字母，默认 `true`；  
