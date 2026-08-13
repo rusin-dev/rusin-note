@@ -15,6 +15,7 @@ rusin-note - 极简在线笔记服务 (支持匿名公开笔记 /world/ 和私�
 - 支持将分享渲染为 Markdown（只读）：/share/<token>/md 或 /share/<token>.md
 - 分享功能：私有笔记可生成分享链接 /share/<token>（长度与字符集可配置，支持只读/可编辑）
 - 分享管理：/user/<用户名>/shares/（创建/删除/查看次数）
+- 犇犇动态：/benben（登录可发布，未登录只读；每条显示用户名+时间，支持 Markdown/LaTeX，安全清洗防 XSS，每页 50 条分批加载）
 - LaTeX 公式渲染：Markdown 只读页面支持 $...$ / $$...$$（KaTeX 洛谷同款，可配置开关与 CDN）
 - 暗色模式：所有页面支持切换（localStorage 记忆 + 跟随系统偏好，导航栏按钮切换）
 - XSS防护：使用bleach清洗Markdown渲染后的HTML

@@ -67,6 +67,10 @@ DEFAULT_CONFIG = {
         "require_lowercase": True,
         "require_digits": True,
         "require_special": True
+    },
+    "benben": {
+        "max_length": 1024,
+        "page_size": 50
     }
 }
 
@@ -187,3 +191,9 @@ def get_password_requirements_description():
     if PW_REQUIRE_SPECIAL:
         parts.append("特殊符号 (不含 / \\ ( ) \" ' )")
     return "、".join(parts)
+
+
+# ---------- 犇犇（用户动态）配置 ----------
+BENBEN_CFG = config.get("benben", DEFAULT_CONFIG["benben"])
+BENBEN_MAX_LENGTH = BENBEN_CFG.get("max_length", 1024)
+BENBEN_PAGE_SIZE = BENBEN_CFG.get("page_size", 50)

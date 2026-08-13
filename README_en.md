@@ -210,3 +210,8 @@ rusin-note:.
    - `require_lowercase`: whether lowercase letters are required, default `true`;  
    - `require_digits`: whether digits are required, default `true`;  
    - `require_special`: whether special characters (excluding `/ \ ( ) " '`) are required, default `true`;
+- `benben` (feed at `/benben`, logged-in users can post, anonymous read-only).
+   - `max_length`: max length of a single feed post (in **characters**), default `1024` (~1KB);
+   - `page_size`: posts loaded per batch, default `50`;
+
+   Feed content supports Markdown and LaTeX math (`$...$` / `$$...$$`, controlled by `latex_render`), sanitized with bleach to prevent XSS; `page_size` posts per page, loaded in batches via "Load more", with loading and posting both subject to request rate limits (GET/POST).

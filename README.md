@@ -207,3 +207,8 @@ rusin-note:.
    - `require_lowercase`：是否必须包含小写字母，默认 `true`；  
    - `require_digits`：是否必须包含数字，默认 `true`；  
    - `require_special`：是否必须包含特殊符号（不含 `/ \ ( ) " '`），默认 `true`； 
+- `benben` 犇犇动态（`/benben`，登录可发布、未登录只读）。
+   - `max_length`：单条犇犇最大长度（单位：**字符**），默认 `1024`（约 1KB）；
+   - `page_size`：每批加载条数，默认 `50`；
+
+   内容支持 Markdown 与 LaTeX 公式（`$...$` / `$$...$$`，依赖 `latex_render` 开关），渲染时经 bleach 安全清洗防止 XSS；每页显示 `page_size` 条，通过「加载更多」分批加载，加载与发布均受请求速率限制（GET/POST 限流）。

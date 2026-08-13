@@ -32,8 +32,10 @@ from .ratelimit import (
     is_save_rate_limited,
 )
 from .store import (
+    add_benben_post,
     create_share,
     delete_share,
+    get_benben_posts,
     get_share,
     increment_share_views,
     save_users,
@@ -219,6 +221,20 @@ class NoteHandler(BaseHTTPRequestHandler):
                 self.wfile.write(data)
             else:
                 self.send_error(404, "Favicon not found")
+            return
+
+        # 犇犇（用户动态）：/benben?page=N（受 GET 限流约束；未登录只读）
+        if path == "/benben":
+            page_num = 1
+            try:
+                page_num = max(1, int(urllib.parse.parse_qs(parsed.query).get("page", ["1"])[0]))
+            except (TypeError, ValueError):
+                page_num = 1
+            posts, has_more = get_benben_posts(page_num, config.BENBEN_PAGE_SIZE)
+            self.send_response(200)
+            self.send_header("Content-Type", self._HTML_HEADER)
+            self.end_headers()
+            self.wfile.write(templates.render_benben_page(self, posts, page_num, has_more).encode("utf-8"))
             return
 
         # 单段短链接 -> 重定向到 /world/<名称>
@@ -624,6 +640,40 @@ class NoteHandler(BaseHTTPRequestHandler):
             self._set_session_cookie(token)
             self.send_header("Location", f"/user/{username}/")
             self.end_headers()
+            return
+
+        # ---------- 犇犇发布：/benben（需登录，受全局 POST 限流约束） ----------
+        if path == "/benben":
+            current_user = self.get_current_user()
+            if not current_user:
+                # 未登录：先读取并丢弃请求体再重定向，避免未读数据导致连接被重置
+                self._read_form_body(1024 * 32, max_fields=5)
+                self._send_redirect("/login")
+                return
+            form = self._read_form_body(1024 * 32, max_fields=5)
+            if form is None:
+                return
+            content = form.get("content", [""])[0].strip()
+            if not content:
+                posts, has_more = get_benben_posts(1, config.BENBEN_PAGE_SIZE)
+                self.send_response(400)
+                self.send_header("Content-Type", self._HTML_HEADER)
+                self.end_headers()
+                self.wfile.write(templates.render_benben_page(self, posts, 1, has_more,
+                                                              "内容不能为空").encode("utf-8"))
+                return
+            if len(content) > config.BENBEN_MAX_LENGTH:
+                posts, has_more = get_benben_posts(1, config.BENBEN_PAGE_SIZE)
+                self.send_response(400)
+                self.send_header("Content-Type", self._HTML_HEADER)
+                self.end_headers()
+                self.wfile.write(templates.render_benben_page(
+                    self, posts, 1, has_more,
+                    f"内容超出长度限制（最多 {config.BENBEN_MAX_LENGTH} 字符）",
+                    prefill=content).encode("utf-8"))
+                return
+            add_benben_post(current_user, content)
+            self._send_redirect("/benben")
             return
 
         # ---------- 创建分享：/user/<用户名>/shares/ ----------

@@ -16,15 +16,18 @@ from .config import (
 USER_FILE = "users.json"
 SESSION_FILE = "sessions.json"
 SHARE_FILE = "shares.json"
+BENBEN_FILE = "benben.json"
 NOTES_BASE = "notes"
 os.makedirs(NOTES_BASE, exist_ok=True)
 
 users = {}
 sessions = {}  # 格式: {sha256(token): {"username": str, "created_at": float}}
 shares = {}  # 格式: {token: {"owner": str, "note_id": str, "created_at": float, "editable": bool, "views": int}}
+benben_posts = []  # 格式: [{"username": str, "content": str, "time": float}]，旧→新
 users_lock = Lock()
 sessions_lock = Lock()
 shares_lock = Lock()
+benben_lock = Lock()
 
 
 def _atomic_json_dump(path: str, data: dict) -> bool:
@@ -160,6 +163,58 @@ def list_user_shares(username: str) -> list:
                 if isinstance(s, dict) and s.get("owner") == username]
 
 
+# ---------- 犇犇（用户动态）存储 ----------
+def load_benben():
+    global benben_posts
+    if os.path.exists(BENBEN_FILE):
+        try:
+            with open(BENBEN_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            if isinstance(data, list):
+                benben_posts = data
+            else:
+                benben_posts = []
+        except Exception:
+            benben_posts = []
+    else:
+        benben_posts = []
+
+
+def save_benben():
+    with benben_lock:
+        _atomic_json_dump(BENBEN_FILE, benben_posts)
+
+
+def add_benben_post(username: str, content: str) -> bool:
+    """新增一条犇犇（追加存储，不提供删除/清除）"""
+    with benben_lock:
+        benben_posts.append({
+            "username": username,
+            "content": content,
+            "time": time.time(),
+        })
+    save_benben()
+    return True
+
+
+def get_benben_posts(page: int, page_size: int):
+    """按页返回犇犇（新→旧），page 从 1 开始。返回 (posts, has_more)。"""
+    with benben_lock:
+        total = len(benben_posts)
+    start = total - page * page_size
+    if start < 0:
+        start = 0
+    end = total - (page - 1) * page_size
+    if end <= 0:
+        return [], False
+    with benben_lock:
+        posts = list(benben_posts[start:end])  # 旧→新
+    posts.reverse()  # 新→旧
+    has_more = total > page * page_size
+    return posts, has_more
+
+
 load_users()
 load_sessions()
 load_shares()
+load_benben()

@@ -14,7 +14,7 @@ FORBIDDEN_NOTE_IDS = {"user", "world", "shares"}
 # 注意：public 与公开笔记存储目录 notes/public/ 冲突，必须保留
 RESERVED_USERNAMES = {"register", "login", "logout", "count", "disclaimer",
                       "favicon", "share", "shares", "world", "user", "new", "md",
-                      "public"}
+                      "public", "benben"}
 
 
 # ---------- 校验 ----------

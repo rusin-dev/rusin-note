@@ -2,6 +2,7 @@
 import html
 import json
 import os
+import time
 
 from . import config
 from .notes import get_stats, list_user_notes
@@ -21,6 +22,7 @@ def get_navbar(handler, current_user=None) -> str:
                     <a href="/user/{html.escape(current_user)}/">我的笔记</a>
                     <a href="/user/{html.escape(current_user)}/new">新建笔记</a>
                     <a href="/user/{html.escape(current_user)}/shares/">分享管理</a>
+                    <a href="/benben">犇犇</a>
                     <a href="/logout">登出</a>
                     {THEME_TOGGLE_BTN}
                 </span>
@@ -33,6 +35,7 @@ def get_navbar(handler, current_user=None) -> str:
                 <span class="nav-links">
                     <a href="/register">注册</a>
                     <a href="/login">登录</a>
+                    <a href="/benben">犇犇</a>
                     <a href="/count">统计</a>
                     <a href="/disclaimer">免责声明</a>
                     {THEME_TOGGLE_BTN}
@@ -342,18 +345,12 @@ def render_disclaimer(handler):
 
     # 尝试使用 markdown 库渲染（同样需要安全清洗，但此处内容由管理员控制，风险较低，不过仍建议统一使用安全渲染）
     if config.MARKDOWN_AVAILABLE and config.BLEACH_AVAILABLE:
-        try:
-            raw_html = config.markdown.markdown(content, extensions=['extra', 'codehilite'])
-            ALLOWED_TAGS = ['p', 'br', 'strong', 'em', 'u', 'strike', 'a', 'ul', 'ol', 'li', 'blockquote', 'pre', 'code', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'hr', 'table', 'thead', 'tbody', 'tr', 'th', 'td', 'div', 'span']
-            ALLOWED_ATTRS = {'*': ['class'], 'a': ['href', 'title', 'target']}
-            html_content = config.bleach.clean(raw_html, tags=ALLOWED_TAGS, attributes=ALLOWED_ATTRS, strip=True)
-            body = f"""
-                <div class="disclaimer markdown-body">{html_content}</div>
-                <p style="margin-top: 20px;"><a href="/">返回首页</a></p>
-            """
-            return render_base(handler, body, "免责声明", extra_head=get_latex_head())
-        except Exception:
-            pass  # 降级到纯文本
+        html_content = render_markdown_html(content)
+        body = f"""
+            <div class="disclaimer markdown-body">{html_content}</div>
+            <p style="margin-top: 20px;"><a href="/">返回首页</a></p>
+        """
+        return render_base(handler, body, "免责声明", extra_head=get_latex_head())
 
     # 降级：纯文本（安全）
     body = f"""
@@ -732,14 +729,12 @@ def get_latex_head() -> str:
     )
 
 
-# ---------- 只读 Markdown 渲染页面（安全清洗） ----------
-def render_markdown_page(handler, note_id: str, content: str, title_label: str = "公开笔记",
-                         back_url: str = None, back_label: str = "返回编辑", navbar: str = None):
+# ---------- 只读 Markdown 渲染（安全清洗，犇犇/笔记通用） ----------
+def render_markdown_html(content: str) -> str:
     """
-    渲染笔记为 Markdown 只读页面（公开/私有/分享通用）。
-    使用 bleach 清洗 HTML，防止 XSS。
+    将 Markdown 安全渲染为 HTML。
+    使用 bleach 清洗 HTML，防止 XSS；依赖缺失或渲染失败时降级为纯文本。
     """
-    # 如果 markdown 和 bleach 都可用，则安全渲染
     if config.MARKDOWN_AVAILABLE and config.BLEACH_AVAILABLE:
         try:
             raw_html = config.markdown.markdown(content, extensions=['extra', 'codehilite'])
@@ -755,13 +750,20 @@ def render_markdown_page(handler, note_id: str, content: str, title_label: str =
                 '*': ['class'],          # 允许 class（用于代码高亮等）
                 'a': ['href', 'title', 'target']
             }
-            html_content = config.bleach.clean(raw_html, tags=ALLOWED_TAGS, attributes=ALLOWED_ATTRS, strip=True)
+            return config.bleach.clean(raw_html, tags=ALLOWED_TAGS, attributes=ALLOWED_ATTRS, strip=True)
         except Exception:
-            # 渲染失败，降级为纯文本
-            html_content = f"<pre>{html.escape(content)}</pre>"
-    else:
-        # 缺少依赖，降级为纯文本（安全）
-        html_content = f"<pre>{html.escape(content)}</pre>"
+            pass  # 渲染失败，降级为纯文本
+    return f"<pre>{html.escape(content)}</pre>"
+
+
+# ---------- 只读 Markdown 渲染页面 ----------
+def render_markdown_page(handler, note_id: str, content: str, title_label: str = "公开笔记",
+                         back_url: str = None, back_label: str = "返回编辑", navbar: str = None):
+    """
+    渲染笔记为 Markdown 只读页面（公开/私有/分享通用）。
+    使用 bleach 清洗 HTML，防止 XSS。
+    """
+    html_content = render_markdown_html(content)
 
     if back_url is None:
         back_url = f"/world/{note_id}"
@@ -860,3 +862,74 @@ def render_share_edit_page(handler, token: str, note_id: str, content: str, owne
         title_prefix="分享笔记",
         hint_text=' 可编辑分享：保存后将写入分享者原笔记',
     )
+
+
+# ---------- 犇犇（用户动态）页面 ----------
+def render_benben_page(handler, posts, page, has_more, error="", prefill=""):
+    """犇犇页面：登录可发布，未登录只读。posts 为（新→旧）的犇犇条目，每页 BENBEN_PAGE_SIZE 条。"""
+    current_user = handler.get_current_user()
+
+    items = ""
+    for post in posts:
+        if not isinstance(post, dict):
+            continue
+        username = post.get("username", "")
+        content = render_markdown_html(post.get("content", ""))
+        ts = post.get("time", 0)
+        if isinstance(ts, (int, float)) and ts > 0:
+            time_str = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(ts))
+        else:
+            time_str = ""
+        items += f"""
+            <div class="benben-post">
+                <div class="benben-head">{html.escape(username)}<span class="benben-time">{time_str}</span></div>
+                <div class="benben-body markdown-body">{content}</div>
+            </div>
+        """
+    if not items:
+        items = '<p class="empty">还没有犇犇，快来发布第一条吧</p>'
+
+    error_html = f'<p class="error">{html.escape(error)}</p>' if error else ""
+    if current_user:
+        form_area = f"""
+            {error_html}
+            <form method="POST" action="/benben" class="benben-form">
+                <div class="form-group">
+                    <label>发布犇犇（支持 Markdown 与 LaTeX 公式，最多 {config.BENBEN_MAX_LENGTH} 字符）</label>
+                    <textarea name="content" rows="4" maxlength="{config.BENBEN_MAX_LENGTH}">{html.escape(prefill)}</textarea>
+                </div>
+                <button type="submit" style="width:auto;">发布</button>
+            </form>
+        """
+    else:
+        form_area = f"""
+            <p style="color: var(--muted);">登录后可发布犇犇，当前为只读模式</p>
+            {error_html}
+        """
+
+    if has_more:
+        more_link = f'<p class="benben-more"><a href="/benben?page={page + 1}">加载更多（更早）</a></p>'
+    else:
+        more_link = '<p class="benben-more empty">没有更多了</p>'
+
+    body = f"""
+        <h1>犇犇</h1>
+        <p style="color: var(--muted); margin: 12px 0 16px;">第 {page} 页 · 每页 {config.BENBEN_PAGE_SIZE} 条</p>
+        {form_area}
+        <div class="benben-list">
+            {items}
+        </div>
+        {more_link}
+    """
+    benben_css = """
+        <style>
+            .benben-post { border: 1px solid var(--card-border); border-radius: 8px; padding: 12px 16px; margin-bottom: 12px; background: var(--card-bg); }
+            .benben-head { font-weight: 500; margin-bottom: 6px; }
+            .benben-time { color: var(--muted); font-size: 13px; font-weight: 400; margin-left: 8px; }
+            .benben-body { font-size: 15px; word-break: break-word; }
+            .benben-form { max-width: 720px; margin: 16px 0 24px; }
+            .benben-more { text-align: center; margin-top: 16px; }
+        </style>
+    """
+    navbar = get_navbar(handler, current_user)
+    return render_base(handler, body, "犇犇", navbar, extra_head=benben_css + get_latex_head())
