@@ -1263,7 +1263,6 @@ class NoteHandler(BaseHTTPRequestHandler):
                 ALLOWED_ATTRS = {'*': ['class'], 'a': ['href', 'title', 'target']}
                 html_content = bleach.clean(raw_html, tags=ALLOWED_TAGS, attributes=ALLOWED_ATTRS, strip=True)
                 body = f"""
-                    <h1>免责声明</h1>
                     <div class="disclaimer markdown-body">{html_content}</div>
                     <p style="margin-top: 20px;"><a href="/">返回首页</a></p>
                 """
@@ -1274,9 +1273,9 @@ class NoteHandler(BaseHTTPRequestHandler):
         # 降级：纯文本（安全）
         body = f"""
             <h1>免责声明</h1>
+            <p>暂无，请联系站长添加</p>
             <div class="disclaimer">{html.escape(content)}</div>
             <p style="margin-top: 20px;"><a href="/">返回首页</a></p>
-            <p style="color: #888; font-size: 14px;">提示: 安装 markdown 和 bleach 库以支持安全 Markdown 渲染 (pip install markdown bleach)</p>
         """
         return self._render_base(body, "免责声明")
 
