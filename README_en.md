@@ -132,7 +132,7 @@ rusin-note:.
 
 ### Configuration Options
 
-- `max_note_size_mb`：Maximum note size (in **MB**), default `1`.
+- `max_note_size_kb`：Maximum note size (in **KB**), default `512` (0.5 MB).
 - `sitename`: Website name. Enter your site name.
 - `rate_limit`：Rate limiting configuration.
 
@@ -147,11 +147,27 @@ rusin-note:.
     - `use_lowercase`：Use lowercase letters, default `true`.
     - `use_digits`：Use digits, default `false`.
 
+- `share_token`：Share link token configuration.
+    - `length`：Token length, default `64`.
+    - `use_uppercase`：Use uppercase letters, default `true`.
+    - `use_lowercase`：Use lowercase letters, default `true`.
+    - `use_digits`：Use digits, default `true`.
+
 - `session_timeout`：Session timeout configuration.
     - `enabled`：Enable session timeout, default `false`.
     - `minutes`：Timeout duration (in **minutes**), default $15$.
 
     Visitors will be logged out when the session exceeds the configured time.
+- `note_expiration`：Note auto-cleanup (notes/clipboards are deleted after their save duration expires).
+    - `enabled`：Enable auto-cleanup, default `false`.
+    - `hours`：Save duration (in **hours**), default $24$.
+
+    When enabled, notes (public + private) not modified within the configured hours are deleted by a background thread, which scans every 30 minutes.
+- `latex_render`：LaTeX formula rendering.
+    - `enabled`：Enable rendering, default `true`.
+    - `cdn`：Base directory of KaTeX static files, default jsdelivr (e.g. BootCDN mirror for China: `https://cdn.bootcdn.net/ajax/libs/katex/0.16.11`).
+
+    When enabled, Markdown read-only pages support `$...$` inline and `$$...$$` display math (KaTeX, client-side rendering, no server dependency).
 - `password_policy`: password policy, defining the complexity requirements for guest passwords.  
    - `min_length`: minimum password length, default `8`;  
    - `require_uppercase`: whether uppercase letters are required, default `true`;  

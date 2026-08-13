@@ -1,5 +1,5 @@
 {
-  "max_note_size_mb": 1,
+  "max_note_size_kb": 512,
   "sitename": "如形の笔记",
   "rate_limit": {
     "window_seconds": 60,
@@ -15,9 +15,23 @@
     "use_lowercase": true,
     "use_digits": false
   },
+  "share_token": {
+    "length": 64,
+    "use_uppercase": true,
+    "use_lowercase": true,
+    "use_digits": true
+  },
   "session_timeout": {
     "enabled": false,
     "minutes": 1440
+  },
+  "note_expiration": {
+    "enabled": false,
+    "hours": 24
+  },
+  "latex_render": {
+    "enabled": true,
+    "cdn": "https://cdn.jsdelivr.net/npm/katex@0.16.11/dist"
   },
   "password_policy": {
     "min_length": 8,

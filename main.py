@@ -6,14 +6,18 @@ rusin-note - 极简在线笔记服务 (支持匿名公开笔记 /world/ 和私�
 - 顶部导航栏，登录/注册/登出
 - 密码强度要求可配置
 - 支持 /<剪贴板名称> 短链接自动重定向到公开笔记 /world/<剪贴板名称>
+- 支持 /<剪贴板名称>.md 直接渲染为 Markdown；其他扩展名 (.html/.exe/.pdf 等) 一律 404
 - 保留关键词（login/logout 等）禁止注册为用户名
 - 统计页面 /count
 - 免责声明 /disclaimer，支持Markdown渲染
 - Cookie使用SHA-256哈希存储，会话支持超时清除
-- 支持将公开笔记渲染为 Markdown（只读）：/world/<id>/md
-- 支持将私有笔记渲染为 Markdown（仅本人）：/user/<用户名>/<笔记ID>/md
-- 分享功能：私有笔记可生成 64 位分享链接 /share/<token>（支持只读/可编辑）
+- 支持将公开笔记渲染为 Markdown（只读）：/world/<id>/md 或 /world/<id>.md
+- 支持将私有笔记渲染为 Markdown（仅本人）：/user/<用户名>/<笔记ID>/md 或 /user/<用户名>/<笔记ID>.md
+- 支持将分享渲染为 Markdown（只读）：/share/<token>/md 或 /share/<token>.md
+- 分享功能：私有笔记可生成分享链接 /share/<token>（长度与字符集可配置，支持只读/可编辑）
 - 分享管理：/user/<用户名>/shares/（创建/删除/查看次数）
+- LaTeX 公式渲染：Markdown 只读页面支持 $...$ / $$...$$（KaTeX 洛谷同款，可配置开关与 CDN）
+- 暗色模式：所有页面支持切换（localStorage 记忆 + 跟随系统偏好，导航栏按钮切换）
 - XSS防护：使用bleach清洗Markdown渲染后的HTML
 - GET请求独立限流（45次/分钟）
 - 编辑区 Tab 键插入 4 个空格
@@ -51,7 +55,7 @@ except ImportError:
 # ---------- 加载配置 ----------
 CONFIG_FILE = "config.json"
 DEFAULT_CONFIG = {
-    "max_note_size_mb": 5,
+    "max_note_size_kb": 5120,
     "sitename": "如形の笔记",
     "rate_limit": {
         "window_seconds": 60,
@@ -67,9 +71,23 @@ DEFAULT_CONFIG = {
         "use_lowercase": True,
         "use_digits": True
     },
+    "share_token": {
+        "length": 64,
+        "use_uppercase": True,
+        "use_lowercase": True,
+        "use_digits": True
+    },
     "session_timeout": {
         "enabled": False,
         "minutes": 60
+    },
+    "note_expiration": {
+        "enabled": False,
+        "hours": 24
+    },
+    "latex_render": {
+        "enabled": True,
+        "cdn": "https://cdn.jsdelivr.net/npm/katex@0.16.11/dist"
     },
     "password_policy": {
         "min_length": 8,
@@ -91,7 +109,7 @@ def load_config():
 
 config = load_config()
 SITE_NAME = config.get("sitename", "") 
-MAX_CONTENT_BYTES = config.get("max_note_size_mb", 5) * 1024 * 1024
+MAX_CONTENT_BYTES = config.get("max_note_size_kb", 5120) * 1024
 RATE_WINDOW = config.get("rate_limit", {}).get("window_seconds", 60)
 RATE_MAX = config.get("rate_limit", {}).get("max_requests", 30)
 
@@ -104,6 +122,19 @@ GET_RATE_MAX = GET_RATE_CFG.get("max_requests", 45)
 SESSION_TIMEOUT_ENABLED = config.get("session_timeout", {}).get("enabled", False)
 SESSION_TIMEOUT_MINUTES = config.get("session_timeout", {}).get("minutes", 60)
 SESSION_TIMEOUT_SECONDS = SESSION_TIMEOUT_MINUTES * 60
+
+# 笔记过期清除配置（超出保存时间的剪贴板自动删除，单位：小时，默认不启用）
+NOTE_EXPIRATION_ENABLED = config.get("note_expiration", {}).get("enabled", False)
+NOTE_EXPIRATION_HOURS = config.get("note_expiration", {}).get("hours", 24)
+NOTE_EXPIRATION_SECONDS = NOTE_EXPIRATION_HOURS * 3600
+# 后台过期笔记清理线程的扫描间隔（秒）
+NOTE_CLEANUP_INTERVAL = 1800
+
+# LaTeX 公式渲染配置（客户端 KaTeX 渲染，洛谷同款，仅影响 Markdown 只读页面）
+# cdn 为 KaTeX 静态文件基础目录，自动拼接 katex.min.css / katex.min.js / contrib/auto-render.min.js
+LATEX_RENDER_ENABLED = config.get("latex_render", {}).get("enabled", True)
+LATEX_CDN = config.get("latex_render", {}).get(
+    "cdn", "https://cdn.jsdelivr.net/npm/katex@0.16.11/dist")
 
 # socket 超时（秒）：防止慢速连接长期占用线程（BUG-008）
 SOCKET_TIMEOUT = 60
@@ -212,9 +243,25 @@ load_sessions()
 
 # ---------- 分享存储 ----------
 SHARE_FILE = "shares.json"
-# 分享链接 token：64 位大小写字母+数字（防爆破）
-SHARE_TOKEN_LENGTH = 64
-SHARE_TOKEN_CHARSET = string.ascii_letters + string.digits
+# 分享链接 token 配置（长度与字符集，防爆破）
+SHARE_CFG = config.get("share_token", DEFAULT_CONFIG["share_token"])
+SHARE_TOKEN_LENGTH = SHARE_CFG.get("length", 64)
+SHARE_USE_UPPER = SHARE_CFG.get("use_uppercase", True)
+SHARE_USE_LOWER = SHARE_CFG.get("use_lowercase", True)
+SHARE_USE_DIGIT = SHARE_CFG.get("use_digits", True)
+
+_share_charset_parts = []
+if SHARE_USE_UPPER:
+    _share_charset_parts.append(string.ascii_uppercase)
+if SHARE_USE_LOWER:
+    _share_charset_parts.append(string.ascii_lowercase)
+if SHARE_USE_DIGIT:
+    _share_charset_parts.append(string.digits)
+if not _share_charset_parts:
+    _share_charset_parts = [string.ascii_lowercase, string.digits]
+SHARE_TOKEN_CHARSET = ''.join(_share_charset_parts)
+# 路由校验用（宽松字符集，仅校验长度，查找仍走精确字典匹配）
+SHARE_TOKEN_PATTERN = f"[A-Za-z0-9]{{{SHARE_TOKEN_LENGTH}}}"
 
 shares = {}  # 格式: {token: {"owner": str, "note_id": str, "created_at": float, "editable": bool, "views": int}}
 shares_lock = Lock()
@@ -242,7 +289,7 @@ def generate_share_token() -> str:
     return ''.join(secrets.choice(SHARE_TOKEN_CHARSET) for _ in range(SHARE_TOKEN_LENGTH))
 
 def create_share(username: str, note_id: str, editable: bool) -> str:
-    """创建分享，返回 64 位分享 token"""
+    """创建分享，返回分享 token（长度与字符集由配置决定）"""
     token = generate_share_token()
     with shares_lock:
         shares[token] = {
@@ -366,6 +413,37 @@ def session_cleanup_loop():
         except Exception as e:
             print(f"[错误] 会话清理失败: {e}")
 
+# ---------- 过期笔记清除（超出保存时间的剪贴板自动删除） ----------
+def purge_expired_notes() -> int:
+    """删除最后修改时间超过 NOTE_EXPIRATION_SECONDS 的笔记文件，返回删除数量（仅在启用时生效）"""
+    if not NOTE_EXPIRATION_ENABLED:
+        return 0
+    cutoff = time.time() - NOTE_EXPIRATION_SECONDS
+    removed = 0
+    for dirpath, _dirs, filenames in os.walk(NOTES_BASE):
+        for fname in filenames:
+            if not fname.endswith(".txt"):
+                continue
+            fpath = os.path.join(dirpath, fname)
+            try:
+                if os.path.getmtime(fpath) < cutoff:
+                    os.remove(fpath)
+                    removed += 1
+            except (IOError, OSError):
+                pass
+    if removed:
+        print(f"[清理] 已清除 {removed} 个过期笔记（保存超过 {NOTE_EXPIRATION_HOURS} 小时）")
+    return removed
+
+def note_cleanup_loop():
+    """后台线程：定时清除过期笔记"""
+    while True:
+        time.sleep(NOTE_CLEANUP_INTERVAL)
+        try:
+            purge_expired_notes()
+        except Exception as e:
+            print(f"[错误] 过期笔记清理失败: {e}")
+
 # ---------- 密码复杂度检查（根据配置） ----------
 def check_password_complexity(password: str) -> bool:
     if len(password) < PW_MIN_LENGTH:
@@ -470,7 +548,10 @@ def get_user_note_dir(username: str) -> str:
     return path
 
 def get_note_path(username: str, note_id: str) -> str | None:
-    if not validate_username(username) or not validate_note_id(note_id):
+    # "public" 是内部公开笔记存储命名空间，不是用户账号，需放行（validate_username 会拒绝它）
+    if username != "public" and not validate_username(username):
+        return None
+    if not validate_note_id(note_id):
         return None
     user_dir = get_user_note_dir(username)
     safe_id = os.path.basename(note_id)
@@ -566,6 +647,81 @@ def generate_random_id() -> str:
         if rid not in FORBIDDEN_NOTE_IDS:
             return rid
 
+# ---------- 暗色模式（CSS 变量 + 切换脚本，所有页面共用） ----------
+THEME_VARS = """:root {
+    --bg: #ffffff;
+    --text: #111111;
+    --heading-border: #eeeeee;
+    --navbar-bg: #f8f9fa;
+    --navbar-border: #dddddd;
+    --link: #0366d6;
+    --border: #cccccc;
+    --input-bg: #ffffff;
+    --btn-bg: #f0f0f0;
+    --btn-hover: #e0e0e0;
+    --error: #c00;
+    --muted: #888888;
+    --list-border: #eeeeee;
+    --card-bg: #fafafa;
+    --card-border: #dddddd;
+    --card-head: #333333;
+    --card-detail: #666666;
+    --disclaimer-bg: #f9f9f9;
+    --disclaimer-border: #eeeeee;
+    --code-bg: #f4f4f4;
+    --quote-border: #dddddd;
+    --quote-text: #666666;
+    --status-bg: rgba(255, 255, 255, 0.95);
+}
+[data-theme="dark"] {
+    --bg: #1a1a1a;
+    --text: #e6e6e6;
+    --heading-border: #333333;
+    --navbar-bg: #222222;
+    --navbar-border: #3a3a3a;
+    --link: #79b8ff;
+    --border: #444444;
+    --input-bg: #252525;
+    --btn-bg: #333333;
+    --btn-hover: #3d3d3d;
+    --error: #f85149;
+    --muted: #8b949e;
+    --list-border: #2d2d2d;
+    --card-bg: #21262d;
+    --card-border: #30363d;
+    --card-head: #c9d1d9;
+    --card-detail: #8b949e;
+    --disclaimer-bg: #1d2127;
+    --disclaimer-border: #30363d;
+    --code-bg: #2d2d2d;
+    --quote-border: #444444;
+    --quote-text: #8b949e;
+    --status-bg: rgba(30, 30, 30, 0.95);
+}
+"""
+
+# 主题切换脚本：放在 <head> 最前避免闪烁；优先 localStorage，其次跟随系统偏好
+THEME_SCRIPT = """
+<script>
+(function() {
+    function apply(t) {
+        document.documentElement.setAttribute('data-theme', t);
+        var b = document.getElementById('themeBtn');
+        if (b) b.textContent = t === 'dark' ? '亮色' : '暗色';
+        try { localStorage.setItem('rusin-theme', t); } catch (e) {}
+    }
+    window.toggleTheme = function() {
+        apply(document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
+    };
+    var saved = null;
+    try { saved = localStorage.getItem('rusin-theme'); } catch (e) {}
+    apply(saved || (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'));
+})();
+</script>
+"""
+
+THEME_TOGGLE_BTN = '<button type="button" id="themeBtn" class="theme-toggle" onclick="toggleTheme()">暗色</button>'
+
 # ---------- HTTP 处理器 ----------
 class NoteHandler(BaseHTTPRequestHandler):
     _HTML_HEADER = "text/html; charset=utf-8"
@@ -615,11 +771,12 @@ class NoteHandler(BaseHTTPRequestHandler):
                         <a href="/user/{html.escape(current_user)}/new">新建笔记</a>
                         <a href="/user/{html.escape(current_user)}/shares/">分享管理</a>
                         <a href="/logout">登出</a>
+                        {THEME_TOGGLE_BTN}
                     </span>
                 </div>
             """
         else:
-            return """
+            return f"""
                 <div class="navbar">
                     <span class="user-info">匿名</span>
                     <span class="nav-links">
@@ -627,6 +784,7 @@ class NoteHandler(BaseHTTPRequestHandler):
                         <a href="/login">登录</a>
                         <a href="/count">统计</a>
                         <a href="/disclaimer">免责声明</a>
+                        {THEME_TOGGLE_BTN}
                     </span>
                 </div>
             """
@@ -656,15 +814,17 @@ class NoteHandler(BaseHTTPRequestHandler):
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{html.escape(full_title)}</title>
+<title>{html.escape(full_title)}</title>
     <link rel="icon" href="/favicon.ico" type="image/x-icon">
-    <style>
+    {THEME_SCRIPT}
+<style>
+        {THEME_VARS}
         * {{ margin: 0; padding: 0; box-sizing: border-box; }}
-        body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }}
+        body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); }}
         .navbar {{
-            background: #f8f9fa;
+            background: var(--navbar-bg);
             padding: 10px 24px;
-            border-bottom: 1px solid #ddd;
+            border-bottom: 1px solid var(--navbar-border);
             display: flex;
             justify-content: space-between;
             align-items: center;
@@ -676,18 +836,25 @@ class NoteHandler(BaseHTTPRequestHandler):
         }}
         .navbar .nav-links a {{
             margin-left: 16px;
-            color: #0366d6;
+            color: var(--link);
             text-decoration: none;
         }}
         .navbar .nav-links a:hover {{
             text-decoration: underline;
+        }}
+        .theme-toggle {{
+            width: auto;
+            margin-left: 16px;
+            padding: 4px 14px;
+            font-size: 13px;
+            border-radius: 14px;
         }}
         .container {{
             max-width: 900px;
             margin: 20px auto;
             padding: 0 20px;
         }}
-        h1 {{ font-weight: 400; border-bottom: 1px solid #eee; padding-bottom: 10px; }}
+        h1 {{ font-weight: 400; border-bottom: 1px solid var(--heading-border); padding-bottom: 10px; }}
         .form-group {{ margin-bottom: 16px; }}
         label {{ display: block; margin-bottom: 4px; font-weight: 500; }}
         input, button, textarea {{
@@ -695,20 +862,22 @@ class NoteHandler(BaseHTTPRequestHandler):
             padding: 10px;
             font-size: 16px;
             box-sizing: border-box;
-            border: 1px solid #ccc;
+            border: 1px solid var(--border);
             border-radius: 4px;
+            background: var(--input-bg);
+            color: var(--text);
         }}
         button {{
-            background: #f0f0f0;
+            background: var(--btn-bg);
             cursor: pointer;
         }}
-        button:hover {{ background: #e0e0e0; }}
-        .error {{ color: #c00; }}
+        button:hover {{ background: var(--btn-hover); }}
+        .error {{ color: var(--error); }}
         .note-list {{ list-style: none; padding: 0; }}
-        .note-list li {{ padding: 8px 0; border-bottom: 1px solid #eee; }}
-        .note-list a {{ color: #0366d6; text-decoration: none; }}
+        .note-list li {{ padding: 8px 0; border-bottom: 1px solid var(--list-border); }}
+        .note-list a {{ color: var(--link); text-decoration: none; }}
         .note-list a:hover {{ text-decoration: underline; }}
-        .empty {{ color: #888; }}
+        .empty {{ color: var(--muted); }}
         .stat-grid {{
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -716,60 +885,60 @@ class NoteHandler(BaseHTTPRequestHandler):
             margin-top: 20px;
         }}
         .stat-card {{
-            border: 1px solid #ddd;
+            border: 1px solid var(--card-border);
             border-radius: 8px;
             padding: 16px 20px;
-            background: #fafafa;
+            background: var(--card-bg);
         }}
         .stat-card h3 {{
             margin-bottom: 8px;
             font-weight: 400;
-            color: #333;
+            color: var(--card-head);
         }}
         .stat-card .number {{
             font-size: 28px;
             font-weight: 500;
         }}
         .stat-card .detail {{
-            color: #666;
+            color: var(--card-detail);
             font-size: 14px;
             margin-top: 4px;
         }}
         .disclaimer {{
-            background: #f9f9f9;
+            background: var(--disclaimer-bg);
             padding: 20px;
             border-radius: 8px;
-            border: 1px solid #eee;
+            border: 1px solid var(--disclaimer-border);
         }}
         .markdown-body {{
             font-size: 16px;
             line-height: 1.6;
         }}
         .markdown-body h1, .markdown-body h2, .markdown-body h3 {{
-            border-bottom: 1px solid #eee;
+            border-bottom: 1px solid var(--heading-border);
             padding-bottom: 6px;
         }}
         .markdown-body ul, .markdown-body ol {{
             padding-left: 2em;
         }}
         .markdown-body code {{
-            background: #f4f4f4;
+            background: var(--code-bg);
             padding: 2px 6px;
             border-radius: 4px;
         }}
         .markdown-body pre {{
-            background: #f4f4f4;
+            background: var(--code-bg);
             padding: 12px;
             border-radius: 4px;
             overflow-x: auto;
         }}
         .markdown-body blockquote {{
-            border-left: 4px solid #ddd;
+            border-left: 4px solid var(--quote-border);
             padding-left: 16px;
-            color: #666;
+            color: var(--quote-text);
         }}
         .markdown-body a {{
-            color: #0366d6;
+            color: var(--link);
         }}
         .home-links {{
             list-style: none;
@@ -781,7 +950,7 @@ class NoteHandler(BaseHTTPRequestHandler):
         }}
         .home-links a {{
             font-size: 18px;
-            color: #0366d6;
+            color: var(--link);
             text-decoration: none;
         }}
         .home-links a:hover {{
@@ -933,7 +1102,7 @@ class NoteHandler(BaseHTTPRequestHandler):
                     <div class="disclaimer markdown-body">{html_content}</div>
                     <p style="margin-top: 20px;"><a href="/">返回首页</a></p>
                 """
-                return self._render_base(body, "免责声明", extra_head="")
+                return self._render_base(body, "免责声明", extra_head=self._get_latex_head())
             except Exception:
                 pass  # 降级到纯文本
 
@@ -974,18 +1143,21 @@ class NoteHandler(BaseHTTPRequestHandler):
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{html.escape(full_title)}</title>
+    {THEME_SCRIPT}
     <style>
+        {THEME_VARS}
         * {{ margin: 0; padding: 0; box-sizing: border-box; }}
         body {{
-            background: #ffffff;
+            background: var(--bg);
+            color: var(--text);
             height: 100vh;
             overflow: hidden;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
         }}
         .navbar {{
-            background: #f8f9fa;
+            background: var(--navbar-bg);
             padding: 8px 24px;
-            border-bottom: 1px solid #ddd;
+            border-bottom: 1px solid var(--navbar-border);
             display: flex;
             justify-content: space-between;
             align-items: center;
@@ -1002,11 +1174,22 @@ class NoteHandler(BaseHTTPRequestHandler):
         }}
         .navbar .nav-links a {{
             margin-left: 16px;
-            color: #0366d6;
+            color: var(--link);
             text-decoration: none;
         }}
         .navbar .nav-links a:hover {{
             text-decoration: underline;
+        }}
+        .theme-toggle {{
+            width: auto;
+            margin-left: 16px;
+            padding: 4px 14px;
+            font-size: 13px;
+            border-radius: 14px;
+            background: var(--btn-bg);
+            border: 1px solid var(--navbar-border);
+            color: var(--text);
+            cursor: pointer;
         }}
         form {{
             height: 100vh;
@@ -1024,19 +1207,19 @@ class NoteHandler(BaseHTTPRequestHandler):
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
             resize: none;
             outline: none;
-            background: #ffffff;
-            color: #111;
+            background: var(--bg);
+            color: var(--text);
         }}
         .save-btn {{
             position: fixed;
             bottom: 24px;
             right: 24px;
-            background: rgba(240, 240, 240, 0.85);
-            border: 1px solid #ddd;
+            background: var(--btn-bg);
+            border: 1px solid var(--navbar-border);
             padding: 8px 20px;
             border-radius: 20px;
             font-size: 14px;
-            color: #333;
+            color: var(--text);
             cursor: pointer;
             backdrop-filter: blur(4px);
             transition: all 0.2s;
@@ -1044,11 +1227,11 @@ class NoteHandler(BaseHTTPRequestHandler):
             font-weight: 500;
         }}
         .save-btn:hover {{
-            background: rgba(220, 220, 220, 0.95);
+            background: var(--btn-hover);
             transform: scale(1.02);
         }}
         .save-btn:active {{
-            background: #ccc;
+            background: var(--border);
             transform: scale(0.98);
         }}
         .save-hint {{
@@ -1093,7 +1276,7 @@ class NoteHandler(BaseHTTPRequestHandler):
             transition: opacity 0.3s ease, transform 0.3s ease;
             pointer-events: none;
             z-index: 15;
-            background: rgba(255, 255, 255, 0.95);
+            background: var(--status-bg);
             padding: 6px 18px;
             border-radius: 16px;
             border: 1px solid #4CAF50;
@@ -1269,6 +1452,30 @@ class NoteHandler(BaseHTTPRequestHandler):
 </html>"""
         return page
 
+    # ---------- LaTeX 渲染（KaTeX 客户端渲染，洛谷同款） ----------
+    def _get_latex_head(self) -> str:
+        """返回启用 LaTeX 渲染所需的 <head> 内容（KaTeX：$...$ 行内 与 $$...$$ 块级公式）"""
+        if not LATEX_RENDER_ENABLED:
+            return ""
+        return (
+            f'<link rel="stylesheet" href="{LATEX_CDN}/katex.min.css">\n'
+            f'<script defer src="{LATEX_CDN}/katex.min.js"></script>\n'
+            f'<script defer src="{LATEX_CDN}/contrib/auto-render.min.js"></script>\n'
+            "<script>\n"
+            "document.addEventListener('DOMContentLoaded', function() {\n"
+            "    renderMathInElement(document.body, {\n"
+            "        delimiters: [\n"
+            "            {left: '$$', right: '$$', display: true},\n"
+            "            {left: '$', right: '$', display: false},\n"
+            "            {left: '\\\\(', right: '\\\\)', display: false},\n"
+            "            {left: '\\\\[', right: '\\\\]', display: true}\n"
+            "        ],\n"
+            "        throwOnError: false\n"
+            "    });\n"
+            "});\n"
+            "</script>\n"
+        )
+
     # ---------- 只读 Markdown 渲染页面（安全清洗） ----------
     def _render_markdown_page(self, note_id: str, content: str, title_label: str = "公开笔记",
                               back_url: str = None, back_label: str = "返回编辑", navbar: str = None):
@@ -1311,7 +1518,7 @@ class NoteHandler(BaseHTTPRequestHandler):
             </div>
             <p style="margin-top: 20px;"><a href="{html.escape(back_url)}">{html.escape(back_label)}</a> · <a href="/">首页</a></p>
         """
-        return self._render_base(body, f"Markdown - {note_id}", navbar)
+        return self._render_base(body, f"Markdown - {note_id}", navbar, extra_head=self._get_latex_head())
 
     # ---------- 分享管理页面 ----------
     def _render_shares_page(self, username: str, error=""):
@@ -1376,11 +1583,11 @@ class NoteHandler(BaseHTTPRequestHandler):
         share_css = """
             <style>
                 .share-table { width: 100%; border-collapse: collapse; margin-top: 8px; }
-                .share-table th, .share-table td { border: 1px solid #ddd; padding: 8px 10px; text-align: left; font-size: 14px; word-break: break-all; }
-                .share-table th { background: #f8f9fa; font-weight: 500; }
-                .share-link { font-family: Consolas, monospace; font-size: 12px; color: #0366d6; }
+                .share-table th, .share-table td { border: 1px solid var(--navbar-border); padding: 8px 10px; text-align: left; font-size: 14px; word-break: break-all; }
+                .share-table th { background: var(--navbar-bg); font-weight: 500; }
+                .share-link { font-family: Consolas, monospace; font-size: 12px; color: var(--link); }
                 .btn-sm { width: auto; padding: 4px 14px; font-size: 13px; }
-                select { width: 100%; padding: 10px; font-size: 16px; border: 1px solid #ccc; border-radius: 4px; }
+                select { width: 100%; padding: 10px; font-size: 16px; border: 1px solid var(--border); border-radius: 4px; background: var(--input-bg); color: var(--text); }
             </style>
         """
         navbar = self._get_navbar(username)
@@ -1475,9 +1682,28 @@ class NoteHandler(BaseHTTPRequestHandler):
 
         # 单段短链接 -> 重定向到 /world/<名称>
         # 注意：必须放在所有固定路由（/register /login /logout /favicon.ico 等）之后
+        # {剪贴板名字}.md -> 渲染为 Markdown 只读页面（与 /world/<id>/md 等价）
+        md_short_match = re.match(r'^/([^/]+)\.md$', path)
+        if md_short_match:
+            note_id = md_short_match.group(1)
+            if not validate_note_id(note_id):
+                self.send_error(400, "Invalid note ID")
+                return
+            content = read_note("public", note_id)
+            page = self._render_markdown_page(note_id, content)
+            self.send_response(200)
+            self.send_header("Content-Type", self._HTML_HEADER)
+            self.end_headers()
+            self.wfile.write(page.encode("utf-8"))
+            return
+
         short_link_match = re.match(r'^/([^/]+)$', path)
         if short_link_match:
             note_id = short_link_match.group(1)
+            # 带扩展名的文件名（.html/.exe/.pdf 等）一律 404（.md 已在上方处理）
+            if "." in note_id:
+                self.send_error(404, "Not found")
+                return
             if validate_note_id(note_id):
                 self._send_redirect(f"/world/{note_id}")
                 return
@@ -1498,8 +1724,23 @@ class NoteHandler(BaseHTTPRequestHandler):
             self.wfile.write(page.encode("utf-8"))
             return
 
+        # 公开笔记 Markdown 快捷方式：/world/<id>.md（等价于 /world/<id>/md）
+        world_md_dot_match = re.match(r'^/world/([^/]+)\.md$', path)
+        if world_md_dot_match:
+            note_id = world_md_dot_match.group(1)
+            if not validate_note_id(note_id):
+                self.send_error(400, "Invalid note ID")
+                return
+            content = read_note("public", note_id)
+            page = self._render_markdown_page(note_id, content)
+            self.send_response(200)
+            self.send_header("Content-Type", self._HTML_HEADER)
+            self.end_headers()
+            self.wfile.write(page.encode("utf-8"))
+            return
+
         # ---------- 分享只读 Markdown：/share/<token>/md ----------
-        share_md_match = re.match(r'^/share/([A-Za-z0-9]{64})/md$', path)
+        share_md_match = re.match(f'^/share/({SHARE_TOKEN_PATTERN})/md$', path)
         if share_md_match:
             token = share_md_match.group(1)
             share = get_share(token)
@@ -1522,8 +1763,32 @@ class NoteHandler(BaseHTTPRequestHandler):
             self.wfile.write(page.encode("utf-8"))
             return
 
+        # ---------- 分享只读 Markdown 快捷方式：/share/<token>.md（等价于 /share/<token>/md） ----------
+        share_md_dot_match = re.match(f'^/share/({SHARE_TOKEN_PATTERN})\\.md$', path)
+        if share_md_dot_match:
+            token = share_md_dot_match.group(1)
+            share = get_share(token)
+            if share is None:
+                self.send_error(404, "Share not found")
+                return
+            increment_share_views(token)
+            note_id = share["note_id"]
+            content = read_note(share["owner"], note_id)
+            page = self._render_markdown_page(
+                note_id, content,
+                title_label="分享笔记",
+                back_url=f"/share/{token}",
+                back_label="返回分享",
+                navbar=self._get_navbar(),
+            )
+            self.send_response(200)
+            self.send_header("Content-Type", self._HTML_HEADER)
+            self.end_headers()
+            self.wfile.write(page.encode("utf-8"))
+            return
+
         # ---------- 分享查看/编辑：/share/<token> ----------
-        share_match = re.match(r'^/share/([A-Za-z0-9]{64})$', path)
+        share_match = re.match(f'^/share/({SHARE_TOKEN_PATTERN})$', path)
         if share_match:
             token = share_match.group(1)
             share = get_share(token)
@@ -1559,7 +1824,11 @@ class NoteHandler(BaseHTTPRequestHandler):
                 return
 
             if not validate_note_id(note_id):
-                self.send_error(400, "Invalid note ID")
+                # 带扩展名的文件名（.html/.exe/.pdf 等）一律 404（.md 已在上方处理）
+                if "." in note_id:
+                    self.send_error(404, "Not found")
+                else:
+                    self.send_error(400, "Invalid note ID")
                 return
 
             content = read_note("public", note_id)
@@ -1575,6 +1844,35 @@ class NoteHandler(BaseHTTPRequestHandler):
         if user_md_match:
             username = user_md_match.group(1)
             note_id = user_md_match.group(2)
+            if not validate_username(username) or not validate_note_id(note_id):
+                self.send_error(400, "Invalid username or note ID")
+                return
+            if not self.is_authenticated(username):
+                self.send_response(401)
+                self.send_header("Content-Type", self._HTML_HEADER)
+                self.end_headers()
+                body = "<h1>需要登录</h1><p>请先 <a href=\"/login\">登录</a> 或 <a href=\"/register\">注册</a> 以访问您的私有笔记。</p>"
+                self.wfile.write(self._render_base(body, "请先登录").encode("utf-8"))
+                return
+            content = read_note(username, note_id)
+            page = self._render_markdown_page(
+                note_id, content,
+                title_label="私有笔记",
+                back_url=f"/user/{username}/{note_id}",
+                back_label="返回编辑",
+                navbar=self._get_navbar(username),
+            )
+            self.send_response(200)
+            self.send_header("Content-Type", self._HTML_HEADER)
+            self.end_headers()
+            self.wfile.write(page.encode("utf-8"))
+            return
+
+        # ---------- 私有笔记 Markdown 快捷方式：/user/<用户名>/<笔记ID>.md（需登录） ----------
+        user_md_dot_match = re.match(r'^/user/([^/]+)/([^/]+)\.md$', path)
+        if user_md_dot_match:
+            username = user_md_dot_match.group(1)
+            note_id = user_md_dot_match.group(2)
             if not validate_username(username) or not validate_note_id(note_id):
                 self.send_error(400, "Invalid username or note ID")
                 return
@@ -1655,7 +1953,11 @@ class NoteHandler(BaseHTTPRequestHandler):
                 return
 
             if not validate_note_id(note_id):
-                self.send_error(400, "Invalid note ID")
+                # 带扩展名的文件名（.html/.exe/.pdf 等）一律 404（.md 已在上方处理）
+                if "." in note_id:
+                    self.send_error(404, "Not found")
+                else:
+                    self.send_error(400, "Invalid note ID")
                 return
 
             content = read_note(username, note_id)
@@ -1832,7 +2134,7 @@ class NoteHandler(BaseHTTPRequestHandler):
             post_data = self.rfile.read(content_length).decode("utf-8")
             form = urllib.parse.parse_qs(post_data, max_num_fields=5)
             token = form.get("token", [""])[0].strip()
-            if not re.match(r'^[A-Za-z0-9]{64}$', token):
+            if not re.match(f'^{SHARE_TOKEN_PATTERN}$', token):
                 self.send_error(400, "Invalid share token")
                 return
             delete_share(username, token)
@@ -1842,7 +2144,7 @@ class NoteHandler(BaseHTTPRequestHandler):
             return
 
         # ---------- 保存可编辑分享：/share/<token>（写回分享者原笔记） ----------
-        share_save_match = re.match(r'^/share/([A-Za-z0-9]{64})$', path)
+        share_save_match = re.match(f'^/share/({SHARE_TOKEN_PATTERN})$', path)
         if share_save_match:
             token = share_save_match.group(1)
             share = get_share(token)
@@ -1854,7 +2156,7 @@ class NoteHandler(BaseHTTPRequestHandler):
                 return
             content_length = int(self.headers.get("Content-Length", 0))
             if content_length > MAX_CONTENT_BYTES:
-                self.send_error(413, f"Content too large (max {MAX_CONTENT_BYTES//1024//1024}MB)")
+                self.send_error(413, f"Content too large (max {MAX_CONTENT_BYTES//1024}KB)")
                 return
             post_data = self.rfile.read(content_length).decode("utf-8")
             form = urllib.parse.parse_qs(post_data, max_num_fields=10)
@@ -1873,12 +2175,16 @@ class NoteHandler(BaseHTTPRequestHandler):
         if world_match:
             note_id = world_match.group(1)
             if not validate_note_id(note_id):
-                self.send_error(400, "Invalid note ID")
+                # 带扩展名的文件名（.html/.exe/.pdf 等）一律 404（.md 已在上方处理）
+                if "." in note_id:
+                    self.send_error(404, "Not found")
+                else:
+                    self.send_error(400, "Invalid note ID")
                 return
 
             content_length = int(self.headers.get("Content-Length", 0))
             if content_length > MAX_CONTENT_BYTES:
-                self.send_error(413, f"Content too large (max {MAX_CONTENT_BYTES//1024//1024}MB)")
+                self.send_error(413, f"Content too large (max {MAX_CONTENT_BYTES//1024}KB)")
                 return
 
             post_data = self.rfile.read(content_length).decode("utf-8")
@@ -1900,7 +2206,11 @@ class NoteHandler(BaseHTTPRequestHandler):
             note_id = user_match.group(2)
 
             if not validate_username(username) or not validate_note_id(note_id):
-                self.send_error(400, "Invalid username or note ID")
+                # 带扩展名的文件名（.html/.exe/.pdf 等）一律 404（.md 已在上方处理）
+                if "." in note_id:
+                    self.send_error(404, "Not found")
+                else:
+                    self.send_error(400, "Invalid username or note ID")
                 return
 
             if not self.is_authenticated(username):
@@ -1909,7 +2219,7 @@ class NoteHandler(BaseHTTPRequestHandler):
 
             content_length = int(self.headers.get("Content-Length", 0))
             if content_length > MAX_CONTENT_BYTES:
-                self.send_error(413, f"Content too large (max {MAX_CONTENT_BYTES//1024//1024}MB)")
+                self.send_error(413, f"Content too large (max {MAX_CONTENT_BYTES//1024}KB)")
                 return
 
             post_data = self.rfile.read(content_length).decode("utf-8")
@@ -1932,7 +2242,12 @@ class NoteHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", "text/html; charset=utf-8")
         self.end_headers()
         if message:
-            response = f"<html><head><title>Error {code}</title></head><body><h1>{code} {message}</h1></body></html>"
+            response = (f"<html><head><title>Error {code}</title>{THEME_SCRIPT}"
+                        f"<style>{THEME_VARS}"
+                        f"body {{ background: var(--bg); color: var(--text); font-family: -apple-system, sans-serif; padding: 40px; }}"
+                        f"h1 {{ font-weight: 400; border-bottom: 1px solid var(--heading-border); padding-bottom: 10px; }}"
+                        f"</style></head>"
+                        f"<body><h1>{code} {message}</h1></body></html>")
             self.wfile.write(response.encode("utf-8"))
 
 
@@ -1951,26 +2266,39 @@ def run_server(port=8080):
     if SESSION_TIMEOUT_ENABLED:
         purge_expired_sessions()  # 启动时清理一次过期会话
         Thread(target=session_cleanup_loop, daemon=True).start()
+    if NOTE_EXPIRATION_ENABLED:
+        purge_expired_notes()  # 启动时清理一次过期笔记
+        Thread(target=note_cleanup_loop, daemon=True).start()
     print("[启动] rusin-note 服务已启动 (公开+私有笔记)")
     print(f"[地址] http://localhost:{port}")
     print(f"[目录] 笔记保存在 ./{NOTES_BASE}/ (public/ 为公开笔记)")
-    print(f"[限制] 每个笔记最大 {MAX_CONTENT_BYTES//1024//1024}MB")
+    print(f"[限制] 每个笔记最大 {MAX_CONTENT_BYTES//1024}KB")
     print(f"[限流] POST: 每个IP {RATE_MAX} 次 / {RATE_WINDOW} 秒")
     print(f"[限流] GET:  每个IP {GET_RATE_MAX} 次 / {GET_RATE_WINDOW} 秒")
     print(f"[连接] socket 超时: {SOCKET_TIMEOUT} 秒 (防止慢速连接挂起线程)")
     print("[公开笔记] 访问 /world/<id> 即可匿名编辑")
     print("[私有笔记] 注册登录后访问 /user/<username>/<id>")
     print("[快捷] 访问 /<名称> 自动重定向到 /world/<名称> (如 /数字 或 /abc)")
+    print("[快捷] 访问 /<名称>.md 直接渲染为 Markdown，其他扩展名 (.html/.exe/.pdf 等) 一律 404")
     print("[统计] 访问 /count 查看笔记统计")
     print("[免责] 访问 /disclaimer 查看免责声明 (支持Markdown)")
     print("[Markdown] 访问 /world/<id>/md 渲染公开笔记为只读 Markdown (已启用XSS防护)")
     print("[Markdown] 访问 /user/<用户名>/<笔记ID>/md 渲染私有笔记为只读 Markdown (需登录)")
+    print("[Markdown] 全部支持 .md 后缀快捷方式: /world/<id>.md /user/<用户名>/<笔记ID>.md /share/<token>.md")
     print("[分享] 访问 /user/<用户名>/shares/ 管理分享链接 (创建/删除/查看次数)")
-    print("[分享] 分享链接: /share/<64位token> (只读或可编辑，保存将写回分享者原笔记)")
+    print(f"[分享] 分享链接: /share/<{SHARE_TOKEN_LENGTH}位token> (只读或可编辑，保存将写回分享者原笔记)")
     if SESSION_TIMEOUT_ENABLED:
         print(f"[超时] 会话超时已启用，超时时间 {SESSION_TIMEOUT_MINUTES} 分钟")
     else:
         print("[超时] 会话超时未启用")
+    if NOTE_EXPIRATION_ENABLED:
+        print(f"[过期] 笔记自动清除已启用，保存超过 {NOTE_EXPIRATION_HOURS} 小时未修改的剪贴板将被删除")
+    else:
+        print("[过期] 笔记自动清除未启用")
+    if LATEX_RENDER_ENABLED:
+        print("[LaTeX] LaTeX 公式渲染已启用 (KaTeX 洛谷同款, $...$ 行内 / $$...$$ 块级)")
+    else:
+        print("[LaTeX] LaTeX 公式渲染未启用")
 
     # 检查依赖状态
     if not MARKDOWN_AVAILABLE:
