@@ -57,20 +57,20 @@ THEME_VARS = """:root {
 
 # 主题切换脚本：放在 <head> 最前避免闪烁；优先服务器渲染的主题（Cookie），其次 localStorage，最后跟随系统偏好。
 # 切换时同时写入 Cookie（服务端据此直接渲染 data-theme，慢网速下切页不再闪白屏）与 localStorage。
-# 按钮文字按当前语言注入（LANG_LABELS）。
 def get_theme_script(lang: str) -> str:
-    from .i18n import get_theme_labels_js
     return f"""
 <script>
 (function() {{
-    var LANG_LABELS = {get_theme_labels_js(lang)};
     function setCookie(t) {{
         document.cookie = 'rusin-theme=' + t + '; Path=/; Max-Age=31536000; SameSite=Lax';
     }}
     function apply(t) {{
         document.documentElement.setAttribute('data-theme', t);
         var b = document.getElementById('themeBtn');
-        if (b) b.textContent = LANG_LABELS[t === 'dark' ? 'dark' : 'light'];
+        if (b) {{
+            var icon = t === 'dark' ? 'fa-sun' : 'fa-moon';
+            b.innerHTML = '<i class="fa-solid ' + icon + '" aria-hidden="true"></i>';
+        }}
         try {{ localStorage.setItem('rusin-theme', t); }} catch (e) {{}}
         setCookie(t);
     }}
@@ -82,16 +82,18 @@ def get_theme_script(lang: str) -> str:
     var serverTheme = document.documentElement.getAttribute('data-theme');
     if (serverTheme) saved = serverTheme;
     apply(saved || (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'));
+    document.addEventListener('DOMContentLoaded', function() {{
+        apply(document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light');
+    }});
 }})();
 </script>
 """
 
 
-def get_theme_toggle_btn(lang: str) -> str:
-    from .i18n import t
+def get_theme_toggle_btn(lang: str, theme: str = None) -> str:
+    icon = "fa-sun" if theme == "dark" else "fa-moon"
     return (f'<button type="button" id="themeBtn" class="theme-toggle" '
-            f'onclick="toggleTheme()">{t(lang, "theme_dark")}</button>')
-
+            f'onclick="toggleTheme()"><i class="fa-solid {icon}" aria-hidden="true"></i></button>')
 # ---------- favicon 缓存（BUG-16：避免每次请求读磁盘） ----------
 _FAVICON_CACHE = None
 
