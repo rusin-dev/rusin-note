@@ -1,7 +1,11 @@
+> [!IMPORTANT]
+>
+> Note: If you are a member of rusin-dev (this organization) and want to contribute, please see the [Collaboration Guide](https://github.com/rusin-dev/rusin-note/blob/main/contributing.md). If you are not a member of this organization, you can join or open an Issue.
+
 <div align="center">
-    <a href="https://github.com/rusin-dev/rusin-note"><img width="10%" alt="logo" src="./image/logo.png" /></a>
+    <a href="https://github.com/rusin-dev/rusin-note"><img width="15%" alt="logo" src="./image/logo.png" /></a>
     <h1><b>Rusin-Note</b></h1>
-    <p><em>🖊︎ A lightweight cloud clipboard project that resembles note.ms can be deployed by VPS.</em></p>
+    <p><em>🖊︎ A lightweight cloud clipboard project inspired by note.ms, designed for VPS deployment, ready to use out of the box.</em></p>
     <p>
         <a href="https://github.com/rusin-dev/rusin-note/blob/main/README.md">简体中文</a> | English | <a href="https://note.rusin7.com">Demo</a>
     </p>
@@ -210,8 +214,11 @@ rusin-note:.
    - `require_lowercase`: whether lowercase letters are required, default `true`;  
    - `require_digits`: whether digits are required, default `true`;  
    - `require_special`: whether special characters (excluding `/ \ ( ) " '`) are required, default `true`;
+- **Multi-language**: The interface supports Simplified Chinese and English. Language switch links (`/lang/zh` / `/lang/en`) are provided on the right side of the navbar; the preference is remembered via a cookie (`rusin-lang`); when unset, it falls back to the browser's `Accept-Language`, defaulting to Chinese. After switching, all site text (navbar, buttons, hints, error messages, benben previews, etc.) switches language instantly.
 - `benben` (feed at `/benben`, logged-in users can post, anonymous read-only).
    - `max_length`: max length of a single feed post (in **characters**), default `1024` (~1KB);
    - `page_size`: posts loaded per batch, default `50`;
+   - `cooldown_seconds`: minimum interval between two posts by the same user (in **seconds**), default `3`;
+   - `max_height_px`: maximum display height of rendered feed content (in **px**), default `1000`, overflow scrolls within the content area;
 
-   Feed content supports Markdown and LaTeX math (`$...$` / `$$...$$`, controlled by `latex_render`), sanitized with bleach to prevent XSS; `page_size` posts per page, loaded in batches via "Load more", with loading and posting both subject to request rate limits (GET/POST).
+   Content supports Markdown and LaTeX math (`$...$` / `$$...$$`, controlled by the `latex_render` switch); the post form has a live preview (client-side marked.js rendering, which filters dangerous tags and links too); rendering is sanitized with bleach to prevent XSS; each page shows `page_size` posts, loaded in batches via "Load more"; loading and posting are both subject to request rate limits (GET/POST), and posting is also subject to a per-user cooldown (`cooldown_seconds`); each post's header shows the poster's IP (whether proxy headers are trusted follows `trust_proxy_headers`; not shown for old data without an IP field).
