@@ -26,8 +26,8 @@ STRINGS = {
         "nav_stats": "统计",
         "nav_disclaimer": "免责声明",
         "lang_switch": "English",
-        "theme_dark": "暗色",
-        "theme_light": "亮色",
+        "theme_dark": "",
+        "theme_light": "",
         # 首页
         "page_home": "首页",
         "home_public_notes": "公开笔记（匿名）",
@@ -148,8 +148,8 @@ STRINGS = {
         "nav_stats": "Stats",
         "nav_disclaimer": "Disclaimer",
         "lang_switch": "简体中文",
-        "theme_dark": "Dark",
-        "theme_light": "Light",
+        "theme_dark": "",
+        "theme_light": "",
         # Home
         "page_home": "Home",
         "home_public_notes": "Public Note (Anonymous)",
@@ -293,7 +293,7 @@ def t(lang: str, key: str, **fmt) -> str:
 def get_lang_switch(lang: str) -> str:
     """导航栏语言切换链接（切换到另一种语言）"""
     target = "en" if lang == "zh" else "zh"
-    return f'<a href="/lang/{target}">{html.escape(t(lang, "lang_switch"))}</a>'
+    return f'<a href="/lang/{target}"><i class="fa-solid fa-language" aria-hidden="true"></i>{html.escape(t(lang, "lang_switch"))}</a>'
 
 
 def get_theme_labels_js(lang: str) -> str:

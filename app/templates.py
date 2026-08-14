@@ -21,13 +21,13 @@ def get_navbar(handler, current_user=None) -> str:
             <div class="navbar">
                 <span class="user-info">{html.escape(t(lang, "nav_user_prefix") + current_user)}</span>
                 <span class="nav-links">
-                    <a href="/user/{html.escape(current_user)}/">{t(lang, "nav_my_notes")}</a>
-                    <a href="/user/{html.escape(current_user)}/new">{t(lang, "nav_new_note")}</a>
-                    <a href="/user/{html.escape(current_user)}/shares/">{t(lang, "nav_share_mgmt")}</a>
-                    <a href="/benben">{t(lang, "nav_benben")}</a>
-                    <a href="/logout">{t(lang, "nav_logout")}</a>
+                    <a href="/user/{html.escape(current_user)}/"><i class="fa-solid fa-file-lines" aria-hidden="true"></i>{t(lang, "nav_my_notes")}</a>
+                    <a href="/user/{html.escape(current_user)}/new"><i class="fa-solid fa-square-plus" aria-hidden="true"></i>{t(lang, "nav_new_note")}</a>
+                    <a href="/user/{html.escape(current_user)}/shares/"><i class="fa-solid fa-share-nodes" aria-hidden="true"></i>{t(lang, "nav_share_mgmt")}</a>
+                    <a href="/benben"><i class="fa-solid fa-sticky-note" aria-hidden="true"></i>{t(lang, "nav_benben")}</a>
+                    <a href="/logout"><i class="fa-solid fa-right-from-bracket" aria-hidden="true"></i>{t(lang, "nav_logout")}</a>
                     {get_lang_switch(lang)}
-                    {get_theme_toggle_btn(lang)}
+                    {get_theme_toggle_btn(lang, handler.get_theme())}
                 </span>
             </div>
         """
@@ -36,13 +36,13 @@ def get_navbar(handler, current_user=None) -> str:
             <div class="navbar">
                 <span class="user-info">{t(lang, "nav_anonymous")}</span>
                 <span class="nav-links">
-                    <a href="/register">{t(lang, "nav_register")}</a>
-                    <a href="/login">{t(lang, "nav_login")}</a>
-                    <a href="/benben">{t(lang, "nav_benben")}</a>
-                    <a href="/count">{t(lang, "nav_stats")}</a>
-                    <a href="/disclaimer">{t(lang, "nav_disclaimer")}</a>
+                    <a href="/register"><i class="fa-solid fa-user-plus" aria-hidden="true"></i>{t(lang, "nav_register")}</a>
+                    <a href="/login"><i class="fa-solid fa-right-to-bracket" aria-hidden="true"></i>{t(lang, "nav_login")}</a>
+                    <a href="/benben"><i class="fa-solid fa-sticky-note" aria-hidden="true"></i>{t(lang, "nav_benben")}</a>
+                    <a href="/count"><i class="fa-solid fa-chart-simple" aria-hidden="true"></i>{t(lang, "nav_stats")}</a>
+                    <a href="/disclaimer"><i class="fa-solid fa-circle-info" aria-hidden="true"></i>{t(lang, "nav_disclaimer")}</a>
                     {get_lang_switch(lang)}
-                    {get_theme_toggle_btn(lang)}
+                    {get_theme_toggle_btn(lang, handler.get_theme())}
                 </span>
             </div>
         """
@@ -66,6 +66,7 @@ def render_base(handler, body: str, title="rusin-note", navbar=None, extra_head=
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>{html.escape(full_title)}</title>
     <link rel="icon" href="/favicon.ico" type="image/x-icon">
+    <link rel="stylesheet" href="https://cdn.jsdmirror.cn/npm/@fortawesome/fontawesome-free@6.5.2/css/all.min.css">
     {get_theme_script(detect_lang(handler))}
 <style>
         {THEME_VARS}
@@ -91,6 +92,9 @@ def render_base(handler, body: str, title="rusin-note", navbar=None, extra_head=
         }}
         .navbar .nav-links a:hover {{
             text-decoration: underline;
+        }}
+        .navbar .nav-links i {{
+            margin-right: 5px;
         }}
         .theme-toggle {{
             width: auto;
@@ -355,7 +359,7 @@ def render_count_page(handler):
 def render_disclaimer(handler):
     """读取 Disclaimer.md 并渲染为 HTML（支持 Markdown）"""
     lang = detect_lang(handler)
-    disclaimer_file = "Disclaimer.md"
+    disclaimer_file = "Disclaimer-en.md" if lang == "en" else "Disclaimer.md"
     if os.path.exists(disclaimer_file):
         try:
             with open(disclaimer_file, "r", encoding="utf-8") as f:
@@ -440,6 +444,7 @@ def render_note_page(handler, note_id: str, content: str, username: str = None, 
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{html.escape(full_title)}</title>
+    <link rel="stylesheet" href="https://cdn.jsdmirror.cn/npm/@fortawesome/fontawesome-free@6.5.2/css/all.min.css">
     {get_theme_script(lang)}
     <style>
         {THEME_VARS}
@@ -476,6 +481,9 @@ def render_note_page(handler, note_id: str, content: str, username: str = None, 
         }}
         .navbar .nav-links a:hover {{
             text-decoration: underline;
+        }}
+        .navbar .nav-links i {{
+            margin-right: 5px;
         }}
         .theme-toggle {{
             width: auto;
