@@ -220,6 +220,7 @@ def render_home(handler):
         <h1>rusin-note</h1>
         <ul class="home-links">
             <li><a href="/world/">公开笔记（匿名）</a></li>
+            <li><a href="/benben">犇犇</a></li>
             <li><a href="/register">注册账号</a></li>
             <li><a href="/login">登录</a></li>
             <li><a href="/count">统计</a></li>
@@ -895,9 +896,10 @@ def render_benben_page(handler, posts, page, has_more, error="", prefill=""):
             {error_html}
             <form method="POST" action="/benben" class="benben-form">
                 <div class="form-group">
-                    <label>发布犇犇（支持 Markdown 与 LaTeX 公式，最多 {config.BENBEN_MAX_LENGTH} 字符）</label>
-                    <textarea name="content" rows="4" maxlength="{config.BENBEN_MAX_LENGTH}">{html.escape(prefill)}</textarea>
+                    <label>发布犇犇（支持 Markdown 与 LaTeX 公式，输入即预览，最多 {config.BENBEN_MAX_LENGTH} 字符）</label>
+                    <textarea name="content" id="benbenInput" rows="4" maxlength="{config.BENBEN_MAX_LENGTH}">{html.escape(prefill)}</textarea>
                 </div>
+                <div id="benbenPreview" class="benben-preview markdown-body"></div>
                 <button type="submit" style="width:auto;">发布</button>
             </form>
         """
@@ -929,7 +931,57 @@ def render_benben_page(handler, posts, page, has_more, error="", prefill=""):
             .benben-body { font-size: 15px; word-break: break-word; }
             .benben-form { max-width: 720px; margin: 16px 0 24px; }
             .benben-more { text-align: center; margin-top: 16px; }
+            .benben-preview { border: 1px dashed var(--border); border-radius: 8px; padding: 12px 16px; margin-bottom: 16px; background: var(--card-bg); font-size: 15px; word-break: break-word; display: none; }
         </style>
     """
+    # 犇犇发布预览：客户端 Markdown（marked.js）+ LaTeX 公式（KaTeX，依赖 latex_render 开关）实时渲染。
+    # 渲染前对 marked 输出做轻量消毒（移除脚本类元素与事件属性），预览仅供本人查看，发布仍由服务端 bleach 清洗。
+    benben_preview_script = """
+<script defer src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    var ta = document.getElementById('benbenInput');
+    var pre = document.getElementById('benbenPreview');
+    if (!ta || !pre) return;
+    var timer = null;
+    function renderPreview() {
+        var text = ta.value.trim();
+        if (!text) { pre.style.display = 'none'; return; }
+        if (!window.marked) { pre.textContent = '预览库加载失败'; pre.style.display = 'block'; return; }
+        var html = '';
+        try { html = window.marked.parse(text); } catch (e) { html = '<p class="error">预览渲染失败</p>'; }
+        var tmp = document.createElement('div');
+        tmp.innerHTML = html;
+        tmp.querySelectorAll('script, iframe, object, embed, link, meta, style').forEach(function(el) { el.remove(); });
+        tmp.querySelectorAll('*').forEach(function(el) {
+            ['onerror','onclick','onload','onmouseover','onmouseout','onfocus','onblur','onchange','onsubmit'].forEach(function(a) { el.removeAttribute(a); });
+        });
+        tmp.querySelectorAll('a').forEach(function(a) {
+            a.setAttribute('rel', 'noopener noreferrer');
+            var href = a.getAttribute('href') || '';
+            if (!/^(https?:|mailto:|#)/i.test(href)) a.removeAttribute('href');
+        });
+        pre.innerHTML = tmp.innerHTML;
+        pre.style.display = 'block';
+        if (window.renderMathInElement) {
+            try {
+                window.renderMathInElement(pre, {
+                    delimiters: [
+                        {left: '$$', right: '$$', display: true},
+                        {left: '$', right: '$', display: false},
+                        {left: '\\\\(', right: '\\\\)', display: false},
+                        {left: '\\\\[', right: '\\\\]', display: true}
+                    ],
+                    throwOnError: false
+                });
+            } catch (e) {}
+        }
+    }
+    ta.addEventListener('input', function() { clearTimeout(timer); timer = setTimeout(renderPreview, 300); });
+    renderPreview();
+});
+</script>
+"""
     navbar = get_navbar(handler, current_user)
-    return render_base(handler, body, "犇犇", navbar, extra_head=benben_css + get_latex_head())
+    return render_base(handler, body, "犇犇", navbar,
+                       extra_head=benben_css + get_latex_head() + benben_preview_script)
