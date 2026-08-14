@@ -16,6 +16,7 @@ from .auth import (
     hash_password,
     verify_password,
 )
+from .i18n import LANG_COOKIE, detect_lang, t
 from .notes import (
     generate_random_id,
     get_note_path,
@@ -44,7 +45,7 @@ from .store import (
     users,
     users_lock,
 )
-from .theme import get_favicon, THEME_SCRIPT, THEME_VARS
+from .theme import get_favicon, get_theme_script, THEME_VARS
 
 
 class NoteHandler(BaseHTTPRequestHandler):
@@ -93,6 +94,10 @@ class NoteHandler(BaseHTTPRequestHandler):
                         return value
         return None
 
+    def get_lang(self) -> str:
+        """当前请求语言（Cookie rusin-lang > Accept-Language > 默认 zh）"""
+        return detect_lang(self)
+
     def get_current_user(self) -> str | None:
         token = self.get_session_cookie()
         if token:
@@ -131,6 +136,16 @@ class NoteHandler(BaseHTTPRequestHandler):
         self.send_response(302)
         self.send_header("Location", location)
         self.end_headers()
+
+    def _send_login_required(self, shares=False):
+        """未登录访问私有资源时的 401 页面（提示文字按当前语言渲染）"""
+        lang = self.get_lang()
+        body = (f"<h1>{t(lang, 'auth_required_title')}</h1>"
+                f"<p>{t(lang, 'auth_required_body_shares' if shares else 'auth_required_body')}</p>")
+        self.send_response(401)
+        self.send_header("Content-Type", self._HTML_HEADER)
+        self.end_headers()
+        self.wfile.write(templates.render_base(self, body, t(lang, "auth_required_title")).encode("utf-8"))
 
     def _set_session_cookie(self, token: str):
         # BUG-13: Max-Age 与服务器端会话超时一致（未启用超时时为 30 天）；
@@ -209,6 +224,27 @@ class NoteHandler(BaseHTTPRequestHandler):
             self.send_response(302)
             self._clear_session_cookie()
             self.send_header("Location", "/")
+            self.end_headers()
+            return
+
+        # 语言切换：/lang/zh 或 /lang/en（设置 Cookie 后重定向回原页面）
+        # 重定向目标取 Referer 的路径+查询串（不含主机），避免开放重定向
+        lang_switch_match = re.match(r'^/lang/(zh|en)$', path)
+        if lang_switch_match:
+            new_lang = lang_switch_match.group(1)
+            self.send_response(302)
+            self.send_header(
+                "Set-Cookie",
+                f"{LANG_COOKIE}={new_lang}; Path=/; Max-Age=31536000; SameSite=Lax",
+            )
+            location = "/"
+            referer = self.headers.get("Referer", "")
+            if referer:
+                ref = urllib.parse.urlparse(referer)
+                location = ref.path + (("?" + ref.query) if ref.query else "")
+                if not location:
+                    location = "/"
+            self.send_header("Location", location)
             self.end_headers()
             return
 
@@ -311,9 +347,9 @@ class NoteHandler(BaseHTTPRequestHandler):
             content = read_note(share.get("owner", ""), note_id)
             page = templates.render_markdown_page(
                 self, note_id, content,
-                title_label="分享笔记",
+                title_label=t(self.get_lang(), "note_share_prefix"),
                 back_url=f"/share/{token}",
-                back_label="返回分享",
+                back_label=t(self.get_lang(), "md_back_share"),
                 navbar=templates.get_navbar(self),
             )
             self.send_response(200)
@@ -335,9 +371,9 @@ class NoteHandler(BaseHTTPRequestHandler):
             content = read_note(share.get("owner", ""), note_id)
             page = templates.render_markdown_page(
                 self, note_id, content,
-                title_label="分享笔记",
+                title_label=t(self.get_lang(), "note_share_prefix"),
                 back_url=f"/share/{token}",
-                back_label="返回分享",
+                back_label=t(self.get_lang(), "md_back_share"),
                 navbar=templates.get_navbar(self),
             )
             self.send_response(200)
@@ -363,9 +399,9 @@ class NoteHandler(BaseHTTPRequestHandler):
             else:
                 page = templates.render_markdown_page(
                     self, note_id, content,
-                    title_label="分享笔记",
+                    title_label=t(self.get_lang(), "note_share_prefix"),
                     back_url=f"/share/{token}",
-                    back_label="刷新",
+                    back_label=t(self.get_lang(), "md_refresh"),
                     navbar=templates.get_navbar(self),
                 )
             self.send_response(200)
@@ -412,15 +448,14 @@ class NoteHandler(BaseHTTPRequestHandler):
                 self.send_response(401)
                 self.send_header("Content-Type", self._HTML_HEADER)
                 self.end_headers()
-                body = "<h1>需要登录</h1><p>请先 <a href=\"/login\">登录</a> 或 <a href=\"/register\">注册</a> 以访问您的私有笔记。</p>"
-                self.wfile.write(templates.render_base(self, body, "请先登录").encode("utf-8"))
+                self._send_login_required()
                 return
             content = read_note(username, note_id)
             page = templates.render_markdown_page(
                 self, note_id, content,
-                title_label="私有笔记",
+                title_label=t(self.get_lang(), "note_private_prefix"),
                 back_url=f"/user/{username}/{note_id}",
-                back_label="返回编辑",
+                back_label=t(self.get_lang(), "md_back_edit"),
                 navbar=templates.get_navbar(self, username),
             )
             self.send_response(200)
@@ -441,15 +476,14 @@ class NoteHandler(BaseHTTPRequestHandler):
                 self.send_response(401)
                 self.send_header("Content-Type", self._HTML_HEADER)
                 self.end_headers()
-                body = "<h1>需要登录</h1><p>请先 <a href=\"/login\">登录</a> 或 <a href=\"/register\">注册</a> 以访问您的私有笔记。</p>"
-                self.wfile.write(templates.render_base(self, body, "请先登录").encode("utf-8"))
+                self._send_login_required()
                 return
             content = read_note(username, note_id)
             page = templates.render_markdown_page(
                 self, note_id, content,
-                title_label="私有笔记",
+                title_label=t(self.get_lang(), "note_private_prefix"),
                 back_url=f"/user/{username}/{note_id}",
-                back_label="返回编辑",
+                back_label=t(self.get_lang(), "md_back_edit"),
                 navbar=templates.get_navbar(self, username),
             )
             self.send_response(200)
@@ -469,8 +503,7 @@ class NoteHandler(BaseHTTPRequestHandler):
                 self.send_response(401)
                 self.send_header("Content-Type", self._HTML_HEADER)
                 self.end_headers()
-                body = "<h1>需要登录</h1><p>请先 <a href=\"/login\">登录</a> 或 <a href=\"/register\">注册</a> 以访问您的分享管理。</p>"
-                self.wfile.write(templates.render_base(self, body, "请先登录").encode("utf-8"))
+                self._send_login_required(shares=True)
                 return
             page = templates.render_shares_page(self, username)
             self.send_response(200)
@@ -496,8 +529,7 @@ class NoteHandler(BaseHTTPRequestHandler):
                 self.send_response(401)
                 self.send_header("Content-Type", self._HTML_HEADER)
                 self.end_headers()
-                body = "<h1>需要登录</h1><p>请先 <a href=\"/login\">登录</a> 或 <a href=\"/register\">注册</a> 以访问您的私有笔记。</p>"
-                self.wfile.write(templates.render_base(self, body, "请先登录").encode("utf-8"))
+                self._send_login_required()
                 return
 
             if note_id == "new":
@@ -571,9 +603,9 @@ class NoteHandler(BaseHTTPRequestHandler):
                 self.send_header("Content-Type", self._HTML_HEADER)
                 self.end_headers()
                 if username.lower() in RESERVED_USERNAMES:
-                    error_msg = "该用户名是系统保留关键词，请更换（如 login/logout/register 等）"
+                    error_msg = t(self.get_lang(), "err_username_reserved")
                 else:
-                    error_msg = "用户名只能包含字母、数字、下划线、连字符"
+                    error_msg = t(self.get_lang(), "err_username_invalid")
                 self.wfile.write(templates.render_register_form(self, error_msg).encode("utf-8"))
                 return
 
@@ -581,16 +613,16 @@ class NoteHandler(BaseHTTPRequestHandler):
                 self.send_response(400)
                 self.send_header("Content-Type", self._HTML_HEADER)
                 self.end_headers()
-                self.wfile.write(templates.render_register_form(self, "两次密码不一致").encode("utf-8"))
+                self.wfile.write(templates.render_register_form(self, t(self.get_lang(), "err_password_mismatch")).encode("utf-8"))
                 return
 
             if not check_password_complexity(password):
-                req_desc = config.get_password_requirements_description()
+                req_desc = config.get_password_requirements_description(self.get_lang())
                 self.send_response(400)
                 self.send_header("Content-Type", self._HTML_HEADER)
                 self.end_headers()
                 self.wfile.write(templates.render_register_form(
-                    self, f"密码不符合要求：{req_desc}"
+                    self, t(self.get_lang(), "err_password_weak", req=req_desc)
                 ).encode("utf-8"))
                 return
 
@@ -601,7 +633,7 @@ class NoteHandler(BaseHTTPRequestHandler):
                     self.send_response(400)
                     self.send_header("Content-Type", self._HTML_HEADER)
                     self.end_headers()
-                    self.wfile.write(templates.render_register_form(self, "用户名不可用").encode("utf-8"))
+                    self.wfile.write(templates.render_register_form(self, t(self.get_lang(), "err_username_taken")).encode("utf-8"))
                     return
                 salt = generate_salt()
                 hashed = hash_password(password, salt)
@@ -635,7 +667,7 @@ class NoteHandler(BaseHTTPRequestHandler):
                 self.send_response(401)
                 self.send_header("Content-Type", self._HTML_HEADER)
                 self.end_headers()
-                self.wfile.write(templates.render_login_form(self, "用户名或密码错误").encode("utf-8"))
+                self.wfile.write(templates.render_login_form(self, t(self.get_lang(), "err_login_failed")).encode("utf-8"))
                 return
 
             token = create_session(username)
@@ -663,7 +695,7 @@ class NoteHandler(BaseHTTPRequestHandler):
                 self.send_header("Content-Type", self._HTML_HEADER)
                 self.end_headers()
                 self.wfile.write(templates.render_benben_page(self, posts, 1, has_more,
-                                                              "内容不能为空").encode("utf-8"))
+                                                              t(self.get_lang(), "err_benben_empty")).encode("utf-8"))
                 return
             if len(content) > config.BENBEN_MAX_LENGTH:
                 posts, has_more = get_benben_posts(1, config.BENBEN_PAGE_SIZE)
@@ -672,7 +704,7 @@ class NoteHandler(BaseHTTPRequestHandler):
                 self.end_headers()
                 self.wfile.write(templates.render_benben_page(
                     self, posts, 1, has_more,
-                    f"内容超出长度限制（最多 {config.BENBEN_MAX_LENGTH} 字符）",
+                    t(self.get_lang(), "err_benben_too_long", max=config.BENBEN_MAX_LENGTH),
                     prefill=content).encode("utf-8"))
                 return
 
@@ -685,11 +717,11 @@ class NoteHandler(BaseHTTPRequestHandler):
                 self.end_headers()
                 self.wfile.write(templates.render_benben_page(
                     self, posts, 1, has_more,
-                    f"发布过于频繁，请 {int(remaining) + 1} 秒后再试",
+                    t(self.get_lang(), "err_benben_cooldown", sec=int(remaining) + 1),
                     prefill=content).encode("utf-8"))
                 return
 
-            add_benben_post(current_user, content)
+            add_benben_post(current_user, content, self.get_client_ip())
             mark_benben_post(current_user)
             self._send_redirect("/benben")
             return
@@ -714,14 +746,14 @@ class NoteHandler(BaseHTTPRequestHandler):
                 self.send_response(400)
                 self.send_header("Content-Type", self._HTML_HEADER)
                 self.end_headers()
-                self.wfile.write(templates.render_shares_page(self, username, "请选择有效的笔记").encode("utf-8"))
+                self.wfile.write(templates.render_shares_page(self, username, t(self.get_lang(), "err_share_invalid_note")).encode("utf-8"))
                 return
             note_path = get_note_path(username, note_id)
             if note_path is None or not os.path.exists(note_path):
                 self.send_response(400)
                 self.send_header("Content-Type", self._HTML_HEADER)
                 self.end_headers()
-                self.wfile.write(templates.render_shares_page(self, username, "笔记不存在，请选择已有的笔记").encode("utf-8"))
+                self.wfile.write(templates.render_shares_page(self, username, t(self.get_lang(), "err_share_note_missing")).encode("utf-8"))
                 return
 
             token = create_share(username, note_id, editable)
@@ -752,7 +784,7 @@ class NoteHandler(BaseHTTPRequestHandler):
                 self.send_response(400)
                 self.send_header("Content-Type", self._HTML_HEADER)
                 self.end_headers()
-                self.wfile.write(templates.render_shares_page(self, username, "删除失败：分享不存在或无权删除").encode("utf-8"))
+                self.wfile.write(templates.render_shares_page(self, username, t(self.get_lang(), "err_share_delete")).encode("utf-8"))
                 return
             self.send_response(302)
             self.send_header("Location", f"/user/{username}/shares/")
@@ -851,7 +883,7 @@ class NoteHandler(BaseHTTPRequestHandler):
             theme = self.get_theme()
             theme_attr = f' data-theme="{theme}"' if theme else ""
             safe_message = html.escape(str(message))
-            response = (f"<html{theme_attr}><head><title>Error {code}</title>{THEME_SCRIPT}"
+            response = (f"<html{theme_attr}><head><title>Error {code}</title>{get_theme_script(self.get_lang())}"
                         f"<style>{THEME_VARS}"
                         f"body {{ background: var(--bg); color: var(--text); font-family: -apple-system, sans-serif; padding: 40px; }}"
                         f"h1 {{ font-weight: 400; border-bottom: 1px solid var(--heading-border); padding-bottom: 10px; }}"

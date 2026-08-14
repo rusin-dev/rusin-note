@@ -5,40 +5,44 @@ import os
 import time
 
 from . import config
+from .i18n import detect_lang, get_lang_switch, t
 from .notes import get_stats, list_user_notes
 from .store import list_user_shares
-from .theme import THEME_VARS, THEME_SCRIPT, THEME_TOGGLE_BTN
+from .theme import get_theme_script, get_theme_toggle_btn, THEME_VARS
 
 
 # ---------- 导航栏 ----------
 def get_navbar(handler, current_user=None) -> str:
     if current_user is None:
         current_user = handler.get_current_user()
+    lang = detect_lang(handler)
     if current_user:
         return f"""
             <div class="navbar">
-                <span class="user-info">用户: {html.escape(current_user)}</span>
+                <span class="user-info">{html.escape(t(lang, "nav_user_prefix") + current_user)}</span>
                 <span class="nav-links">
-                    <a href="/user/{html.escape(current_user)}/">我的笔记</a>
-                    <a href="/user/{html.escape(current_user)}/new">新建笔记</a>
-                    <a href="/user/{html.escape(current_user)}/shares/">分享管理</a>
-                    <a href="/benben">犇犇</a>
-                    <a href="/logout">登出</a>
-                    {THEME_TOGGLE_BTN}
+                    <a href="/user/{html.escape(current_user)}/">{t(lang, "nav_my_notes")}</a>
+                    <a href="/user/{html.escape(current_user)}/new">{t(lang, "nav_new_note")}</a>
+                    <a href="/user/{html.escape(current_user)}/shares/">{t(lang, "nav_share_mgmt")}</a>
+                    <a href="/benben">{t(lang, "nav_benben")}</a>
+                    <a href="/logout">{t(lang, "nav_logout")}</a>
+                    {get_lang_switch(lang)}
+                    {get_theme_toggle_btn(lang)}
                 </span>
             </div>
         """
     else:
         return f"""
             <div class="navbar">
-                <span class="user-info">匿名</span>
+                <span class="user-info">{t(lang, "nav_anonymous")}</span>
                 <span class="nav-links">
-                    <a href="/register">注册</a>
-                    <a href="/login">登录</a>
-                    <a href="/benben">犇犇</a>
-                    <a href="/count">统计</a>
-                    <a href="/disclaimer">免责声明</a>
-                    {THEME_TOGGLE_BTN}
+                    <a href="/register">{t(lang, "nav_register")}</a>
+                    <a href="/login">{t(lang, "nav_login")}</a>
+                    <a href="/benben">{t(lang, "nav_benben")}</a>
+                    <a href="/count">{t(lang, "nav_stats")}</a>
+                    <a href="/disclaimer">{t(lang, "nav_disclaimer")}</a>
+                    {get_lang_switch(lang)}
+                    {get_theme_toggle_btn(lang)}
                 </span>
             </div>
         """
@@ -62,7 +66,7 @@ def render_base(handler, body: str, title="rusin-note", navbar=None, extra_head=
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>{html.escape(full_title)}</title>
     <link rel="icon" href="/favicon.ico" type="image/x-icon">
-    {THEME_SCRIPT}
+    {get_theme_script(detect_lang(handler))}
 <style>
         {THEME_VARS}
         * {{ margin: 0; padding: 0; box-sizing: border-box; }}
@@ -216,86 +220,91 @@ def render_base(handler, body: str, title="rusin-note", navbar=None, extra_head=
 
 # ---------- 页面渲染 ----------
 def render_home(handler):
-    body = """
+    lang = detect_lang(handler)
+    body = f"""
         <h1>rusin-note</h1>
         <ul class="home-links">
-            <li><a href="/world/">公开笔记（匿名）</a></li>
-            <li><a href="/benben">犇犇</a></li>
-            <li><a href="/register">注册账号</a></li>
-            <li><a href="/login">登录</a></li>
-            <li><a href="/count">统计</a></li>
-            <li><a href="/disclaimer">免责声明</a></li>
+            <li><a href="/world/">{t(lang, "home_public_notes")}</a></li>
+            <li><a href="/benben">{t(lang, "home_benben")}</a></li>
+            <li><a href="/register">{t(lang, "home_register")}</a></li>
+            <li><a href="/login">{t(lang, "home_login")}</a></li>
+            <li><a href="/count">{t(lang, "home_stats")}</a></li>
+            <li><a href="/disclaimer">{t(lang, "home_disclaimer")}</a></li>
         </ul>
     """
-    return render_base(handler, body, "首页")
+    return render_base(handler, body, t(lang, "page_home"))
 
 
 def render_register_form(handler, error=""):
-    req_desc = config.get_password_requirements_description()
+    lang = detect_lang(handler)
+    req_desc = config.get_password_requirements_description(lang)
     body = f"""
-        <h1>注册</h1>
+        <h1>{t(lang, "register_title")}</h1>
         {f'<p class="error">{html.escape(error)}</p>' if error else ''}
         <form method="POST" action="/register">
             <div class="form-group">
-                <label>用户名 (字母数字下划线连字符，不可使用 login/logout 等系统关键词)</label>
+                <label>{t(lang, "reg_username_label")}</label>
                 <input type="text" name="username" required pattern="[a-zA-Z0-9_\\-]+">
             </div>
             <div class="form-group">
-                <label>密码 (要求: {req_desc})</label>
+                <label>{t(lang, "reg_password_label", req=req_desc)}</label>
                 <input type="password" name="password" required>
             </div>
             <div class="form-group">
-                <label>确认密码</label>
+                <label>{t(lang, "reg_confirm_label")}</label>
                 <input type="password" name="confirm" required>
             </div>
-            <button type="submit">注册</button>
+            <button type="submit">{t(lang, "reg_submit")}</button>
         </form>
-        <p style="margin-top:12px;"><a href="/login">已有账号？登录</a></p>
+        <p style="margin-top:12px;"><a href="/login">{t(lang, "reg_have_account")}</a></p>
     """
-    return render_base(handler, body, "注册")
+    return render_base(handler, body, t(lang, "register_title"))
 
 
 def render_login_form(handler, error=""):
+    lang = detect_lang(handler)
     body = f"""
-        <h1>登录</h1>
+        <h1>{t(lang, "login_title")}</h1>
         {f'<p class="error">{html.escape(error)}</p>' if error else ''}
         <form method="POST" action="/login">
             <div class="form-group">
-                <label>用户名</label>
+                <label>{t(lang, "login_username")}</label>
                 <input type="text" name="username" required>
             </div>
             <div class="form-group">
-                <label>密码</label>
+                <label>{t(lang, "login_password")}</label>
                 <input type="password" name="password" required>
             </div>
-            <button type="submit">登录</button>
+            <button type="submit">{t(lang, "login_submit")}</button>
         </form>
-        <p style="margin-top:12px;"><a href="/register">没有账号？注册</a></p>
+        <p style="margin-top:12px;"><a href="/register">{t(lang, "login_no_account")}</a></p>
     """
-    return render_base(handler, body, "登录")
+    return render_base(handler, body, t(lang, "login_title"))
 
 
 def render_user_list(handler, username: str, notes: list[str]):
+    lang = detect_lang(handler)
     note_items = ""
     if notes:
         for nid in notes:
             note_items += f'<li><a href="/user/{html.escape(username)}/{html.escape(nid)}">{html.escape(nid)}</a></li>'
     else:
-        note_items = '<li class="empty">还没有笔记，创建一个吧</li>'
+        note_items = f'<li class="empty">{t(lang, "user_no_notes")}</li>'
     body = f"""
-        <h1>{html.escape(username)} 的笔记</h1>
+        <h1>{t(lang, "user_notes_title", username=username)}</h1>
         <div style="margin-bottom: 16px;">
-            <a href="/user/{html.escape(username)}/new">+ 新建笔记</a>
+            <a href="/user/{html.escape(username)}/new">{t(lang, "user_new_note")}</a>
         </div>
         <ul class="note-list">
             {note_items}
         </ul>
     """
     navbar = get_navbar(handler, username)
-    return render_base(handler, body, f"{username} 的笔记", navbar)
+    return render_base(handler, body, t(lang, "user_notes_title", username=username), navbar)
 
 
 def render_count_page(handler):
+    lang = detect_lang(handler)
     pub_cnt, pub_size, priv_cnt, priv_size, user_cnt = get_stats()
 
     def fmt_size(sz):
@@ -309,69 +318,71 @@ def render_count_page(handler):
             return f"{sz/(1024*1024*1024):.2f} GB"
 
     body = f"""
-        <h1>笔记统计</h1>
+        <h1>{t(lang, "stats_title")}</h1>
         <div class="stat-grid">
             <div class="stat-card">
-                <h3>公开笔记</h3>
+                <h3>{t(lang, "stats_public")}</h3>
                 <div class="number">{pub_cnt}</div>
-                <div class="detail">总大小: {fmt_size(pub_size)}</div>
+                <div class="detail">{t(lang, "stats_total_size", size=fmt_size(pub_size))}</div>
             </div>
             <div class="stat-card">
-                <h3>私有笔记</h3>
+                <h3>{t(lang, "stats_private")}</h3>
                 <div class="number">{priv_cnt}</div>
-                <div class="detail">总大小: {fmt_size(priv_size)}</div>
+                <div class="detail">{t(lang, "stats_total_size", size=fmt_size(priv_size))}</div>
             </div>
             <div class="stat-card">
-                <h3>注册用户</h3>
+                <h3>{t(lang, "stats_users")}</h3>
                 <div class="number">{user_cnt}</div>
-                <div class="detail">已注册账号</div>
+                <div class="detail">{t(lang, "stats_users_detail")}</div>
             </div>
         </div>
-        <p style="margin-top: 24px;"><a href="/">返回首页</a></p>
+        <p style="margin-top: 24px;"><a href="/">{t(lang, "back_home")}</a></p>
     """
-    return render_base(handler, body, "统计信息")
+    return render_base(handler, body, t(lang, "stats_title"))
 
 
 def render_disclaimer(handler):
     """读取 Disclaimer.md 并渲染为 HTML（支持 Markdown）"""
+    lang = detect_lang(handler)
     disclaimer_file = "Disclaimer.md"
     if os.path.exists(disclaimer_file):
         try:
             with open(disclaimer_file, "r", encoding="utf-8") as f:
                 content = f.read()
         except Exception as e:
-            content = f"读取免责声明文件失败: {e}"
+            content = t(lang, "disclaimer_read_error", e=e)
     else:
-        content = "免责声明文件 (Disclaimer.md) 未找到。"
+        content = t(lang, "disclaimer_not_found")
 
     # 尝试使用 markdown 库渲染（同样需要安全清洗，但此处内容由管理员控制，风险较低，不过仍建议统一使用安全渲染）
     if config.MARKDOWN_AVAILABLE and config.BLEACH_AVAILABLE:
         html_content = render_markdown_html(content)
         body = f"""
             <div class="disclaimer markdown-body">{html_content}</div>
-            <p style="margin-top: 20px;"><a href="/">返回首页</a></p>
+            <p style="margin-top: 20px;"><a href="/">{t(lang, "back_home")}</a></p>
         """
-        return render_base(handler, body, "免责声明", extra_head=get_latex_head())
+        return render_base(handler, body, t(lang, "disclaimer_title"), extra_head=get_latex_head())
 
     # 降级：纯文本（安全）
     body = f"""
-        <h1>免责声明</h1>
-        <p>暂无，请联系站长添加</p>
+        <h1>{t(lang, "disclaimer_title")}</h1>
+        <p>{t(lang, "disclaimer_none")}</p>
         <div class="disclaimer">{html.escape(content)}</div>
-        <p style="margin-top: 20px;"><a href="/">返回首页</a></p>
+        <p style="margin-top: 20px;"><a href="/">{t(lang, "back_home")}</a></p>
     """
-    return render_base(handler, body, "免责声明")
+    return render_base(handler, body, t(lang, "disclaimer_title"))
 
 
 def render_note_page(handler, note_id: str, content: str, username: str = None, is_world: bool = False,
                      action_url: str = None, navbar: str = None, title_prefix: str = None,
                      hint_text: str = None, theme=None):
+    lang = detect_lang(handler)
     escaped_id = html.escape(note_id)
     escaped_content = html.escape(content)
 
     # ---- 生成标题 ----
     if title_prefix is None:
-        title_prefix = "公开笔记" if is_world else "私有笔记"
+        title_prefix = t(lang, "note_public_prefix") if is_world else t(lang, "note_private_prefix")
     if config.SITE_NAME:
         full_title = f"{title_prefix} {escaped_id} | {config.SITE_NAME}"
     else:
@@ -383,10 +394,20 @@ def render_note_page(handler, note_id: str, content: str, username: str = None, 
     if navbar is None:
         navbar = get_navbar(handler) if is_world else get_navbar(handler, username)
     if hint_text is None:
-        hint_text = ' 按 <kbd>Ctrl</kbd> + <kbd>S</kbd> 快速保存'
+        hint_text = t(lang, "note_save_hint")
     if theme is None:
         theme = handler.get_theme()
     theme_attr = f' data-theme="{theme}"' if theme else ""
+    save_btn_label = t(lang, "note_save_btn")
+    l10n = json.dumps({
+        "saving": t(lang, "save_status_saving"),
+        "saved": t(lang, "save_status_saved"),
+        "failedStatus": t(lang, "save_status_failed"),
+        "netError": t(lang, "save_status_net_error"),
+        "savedHint": t(lang, "save_hint_saved"),
+        "retryHint": t(lang, "save_hint_retry"),
+        "failedMsg": t(lang, "save_failed_msg"),
+    }, ensure_ascii=False)
 
     page = f"""<!DOCTYPE html>
 <html{theme_attr}>
@@ -394,7 +415,7 @@ def render_note_page(handler, note_id: str, content: str, username: str = None, 
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{html.escape(full_title)}</title>
-    {THEME_SCRIPT}
+    {get_theme_script(lang)}
     <style>
         {THEME_VARS}
         * {{ margin: 0; padding: 0; box-sizing: border-box; }}
@@ -576,10 +597,10 @@ def render_note_page(handler, note_id: str, content: str, username: str = None, 
     {navbar}
     <form method="POST" action="{action_url}" id="noteForm">
         <textarea name="content" id="noteContent" autofocus spellcheck="true">{escaped_content}</textarea>
-        <button type="button" class="save-btn" id="saveBtn"> 保存</button>
+        <button type="button" class="save-btn" id="saveBtn">{save_btn_label}</button>
     </form>
     <div class="save-hint" id="saveHint">
-         按 <kbd>Ctrl</kbd> + <kbd>S</kbd> 快速保存
+        {hint_text}
     </div>
     <div class="save-status" id="saveStatus"></div>
 
@@ -596,6 +617,7 @@ def render_note_page(handler, note_id: str, content: str, username: str = None, 
             let isSaving = false;
             // BUG-12: 使用 json.dumps 生成合法的 JS 字符串字面量，防止 hint 含引号/反斜杠时破坏脚本或注入
             const DEFAULT_HINT = {json.dumps(hint_text, ensure_ascii=False)};
+            const L10N = {l10n};
 
             // ADDED: Tab键插入4个空格
             textarea.addEventListener('keydown', function(e) {{
@@ -666,7 +688,7 @@ def render_note_page(handler, note_id: str, content: str, username: str = None, 
             function saveNote() {{
                 if (isSaving) return;
                 isSaving = true;
-                showStatus(' 保存中...', 'saving');
+                showStatus(L10N.saving, 'saving');
                 const content = textarea.value;
                 fetch(window.location.href, {{
                     method: 'POST',
@@ -678,17 +700,17 @@ def render_note_page(handler, note_id: str, content: str, username: str = None, 
                 .then(response => {{
                     isSaving = false;
                     if (response.ok) {{
-                        showStatus('已保存', '');
-                        showHint(' 已保存！按 <kbd>Ctrl</kbd> + <kbd>S</kbd> 再次保存');
+                        showStatus(L10N.saved, '');
+                        showHint(L10N.savedHint);
                     }} else {{
-                        showStatus(' 保存失败 (' + response.status + ')', 'error');
-                        showHint(' 保存失败，请重试');
+                        showStatus(L10N.failedStatus.replace('{{status}}', response.status), 'error');
+                        showHint(L10N.retryHint);
                     }}
                 }})
                 .catch(error => {{
                     isSaving = false;
-                    showStatus(' 网络错误', 'error');
-                    showHint(' 保存失败：' + error.message);
+                    showStatus(L10N.netError, 'error');
+                    showHint(L10N.failedMsg + error.message);
                 }});
             }}
 
@@ -758,30 +780,36 @@ def render_markdown_html(content: str) -> str:
 
 
 # ---------- 只读 Markdown 渲染页面 ----------
-def render_markdown_page(handler, note_id: str, content: str, title_label: str = "公开笔记",
-                         back_url: str = None, back_label: str = "返回编辑", navbar: str = None):
+def render_markdown_page(handler, note_id: str, content: str, title_label: str = None,
+                         back_url: str = None, back_label: str = None, navbar: str = None):
     """
     渲染笔记为 Markdown 只读页面（公开/私有/分享通用）。
     使用 bleach 清洗 HTML，防止 XSS。
     """
+    lang = detect_lang(handler)
     html_content = render_markdown_html(content)
 
+    if title_label is None:
+        title_label = t(lang, "note_public_prefix")
+    if back_label is None:
+        back_label = t(lang, "md_back_edit")
     if back_url is None:
         back_url = f"/world/{note_id}"
     if navbar is None:
         navbar = get_navbar(handler)  # 匿名导航
     body = f"""
-        <h1>{html.escape(title_label)} · {html.escape(note_id)} <span style="font-size:0.6em; font-weight:400; color:#888;">只读</span></h1>
+        <h1>{html.escape(title_label)} · {html.escape(note_id)} <span style="font-size:0.6em; font-weight:400; color:#888;">{t(lang, "md_readonly")}</span></h1>
         <div class="markdown-body" style="margin-top:20px; padding-bottom:40px;">
             {html_content}
         </div>
-        <p style="margin-top: 20px;"><a href="{html.escape(back_url)}">{html.escape(back_label)}</a> · <a href="/">首页</a></p>
+        <p style="margin-top: 20px;"><a href="{html.escape(back_url)}">{html.escape(back_label)}</a> · <a href="/">{t(lang, "md_home")}</a></p>
     """
     return render_base(handler, body, f"Markdown - {note_id}", navbar, extra_head=get_latex_head())
 
 
 # ---------- 分享管理页面 ----------
 def render_shares_page(handler, username: str, error=""):
+    lang = detect_lang(handler)
     my_shares = list_user_shares(username)
     notes = list_user_notes(username)
 
@@ -790,13 +818,13 @@ def render_shares_page(handler, username: str, error=""):
         for nid in notes:
             note_options += f'<option value="{html.escape(nid)}">{html.escape(nid)}</option>'
     else:
-        note_options = '<option value="">（暂无笔记，请先创建笔记）</option>'
+        note_options = f'<option value="">{t(lang, "shares_no_notes")}</option>'
 
     rows = ""
     if my_shares:
         for tok, s in sorted(my_shares, key=lambda kv: kv[1].get("created_at", 0), reverse=True):
             nid = s.get("note_id", "")
-            editable = "可编辑" if s.get("editable") else "只读"
+            editable = t(lang, "shares_editable") if s.get("editable") else t(lang, "shares_readonly")
             rows += f"""
                 <tr>
                     <td>{html.escape(nid)}</td>
@@ -806,38 +834,38 @@ def render_shares_page(handler, username: str, error=""):
                     <td>
                         <form method="POST" action="/user/{html.escape(username)}/shares/delete" style="display:inline;">
                             <input type="hidden" name="token" value="{tok}">
-                            <button type="submit" class="btn-sm">删除</button>
+                            <button type="submit" class="btn-sm">{t(lang, "shares_delete")}</button>
                         </form>
                     </td>
                 </tr>"""
     else:
-        rows = '<tr><td colspan="5" class="empty">还没有分享链接，创建第一个吧</td></tr>'
+        rows = f'<tr><td colspan="5" class="empty">{t(lang, "shares_empty")}</td></tr>'
 
     body = f"""
-        <h1>分享管理</h1>
+        <h1>{t(lang, "shares_title")}</h1>
         {f'<p class="error">{html.escape(error)}</p>' if error else ''}
         <div style="margin: 20px 0;">
-            <h2 style="border:none; margin-bottom: 12px;">创建分享</h2>
+            <h2 style="border:none; margin-bottom: 12px;">{t(lang, "shares_create")}</h2>
             <form method="POST" action="/user/{html.escape(username)}/shares/" style="max-width: 420px;">
                 <div class="form-group">
-                    <label>选择要分享的笔记</label>
+                    <label>{t(lang, "shares_select_note")}</label>
                     <select name="note_id">{note_options}</select>
                 </div>
                 <div class="form-group" style="display:flex; align-items:center; gap:8px;">
                     <input type="checkbox" name="editable" value="1" id="editable_cb" style="width:auto;">
-                    <label for="editable_cb" style="margin:0;">允许编辑（访客保存将修改我的原笔记）</label>
+                    <label for="editable_cb" style="margin:0;">{t(lang, "shares_editable_label")}</label>
                 </div>
-                <button type="submit">创建分享</button>
+                <button type="submit">{t(lang, "shares_create_btn")}</button>
             </form>
         </div>
-        <h2 style="border:none; margin-bottom: 12px;">我的分享（{len(my_shares)}）</h2>
+        <h2 style="border:none; margin-bottom: 12px;">{t(lang, "shares_my", count=len(my_shares))}</h2>
         <table class="share-table">
             <thead>
-                <tr><th>笔记</th><th>分享链接</th><th>权限</th><th>查看次数</th><th>操作</th></tr>
+                <tr><th>{t(lang, "shares_col_note")}</th><th>{t(lang, "shares_col_link")}</th><th>{t(lang, "shares_col_perm")}</th><th>{t(lang, "shares_col_views")}</th><th>{t(lang, "shares_col_action")}</th></tr>
             </thead>
             <tbody>{rows}</tbody>
         </table>
-        <p style="margin-top: 24px;"><a href="/user/{html.escape(username)}/">返回我的笔记</a></p>
+        <p style="margin-top: 24px;"><a href="/user/{html.escape(username)}/">{t(lang, "shares_back")}</a></p>
     """
     # 分享页专用样式
     share_css = """
@@ -851,23 +879,25 @@ def render_shares_page(handler, username: str, error=""):
         </style>
     """
     navbar = get_navbar(handler, username)
-    return render_base(handler, body, "分享管理", navbar, extra_head=share_css)
+    return render_base(handler, body, t(lang, "shares_title"), navbar, extra_head=share_css)
 
 
 # ---------- 可编辑分享页面 ----------
 def render_share_edit_page(handler, token: str, note_id: str, content: str, owner: str):
+    lang = detect_lang(handler)
     return render_note_page(
         handler, note_id, content,
         action_url=f"/share/{token}",
         navbar=get_navbar(handler),
-        title_prefix="分享笔记",
-        hint_text=' 可编辑分享：保存后将写入分享者原笔记',
+        title_prefix=t(lang, "note_share_prefix"),
+        hint_text=t(lang, "share_edit_hint"),
     )
 
 
 # ---------- 犇犇（用户动态）页面 ----------
 def render_benben_page(handler, posts, page, has_more, error="", prefill=""):
     """犇犇页面：登录可发布，未登录只读。posts 为（新→旧）的犇犇条目，每页 BENBEN_PAGE_SIZE 条。"""
+    lang = detect_lang(handler)
     current_user = handler.get_current_user()
 
     items = ""
@@ -881,14 +911,16 @@ def render_benben_page(handler, posts, page, has_more, error="", prefill=""):
             time_str = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(ts))
         else:
             time_str = ""
+        ip_str = str(post.get("ip", "")).strip()
+        ip_html = f'<span class="benben-ip">IP:{html.escape(ip_str)}</span>' if ip_str else ""
         items += f"""
             <div class="benben-post">
-                <div class="benben-head">{html.escape(username)}<span class="benben-time">{time_str}</span></div>
+                <div class="benben-head">{html.escape(username)}<span class="benben-time">{time_str}</span>{ip_html}</div>
                 <div class="benben-body markdown-body">{content}</div>
             </div>
         """
     if not items:
-        items = '<p class="empty">还没有犇犇，快来发布第一条吧</p>'
+        items = f'<p class="empty">{t(lang, "benben_empty")}</p>'
 
     error_html = f'<p class="error">{html.escape(error)}</p>' if error else ""
     if current_user:
@@ -896,50 +928,72 @@ def render_benben_page(handler, posts, page, has_more, error="", prefill=""):
             {error_html}
             <form method="POST" action="/benben" class="benben-form">
                 <div class="form-group">
-                    <label>发布犇犇（支持 Markdown 与 LaTeX 公式，输入即预览，最多 {config.BENBEN_MAX_LENGTH} 字符）</label>
+                    <label>{t(lang, "benben_label", max=config.BENBEN_MAX_LENGTH)}</label>
                     <textarea name="content" id="benbenInput" rows="4" maxlength="{config.BENBEN_MAX_LENGTH}">{html.escape(prefill)}</textarea>
                 </div>
                 <div id="benbenPreview" class="benben-preview markdown-body"></div>
-                <button type="submit" style="width:auto;">发布</button>
+                <button type="submit" style="width:auto;">{t(lang, "benben_submit")}</button>
             </form>
         """
     else:
         form_area = f"""
-            <p style="color: var(--muted);">登录后可发布犇犇，当前为只读模式</p>
+            <p style="color: var(--muted);">{t(lang, "benben_readonly")}</p>
             {error_html}
         """
 
     if has_more:
-        more_link = f'<p class="benben-more"><a href="/benben?page={page + 1}">加载更多（更早）</a></p>'
+        more_link = f'<p class="benben-more"><a href="/benben?page={page + 1}">{t(lang, "benben_more")}</a></p>'
     else:
-        more_link = '<p class="benben-more empty">没有更多了</p>'
+        more_link = f'<p class="benben-more empty">{t(lang, "benben_no_more")}</p>'
 
     body = f"""
-        <h1>犇犇</h1>
-        <p style="color: var(--muted); margin: 12px 0 16px;">第 {page} 页 · 每页 {config.BENBEN_PAGE_SIZE} 条</p>
+        <h1>{t(lang, "benben_title")}</h1>
+        <p style="color: var(--muted); margin: 12px 0 16px;">{t(lang, "benben_page_info", page=page, size=config.BENBEN_PAGE_SIZE)}</p>
         {form_area}
         <div class="benben-list">
             {items}
         </div>
         {more_link}
     """
-    benben_css = """
+    benben_css = _BENBEN_CSS_TEMPLATE.replace(
+        "__BENBEN_MAX_HEIGHT_PX__", str(config.BENBEN_MAX_HEIGHT_PX)
+    )
+    # 犇犇发布预览：客户端 Markdown（marked.js）+ LaTeX 公式（KaTeX，依赖 latex_render 开关）实时渲染。
+    # 渲染前对 marked 输出做轻量消毒（移除脚本类元素与事件属性），预览仅供本人查看，发布仍由服务端 bleach 清洗。
+    preview_l10n = json.dumps({
+        "loadFailed": t(lang, "preview_load_failed"),
+        "renderFailed": t(lang, "preview_render_failed"),
+    }, ensure_ascii=False)
+    benben_preview_script = _BENBEN_PREVIEW_SCRIPT.replace(
+        "var L10N = null; // __PREVIEW_L10N__",
+        f"var L10N = {preview_l10n};",
+    )
+    navbar = get_navbar(handler, current_user)
+    return render_base(handler, body, t(lang, "benben_title"), navbar,
+                       extra_head=benben_css + get_latex_head() + benben_preview_script)
+
+
+# 犇犇页面样式模板（静态字符串，max-height 通过占位符注入，避免 f-string 转义 CSS 花括号）
+_BENBEN_CSS_TEMPLATE = """
         <style>
             .benben-post { border: 1px solid var(--card-border); border-radius: 8px; padding: 12px 16px; margin-bottom: 12px; background: var(--card-bg); }
             .benben-head { font-weight: 500; margin-bottom: 6px; }
             .benben-time { color: var(--muted); font-size: 13px; font-weight: 400; margin-left: 8px; }
-            .benben-body { font-size: 15px; word-break: break-word; }
+            .benben-ip { color: var(--muted); font-size: 12px; font-weight: 400; margin-left: 8px; font-family: Consolas, monospace; }
+            .benben-body { font-size: 15px; word-break: break-word; max-height: __BENBEN_MAX_HEIGHT_PX__px; overflow-y: auto; }
             .benben-form { max-width: 720px; margin: 16px 0 24px; }
             .benben-more { text-align: center; margin-top: 16px; }
             .benben-preview { border: 1px dashed var(--border); border-radius: 8px; padding: 12px 16px; margin-bottom: 16px; background: var(--card-bg); font-size: 15px; word-break: break-word; display: none; }
         </style>
     """
-    # 犇犇发布预览：客户端 Markdown（marked.js）+ LaTeX 公式（KaTeX，依赖 latex_render 开关）实时渲染。
-    # 渲染前对 marked 输出做轻量消毒（移除脚本类元素与事件属性），预览仅供本人查看，发布仍由服务端 bleach 清洗。
-    benben_preview_script = """
+
+
+# 犇犇预览脚本模板（静态字符串，L10N 通过占位符注入，避免 f-string 转义 JS 花括号）
+_BENBEN_PREVIEW_SCRIPT = """
 <script defer src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
+    var L10N = null; // __PREVIEW_L10N__
     var ta = document.getElementById('benbenInput');
     var pre = document.getElementById('benbenPreview');
     if (!ta || !pre) return;
@@ -947,9 +1001,9 @@ document.addEventListener('DOMContentLoaded', function() {
     function renderPreview() {
         var text = ta.value.trim();
         if (!text) { pre.style.display = 'none'; return; }
-        if (!window.marked) { pre.textContent = '预览库加载失败'; pre.style.display = 'block'; return; }
+        if (!window.marked) { pre.textContent = L10N.loadFailed; pre.style.display = 'block'; return; }
         var html = '';
-        try { html = window.marked.parse(text); } catch (e) { html = '<p class="error">预览渲染失败</p>'; }
+        try { html = window.marked.parse(text); } catch (e) { html = '<p class="error">' + L10N.renderFailed + '</p>'; }
         var tmp = document.createElement('div');
         tmp.innerHTML = html;
         tmp.querySelectorAll('script, iframe, object, embed, link, meta, style').forEach(function(el) { el.remove(); });
@@ -982,6 +1036,3 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 </script>
 """
-    navbar = get_navbar(handler, current_user)
-    return render_base(handler, body, "犇犇", navbar,
-                       extra_head=benben_css + get_latex_head() + benben_preview_script)

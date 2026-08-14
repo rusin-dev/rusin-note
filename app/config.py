@@ -71,7 +71,8 @@ DEFAULT_CONFIG = {
     "benben": {
         "max_length": 1024,
         "page_size": 50,
-        "cooldown_seconds": 3
+        "cooldown_seconds": 3,
+        "max_height_px": 1000
     }
 }
 
@@ -185,9 +186,20 @@ PW_REQUIRE_DIGIT = PW_POLICY.get("require_digits", True)
 PW_REQUIRE_SPECIAL = PW_POLICY.get("require_special", True)
 
 
-def get_password_requirements_description():
-    parts = []
-    parts.append(f"至少 {PW_MIN_LENGTH} 位")
+def get_password_requirements_description(lang: str = "zh"):
+    """密码要求描述（zh/en）。由各单项要求拼装，`、`/`, ` 分隔。"""
+    if lang == "en":
+        parts = [f"at least {PW_MIN_LENGTH} characters"]
+        if PW_REQUIRE_UPPER:
+            parts.append("uppercase letters")
+        if PW_REQUIRE_LOWER:
+            parts.append("lowercase letters")
+        if PW_REQUIRE_DIGIT:
+            parts.append("digits")
+        if PW_REQUIRE_SPECIAL:
+            parts.append("special characters (not / \\ ( ) \" ' )")
+        return ", ".join(parts)
+    parts = [f"至少 {PW_MIN_LENGTH} 位"]
     if PW_REQUIRE_UPPER:
         parts.append("大写字母")
     if PW_REQUIRE_LOWER:
@@ -205,3 +217,11 @@ BENBEN_MAX_LENGTH = BENBEN_CFG.get("max_length", 1024)
 BENBEN_PAGE_SIZE = BENBEN_CFG.get("page_size", 50)
 # 犇犇发布冷却时间（秒）：单个用户两次发布犇犇的最小间隔，默认 3 秒
 BENBEN_COOLDOWN_SECONDS = BENBEN_CFG.get("cooldown_seconds", 3)
+# 犇犇内容渲染后的最大显示高度（px）：超出部分在内容区内滚动，默认 1000px
+BENBEN_MAX_HEIGHT_PX = BENBEN_CFG.get("max_height_px", 1000)
+try:
+    BENBEN_MAX_HEIGHT_PX = int(BENBEN_MAX_HEIGHT_PX)
+    if BENBEN_MAX_HEIGHT_PX <= 0:
+        BENBEN_MAX_HEIGHT_PX = 1000
+except (TypeError, ValueError):
+    BENBEN_MAX_HEIGHT_PX = 1000
