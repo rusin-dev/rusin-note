@@ -70,6 +70,8 @@ STRINGS = {
         "stats_private": "私有笔记",
         "stats_users": "注册用户",
         "stats_users_detail": "已注册账号",
+        "stats_benben": "犇犇动态",
+        "stats_benben_detail": "已发布犇犇数",
         "back_home": "返回首页",
         # 免责声明
         "disclaimer_title": "免责声明",
@@ -192,6 +194,8 @@ STRINGS = {
         "stats_private": "Private Notes",
         "stats_users": "Registered Users",
         "stats_users_detail": "Registered accounts",
+        "stats_benben": "Benben Posts",
+        "stats_benben_detail": "Total posts published",
         "back_home": "Back to Home",
         # Disclaimer
         "disclaimer_title": "Disclaimer",
