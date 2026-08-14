@@ -66,7 +66,10 @@ def render_base(handler, body: str, title="rusin-note", navbar=None, extra_head=
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>{html.escape(full_title)}</title>
     <link rel="icon" href="/favicon.ico" type="image/x-icon">
-    <link rel="stylesheet" href="https://cdn.jsdmirror.cn/npm/@fortawesome/fontawesome-free@6.5.2/css/all.min.css">
+    <link rel="preload" href="https://cdn.jsdmirror.cn/npm/@fortawesome/fontawesome-free@6.5.2/webfonts/fa-solid-900.woff2" as="font" type="font/woff2" crossorigin>
+    <link rel="preload" href="https://cdn.jsdmirror.cn/npm/@fortawesome/fontawesome-free@6.5.2/webfonts/fa-brands-400.woff2" as="font" type="font/woff2" crossorigin>
+    <link rel="stylesheet" href="https://cdn.jsdmirror.cn/npm/@fortawesome/fontawesome-free@6.5.2/css/all.min.css" media="print" onload="this.media='all'">
+    <noscript><link rel="stylesheet" href="https://cdn.jsdmirror.cn/npm/@fortawesome/fontawesome-free@6.5.2/css/all.min.css"></noscript>
     {get_theme_script(detect_lang(handler))}
 <style>
         {THEME_VARS}
@@ -196,21 +199,99 @@ def render_base(handler, body: str, title="rusin-note", navbar=None, extra_head=
         .markdown-body a {{
             color: var(--link);
         }}
-        .home-links {{
+        .home-hero {{
+            text-align: center;
+            padding: 28px 8px 8px;
+        }}
+        .home-hero h1 {{
+            border: none;
+            font-size: 34px;
+            font-weight: 600;
+            background: linear-gradient(135deg, var(--hero-grad-a), var(--hero-grad-b));
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+            color: transparent;
+            padding-bottom: 0;
+        }}
+        .home-hero p {{
+            color: var(--muted);
+            margin-top: 10px;
+            font-size: 15px;
+        }}
+        .home-grid {{
             list-style: none;
             padding: 0;
-            margin-top: 24px;
+            margin-top: 28px;
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+            gap: 16px;
         }}
-        .home-links li {{
-            margin: 12px 0;
-        }}
-        .home-links a {{
-            font-size: 18px;
-            color: var(--link);
+        .home-card {{
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            padding: 18px 20px;
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 12px;
             text-decoration: none;
+            color: var(--text);
+            transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
         }}
-        .home-links a:hover {{
-            text-decoration: underline;
+        .home-card:hover {{
+            transform: translateY(-3px);
+            border-color: var(--hover);
+            box-shadow: var(--card-shadow);
+        }}
+        .home-card:active {{
+            transform: translateY(-1px) scale(0.99);
+        }}
+        .home-card:focus-visible {{
+            outline: 2px solid var(--link);
+            outline-offset: 2px;
+        }}
+        .home-card-icon {{
+            flex-shrink: 0;
+            width: 46px;
+            height: 46px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            color: #546271;
+            background: var(--card-icon-bg);
+            border-radius: 10px;
+            transition: transform 0.18s ease, background 0.18s ease;
+        }}
+        .home-card:hover .home-card-icon {{
+            transform: scale(1.1);
+        }}
+        .home-card-body {{
+            flex: 1;
+            min-width: 0;
+        }}
+        .home-card-title {{
+            display: block;
+            font-size: 16px;
+            font-weight: 600;
+        }}
+        .home-card-desc {{
+            display: block;
+            color: var(--muted);
+            font-size: 13px;
+            margin-top: 4px;
+            line-height: 1.4;
+        }}
+        .home-card-arrow {{
+            flex-shrink: 0;
+            color: var(--muted);
+            font-size: 14px;
+            transition: transform 0.18s ease, color 0.18s ease;
+        }}
+        .home-card:hover .home-card-arrow {{
+            transform: translateX(4px);
+            color: var(--hover);
         }}
     </style>
     {extra_head}
@@ -241,16 +322,57 @@ def format_size(size) -> str:
 
 def render_home(handler):
     lang = detect_lang(handler)
+    current_user = handler.get_current_user()
+
+    if current_user:
+        # 已登录用户：直接进入个人功能，登录/注册入口不再展示
+        links = [
+            ("/user/" + html.escape(current_user) + "/", "fa-file-lines", t(lang, "nav_my_notes"), t(lang, "home_my_notes_desc")),
+            ("/user/" + html.escape(current_user) + "/new", "fa-square-plus", t(lang, "nav_new_note"), t(lang, "home_new_note_desc")),
+            ("/user/" + html.escape(current_user) + "/shares/", "fa-share-nodes", t(lang, "nav_share_mgmt"), t(lang, "home_share_mgmt_desc")),
+            ("/benben", "fa-sticky-note", t(lang, "home_benben"), t(lang, "home_benben_desc")),
+            ("/count", "fa-chart-simple", t(lang, "home_stats"), t(lang, "home_stats_desc")),
+        ]
+    else:
+        links = [
+            ("/world/", "fa-globe", t(lang, "home_public_notes"), t(lang, "home_public_notes_desc")),
+            ("/login", "fa-right-to-bracket", t(lang, "home_login"), t(lang, "home_login_desc")),
+            ("/register", "fa-user-plus", t(lang, "home_register"), t(lang, "home_register_desc")),
+            ("/benben", "fa-sticky-note", t(lang, "home_benben"), t(lang, "home_benben_desc")),
+            ("/count", "fa-chart-simple", t(lang, "home_stats"), t(lang, "home_stats_desc")),
+        ]
+
+    cards = "".join(
+        f"""
+        <a class="home-card" href="{href}">
+            <span class="home-card-icon"><i class="fa-solid {icon}" aria-hidden="true"></i></span>
+            <span class="home-card-body">
+                <span class="home-card-title">{title}</span>
+                <span class="home-card-desc">{desc}</span>
+            </span>
+            <span class="home-card-arrow"><i class="fa-solid fa-arrow-right" aria-hidden="true"></i></span>
+        </a>"""
+        for href, icon, title, desc in links
+    )
+
+    cards += f"""
+        <a class="home-card" href="https://github.com/rusin-dev/rusin-note" target="_blank" rel="noopener noreferrer">
+            <span class="home-card-icon"><i class="fa-brands fa-github" aria-hidden="true"></i></span>
+            <span class="home-card-body">
+                <span class="home-card-title">{t(lang, "home_github")}</span>
+                <span class="home-card-desc">{t(lang, "home_github_desc")}</span>
+            </span>
+            <span class="home-card-arrow"><i class="fa-solid fa-arrow-right" aria-hidden="true"></i></span>
+        </a>"""
+
     body = f"""
-        <h1>rusin-note</h1>
-        <ul class="home-links">
-            <li><a href="/world/">{t(lang, "home_public_notes")}</a></li>
-            <li><a href="/benben">{t(lang, "home_benben")}</a></li>
-            <li><a href="/register">{t(lang, "home_register")}</a></li>
-            <li><a href="/login">{t(lang, "home_login")}</a></li>
-            <li><a href="/count">{t(lang, "home_stats")}</a></li>
-            <li><a href="/disclaimer">{t(lang, "home_disclaimer")}</a></li>
-        </ul>
+        <div class="home-hero">
+            <h1>{html.escape(config.SITE_NAME or "如形の笔记")}</h1>
+            <p>{t(lang, "home_tagline")}</p>
+        </div>
+        <div class="home-grid">
+            {cards}
+        </div>
     """
     return render_base(handler, body, t(lang, "page_home"))
 
@@ -444,7 +566,10 @@ def render_note_page(handler, note_id: str, content: str, username: str = None, 
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{html.escape(full_title)}</title>
-    <link rel="stylesheet" href="https://cdn.jsdmirror.cn/npm/@fortawesome/fontawesome-free@6.5.2/css/all.min.css">
+    <link rel="preload" href="https://cdn.jsdmirror.cn/npm/@fortawesome/fontawesome-free@6.5.2/webfonts/fa-solid-900.woff2" as="font" type="font/woff2" crossorigin>
+    <link rel="preload" href="https://cdn.jsdmirror.cn/npm/@fortawesome/fontawesome-free@6.5.2/webfonts/fa-brands-400.woff2" as="font" type="font/woff2" crossorigin>
+    <link rel="stylesheet" href="https://cdn.jsdmirror.cn/npm/@fortawesome/fontawesome-free@6.5.2/css/all.min.css" media="print" onload="this.media='all'">
+    <noscript><link rel="stylesheet" href="https://cdn.jsdmirror.cn/npm/@fortawesome/fontawesome-free@6.5.2/css/all.min.css"></noscript>
     {get_theme_script(lang)}
     <style>
         {THEME_VARS}

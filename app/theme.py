@@ -9,6 +9,7 @@ THEME_VARS = """:root {
     --navbar-bg: #f8f9fa;
     --navbar-border: #dddddd;
     --link: #0366d6;
+    --hover: #546271;
     --border: #cccccc;
     --input-bg: #ffffff;
     --btn-bg: #f0f0f0;
@@ -26,6 +27,10 @@ THEME_VARS = """:root {
     --quote-border: #dddddd;
     --quote-text: #666666;
     --status-bg: rgba(255, 255, 255, 0.95);
+    --card-shadow: 0 10px 24px rgba(0, 0, 0, 0.10);
+    --card-icon-bg: #eef3fa;
+    --hero-grad-a: #ffffff;
+    --hero-grad-b: #000000;
 }
 [data-theme="dark"] {
     color-scheme: dark;
@@ -52,9 +57,12 @@ THEME_VARS = """:root {
     --quote-border: #444444;
     --quote-text: #8b949e;
     --status-bg: rgba(30, 30, 30, 0.95);
+    --card-shadow: 0 12px 28px rgba(0, 0, 0, 0.45);
+    --card-icon-bg: #1c2530;
+    --hero-grad-a: #ffffff;
+    --hero-grad-b: #000000;
 }
 """
-
 # 主题切换脚本：放在 <head> 最前避免闪烁；优先服务器渲染的主题（Cookie），其次 localStorage，最后跟随系统偏好。
 # 切换时同时写入 Cookie（服务端据此直接渲染 data-theme，慢网速下切页不再闪白屏）与 localStorage。
 def get_theme_script(lang: str) -> str:
