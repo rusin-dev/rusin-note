@@ -147,6 +147,9 @@ def session_cleanup_loop():
 def check_password_complexity(password: str) -> bool:
     if len(password) < config.PW_MIN_LENGTH:
         return False
+    # BUG-108: 超长密码直接拒绝，避免超长输入进入 PBKDF2 慢哈希消耗 CPU
+    if len(password) > config.PW_MAX_LENGTH:
+        return False
     if config.PW_REQUIRE_UPPER and not re.search(r'[A-Z]', password):
         return False
     if config.PW_REQUIRE_LOWER and not re.search(r'[a-z]', password):

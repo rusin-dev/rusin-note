@@ -210,6 +210,7 @@ rusin-note:.
     When enabled, Markdown read-only pages support `$...$` inline and `$$...$$` display math (KaTeX, client-side rendering, no server dependency).
 - `password_policy`: password policy, defining the complexity requirements for guest passwords.  
    - `min_length`: minimum password length, default `8`;  
+   - `max_length`: maximum password length, default `128` (hard cap `128`, preventing oversized passwords from entering the PBKDF2 slow hash and consuming CPU);  
    - `require_uppercase`: whether uppercase letters are required, default `true`;  
    - `require_lowercase`: whether lowercase letters are required, default `true`;  
    - `require_digits`: whether digits are required, default `true`;  

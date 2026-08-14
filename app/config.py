@@ -63,6 +63,7 @@ DEFAULT_CONFIG = {
     },
     "password_policy": {
         "min_length": 8,
+        "max_length": 128,
         "require_uppercase": True,
         "require_lowercase": True,
         "require_digits": True,
@@ -180,6 +181,12 @@ SHARE_TOKEN_PATTERN = f"[A-Za-z0-9]{{{SHARE_TOKEN_LENGTH}}}"
 # ---------- 密码策略配置 ----------
 PW_POLICY = config.get("password_policy", DEFAULT_CONFIG["password_policy"])
 PW_MIN_LENGTH = PW_POLICY.get("min_length", 8)
+# BUG-108: 密码最大长度（默认 128），硬上限 128，防止超长密码进入 PBKDF2 慢哈希造成 CPU DoS。
+# 配置值可调但不会超过硬上限，超限请求在进入哈希前即被拒绝。
+try:
+    PW_MAX_LENGTH = min(int(PW_POLICY.get("max_length", 128)), 128)
+except (TypeError, ValueError):
+    PW_MAX_LENGTH = 128
 PW_REQUIRE_UPPER = PW_POLICY.get("require_uppercase", True)
 PW_REQUIRE_LOWER = PW_POLICY.get("require_lowercase", True)
 PW_REQUIRE_DIGIT = PW_POLICY.get("require_digits", True)
@@ -189,7 +196,7 @@ PW_REQUIRE_SPECIAL = PW_POLICY.get("require_special", True)
 def get_password_requirements_description(lang: str = "zh"):
     """密码要求描述（zh/en）。由各单项要求拼装，`、`/`, ` 分隔。"""
     if lang == "en":
-        parts = [f"at least {PW_MIN_LENGTH} characters"]
+        parts = [f"at least {PW_MIN_LENGTH} and at most {PW_MAX_LENGTH} characters"]
         if PW_REQUIRE_UPPER:
             parts.append("uppercase letters")
         if PW_REQUIRE_LOWER:
@@ -199,7 +206,7 @@ def get_password_requirements_description(lang: str = "zh"):
         if PW_REQUIRE_SPECIAL:
             parts.append("special characters (not / \\ ( ) \" ' )")
         return ", ".join(parts)
-    parts = [f"至少 {PW_MIN_LENGTH} 位"]
+    parts = [f"至少 {PW_MIN_LENGTH} 位、至多 {PW_MAX_LENGTH} 位"]
     if PW_REQUIRE_UPPER:
         parts.append("大写字母")
     if PW_REQUIRE_LOWER:
