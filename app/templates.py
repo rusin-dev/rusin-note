@@ -911,9 +911,11 @@ def render_benben_page(handler, posts, page, has_more, error="", prefill=""):
             time_str = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(ts))
         else:
             time_str = ""
+        ip_str = str(post.get("ip", "")).strip()
+        ip_html = f'<span class="benben-ip">IP:{html.escape(ip_str)}</span>' if ip_str else ""
         items += f"""
             <div class="benben-post">
-                <div class="benben-head">{html.escape(username)}<span class="benben-time">{time_str}</span></div>
+                <div class="benben-head">{html.escape(username)}<span class="benben-time">{time_str}</span>{ip_html}</div>
                 <div class="benben-body markdown-body">{content}</div>
             </div>
         """
@@ -953,17 +955,9 @@ def render_benben_page(handler, posts, page, has_more, error="", prefill=""):
         </div>
         {more_link}
     """
-    benben_css = """
-        <style>
-            .benben-post { border: 1px solid var(--card-border); border-radius: 8px; padding: 12px 16px; margin-bottom: 12px; background: var(--card-bg); }
-            .benben-head { font-weight: 500; margin-bottom: 6px; }
-            .benben-time { color: var(--muted); font-size: 13px; font-weight: 400; margin-left: 8px; }
-            .benben-body { font-size: 15px; word-break: break-word; }
-            .benben-form { max-width: 720px; margin: 16px 0 24px; }
-            .benben-more { text-align: center; margin-top: 16px; }
-            .benben-preview { border: 1px dashed var(--border); border-radius: 8px; padding: 12px 16px; margin-bottom: 16px; background: var(--card-bg); font-size: 15px; word-break: break-word; display: none; }
-        </style>
-    """
+    benben_css = _BENBEN_CSS_TEMPLATE.replace(
+        "__BENBEN_MAX_HEIGHT_PX__", str(config.BENBEN_MAX_HEIGHT_PX)
+    )
     # 犇犇发布预览：客户端 Markdown（marked.js）+ LaTeX 公式（KaTeX，依赖 latex_render 开关）实时渲染。
     # 渲染前对 marked 输出做轻量消毒（移除脚本类元素与事件属性），预览仅供本人查看，发布仍由服务端 bleach 清洗。
     preview_l10n = json.dumps({
@@ -977,6 +971,21 @@ def render_benben_page(handler, posts, page, has_more, error="", prefill=""):
     navbar = get_navbar(handler, current_user)
     return render_base(handler, body, t(lang, "benben_title"), navbar,
                        extra_head=benben_css + get_latex_head() + benben_preview_script)
+
+
+# 犇犇页面样式模板（静态字符串，max-height 通过占位符注入，避免 f-string 转义 CSS 花括号）
+_BENBEN_CSS_TEMPLATE = """
+        <style>
+            .benben-post { border: 1px solid var(--card-border); border-radius: 8px; padding: 12px 16px; margin-bottom: 12px; background: var(--card-bg); }
+            .benben-head { font-weight: 500; margin-bottom: 6px; }
+            .benben-time { color: var(--muted); font-size: 13px; font-weight: 400; margin-left: 8px; }
+            .benben-ip { color: var(--muted); font-size: 12px; font-weight: 400; margin-left: 8px; font-family: Consolas, monospace; }
+            .benben-body { font-size: 15px; word-break: break-word; max-height: __BENBEN_MAX_HEIGHT_PX__px; overflow-y: auto; }
+            .benben-form { max-width: 720px; margin: 16px 0 24px; }
+            .benben-more { text-align: center; margin-top: 16px; }
+            .benben-preview { border: 1px dashed var(--border); border-radius: 8px; padding: 12px 16px; margin-bottom: 16px; background: var(--card-bg); font-size: 15px; word-break: break-word; display: none; }
+        </style>
+    """
 
 
 # 犇犇预览脚本模板（静态字符串，L10N 通过占位符注入，避免 f-string 转义 JS 花括号）

@@ -721,7 +721,7 @@ class NoteHandler(BaseHTTPRequestHandler):
                     prefill=content).encode("utf-8"))
                 return
 
-            add_benben_post(current_user, content)
+            add_benben_post(current_user, content, self.get_client_ip())
             mark_benben_post(current_user)
             self._send_redirect("/benben")
             return
