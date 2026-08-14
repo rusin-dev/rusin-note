@@ -71,7 +71,8 @@ DEFAULT_CONFIG = {
     "benben": {
         "max_length": 1024,
         "page_size": 50,
-        "cooldown_seconds": 3
+        "cooldown_seconds": 3,
+        "max_height_px": 1000
     }
 }
 
@@ -216,3 +217,11 @@ BENBEN_MAX_LENGTH = BENBEN_CFG.get("max_length", 1024)
 BENBEN_PAGE_SIZE = BENBEN_CFG.get("page_size", 50)
 # 犇犇发布冷却时间（秒）：单个用户两次发布犇犇的最小间隔，默认 3 秒
 BENBEN_COOLDOWN_SECONDS = BENBEN_CFG.get("cooldown_seconds", 3)
+# 犇犇内容渲染后的最大显示高度（px）：超出部分在内容区内滚动，默认 1000px
+BENBEN_MAX_HEIGHT_PX = BENBEN_CFG.get("max_height_px", 1000)
+try:
+    BENBEN_MAX_HEIGHT_PX = int(BENBEN_MAX_HEIGHT_PX)
+    if BENBEN_MAX_HEIGHT_PX <= 0:
+        BENBEN_MAX_HEIGHT_PX = 1000
+except (TypeError, ValueError):
+    BENBEN_MAX_HEIGHT_PX = 1000

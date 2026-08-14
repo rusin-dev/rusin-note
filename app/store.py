@@ -214,13 +214,14 @@ def save_benben():
         _atomic_json_dump(BENBEN_FILE, benben_posts)
 
 
-def add_benben_post(username: str, content: str) -> bool:
-    """新增一条犇犇（追加存储，不提供删除/清除）"""
+def add_benben_post(username: str, content: str, ip: str = "") -> bool:
+    """新增一条犇犇（追加存储，不提供删除/清除）。ip 为发布者 IP（get_client_ip() 结果）。"""
     with benben_lock:
         benben_posts.append({
             "username": username,
             "content": content,
             "time": time.time(),
+            "ip": ip,
         })
     save_benben()
     return True

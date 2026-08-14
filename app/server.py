@@ -1,4 +1,5 @@
 """服务器启动（TimedThreadingHTTPServer 与 run_server）"""
+import os
 import time
 from http.server import ThreadingHTTPServer
 from threading import Thread
@@ -29,8 +30,10 @@ class TimedThreadingHTTPServer(ThreadingHTTPServer):
         return sock, addr
 
 
-def run_server(port=8080):
-    server_address = ("", port)
+def run_server(port=None):
+    if port is None:
+        port = int(os.environ.get("PORT", 8080))
+    server_address = ("0.0.0.0", port)
     httpd = TimedThreadingHTTPServer(server_address, NoteHandler)
     # BUG-8: 清理线程无条件启动（仅启用会话超时时执行删除逻辑），
     # 避免 sessions.json 在超时关闭时无限增长

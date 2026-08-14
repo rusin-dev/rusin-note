@@ -49,6 +49,7 @@
   "benben": {
     "max_length": 1024,
     "page_size": 50,
-    "cooldown_seconds": 3
+    "cooldown_seconds": 3,
+    "max_height_px": 1000
   }
 }
