@@ -70,7 +70,8 @@ DEFAULT_CONFIG = {
     },
     "benben": {
         "max_length": 1024,
-        "page_size": 50
+        "page_size": 50,
+        "cooldown_seconds": 3
     }
 }
 
@@ -202,3 +203,5 @@ def get_password_requirements_description():
 BENBEN_CFG = config.get("benben", DEFAULT_CONFIG["benben"])
 BENBEN_MAX_LENGTH = BENBEN_CFG.get("max_length", 1024)
 BENBEN_PAGE_SIZE = BENBEN_CFG.get("page_size", 50)
+# 犇犇发布冷却时间（秒）：单个用户两次发布犇犇的最小间隔，默认 3 秒
+BENBEN_COOLDOWN_SECONDS = BENBEN_CFG.get("cooldown_seconds", 3)
