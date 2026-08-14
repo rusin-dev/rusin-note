@@ -46,7 +46,7 @@ Python version $\geq 3.10$.
 3. Start the server
 
     ```bash
-    python3 main.py
+    python3 -m app
     ```
 
     Then open <https://localhost:8080> to view the result.
@@ -70,10 +70,10 @@ Connect to your server, then:
 3. Start the server
 
     ```bash
-    python3 main.py
+    python3 -m app
 
     # Run in the background
-    nohup python3 rusin-note.py > app.log 2>&1 &
+    nohup python3 -m app > app.log 2>&1 &
     ```
 
 4. Configure Nginx (optional)
@@ -118,10 +118,22 @@ rusin-note:.
 │  config.json (configuration)
 │  Disclaimer.md (disclaimer)
 │  LICENSE
-│  main.py (core code)
 │  README.md
 │  contribute.md (collaboration guide)
 │  
+├─app (core code)
+│  │  __init__.py
+│  │  __main__.py (entry: python3 -m app)
+│  │  config.py (configuration loading & global constants)
+│  │  store.py (users/sessions/shares data storage)
+│  │  auth.py (password hashing & session auth)
+│  │  notes.py (note file operations & stats)
+│  │  ratelimit.py (IP rate limiting)
+│  │  theme.py (dark mode & favicon)
+│  │  templates.py (page rendering)
+│  │  handlers.py (HTTP routing)
+│  │  server.py (server startup)
+│  │
 ├─image
 │      logo.png
 │      
@@ -198,3 +210,8 @@ rusin-note:.
    - `require_lowercase`: whether lowercase letters are required, default `true`;  
    - `require_digits`: whether digits are required, default `true`;  
    - `require_special`: whether special characters (excluding `/ \ ( ) " '`) are required, default `true`;
+- `benben` (feed at `/benben`, logged-in users can post, anonymous read-only).
+   - `max_length`: max length of a single feed post (in **characters**), default `1024` (~1KB);
+   - `page_size`: posts loaded per batch, default `50`;
+
+   Feed content supports Markdown and LaTeX math (`$...$` / `$$...$$`, controlled by `latex_render`), sanitized with bleach to prevent XSS; `page_size` posts per page, loaded in batches via "Load more", with loading and posting both subject to request rate limits (GET/POST).

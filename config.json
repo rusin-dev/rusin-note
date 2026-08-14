@@ -45,5 +45,9 @@
     "require_lowercase": true,
     "require_digits": true,
     "require_special": true
+  },
+  "benben": {
+    "max_length": 1024,
+    "page_size": 50
   }
 }
