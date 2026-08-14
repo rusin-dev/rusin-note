@@ -61,6 +61,28 @@ def read_note(username: str, note_id: str) -> str:
         return ""
 
 
+def get_note_mtime(username: str, note_id: str):
+    """返回笔记文件最后修改时间（epoch 秒），文件不存在或读取失败时返回 None"""
+    path = get_note_path(username, note_id)
+    if path is None:
+        return None
+    try:
+        return os.path.getmtime(path)
+    except (IOError, OSError):
+        return None
+
+
+def get_note_size(username: str, note_id: str) -> int | None:
+    """返回笔记文件大小（字节），文件不存在或读取失败时返回 None"""
+    path = get_note_path(username, note_id)
+    if path is None:
+        return None
+    try:
+        return os.path.getsize(path)
+    except (IOError, OSError):
+        return None
+
+
 def write_note(username: str, note_id: str, content: str) -> bool:
     path = get_note_path(username, note_id)
     if path is None:
