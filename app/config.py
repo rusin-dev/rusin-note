@@ -185,9 +185,20 @@ PW_REQUIRE_DIGIT = PW_POLICY.get("require_digits", True)
 PW_REQUIRE_SPECIAL = PW_POLICY.get("require_special", True)
 
 
-def get_password_requirements_description():
-    parts = []
-    parts.append(f"至少 {PW_MIN_LENGTH} 位")
+def get_password_requirements_description(lang: str = "zh"):
+    """密码要求描述（zh/en）。由各单项要求拼装，`、`/`, ` 分隔。"""
+    if lang == "en":
+        parts = [f"at least {PW_MIN_LENGTH} characters"]
+        if PW_REQUIRE_UPPER:
+            parts.append("uppercase letters")
+        if PW_REQUIRE_LOWER:
+            parts.append("lowercase letters")
+        if PW_REQUIRE_DIGIT:
+            parts.append("digits")
+        if PW_REQUIRE_SPECIAL:
+            parts.append("special characters (not / \\ ( ) \" ' )")
+        return ", ".join(parts)
+    parts = [f"至少 {PW_MIN_LENGTH} 位"]
     if PW_REQUIRE_UPPER:
         parts.append("大写字母")
     if PW_REQUIRE_LOWER:

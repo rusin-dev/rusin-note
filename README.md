@@ -207,6 +207,7 @@ rusin-note:.
    - `require_lowercase`：是否必须包含小写字母，默认 `true`；  
    - `require_digits`：是否必须包含数字，默认 `true`；  
    - `require_special`：是否必须包含特殊符号（不含 `/ \ ( ) " '`），默认 `true`； 
+- **多语言**：界面支持简体中文与 English。导航栏右侧提供语言切换链接（`/lang/zh` / `/lang/en`），选择后通过 Cookie（`rusin-lang`）记住偏好；未设置时自动按浏览器 `Accept-Language` 判断，默认中文。切换后全站文本（导航、按钮、提示、错误信息、犇犇预览等）即时切换语言。 
 - `benben` 犇犇动态（`/benben`，登录可发布、未登录只读）。
    - `max_length`：单条犇犇最大长度（单位：**字符**），默认 `1024`（约 1KB）；
    - `page_size`：每批加载条数，默认 `50`；

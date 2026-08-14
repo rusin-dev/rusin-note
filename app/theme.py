@@ -57,32 +57,40 @@ THEME_VARS = """:root {
 
 # 主题切换脚本：放在 <head> 最前避免闪烁；优先服务器渲染的主题（Cookie），其次 localStorage，最后跟随系统偏好。
 # 切换时同时写入 Cookie（服务端据此直接渲染 data-theme，慢网速下切页不再闪白屏）与 localStorage。
-THEME_SCRIPT = """
+# 按钮文字按当前语言注入（LANG_LABELS）。
+def get_theme_script(lang: str) -> str:
+    from .i18n import get_theme_labels_js
+    return f"""
 <script>
-(function() {
-    function setCookie(t) {
+(function() {{
+    var LANG_LABELS = {get_theme_labels_js(lang)};
+    function setCookie(t) {{
         document.cookie = 'rusin-theme=' + t + '; Path=/; Max-Age=31536000; SameSite=Lax';
-    }
-    function apply(t) {
+    }}
+    function apply(t) {{
         document.documentElement.setAttribute('data-theme', t);
         var b = document.getElementById('themeBtn');
-        if (b) b.textContent = t === 'dark' ? '亮色' : '暗色';
-        try { localStorage.setItem('rusin-theme', t); } catch (e) {}
+        if (b) b.textContent = LANG_LABELS[t === 'dark' ? 'dark' : 'light'];
+        try {{ localStorage.setItem('rusin-theme', t); }} catch (e) {{}}
         setCookie(t);
-    }
-    window.toggleTheme = function() {
+    }}
+    window.toggleTheme = function() {{
         apply(document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
-    };
+    }};
     var saved = null;
-    try { saved = localStorage.getItem('rusin-theme'); } catch (e) {}
+    try {{ saved = localStorage.getItem('rusin-theme'); }} catch (e) {{}}
     var serverTheme = document.documentElement.getAttribute('data-theme');
     if (serverTheme) saved = serverTheme;
     apply(saved || (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'));
-})();
+}})();
 </script>
 """
 
-THEME_TOGGLE_BTN = '<button type="button" id="themeBtn" class="theme-toggle" onclick="toggleTheme()">暗色</button>'
+
+def get_theme_toggle_btn(lang: str) -> str:
+    from .i18n import t
+    return (f'<button type="button" id="themeBtn" class="theme-toggle" '
+            f'onclick="toggleTheme()">{t(lang, "theme_dark")}</button>')
 
 # ---------- favicon 缓存（BUG-16：避免每次请求读磁盘） ----------
 _FAVICON_CACHE = None
