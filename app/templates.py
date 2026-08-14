@@ -6,7 +6,7 @@ import time
 
 from . import config
 from .i18n import detect_lang, get_lang_switch, t
-from .notes import get_stats, list_user_notes
+from .notes import get_note_mtime, get_note_size, get_stats, list_user_notes
 from .store import list_user_shares
 from .theme import get_theme_script, get_theme_toggle_btn, THEME_VARS
 
@@ -127,6 +127,8 @@ def render_base(handler, body: str, title="rusin-note", navbar=None, extra_head=
         .note-list li {{ padding: 8px 0; border-bottom: 1px solid var(--list-border); }}
         .note-list a {{ color: var(--link); text-decoration: none; }}
         .note-list a:hover {{ text-decoration: underline; }}
+        .note-list .note-time {{ color: var(--muted); font-size: 13px; margin-left: 12px; }}
+        .note-list .note-size {{ color: var(--muted); font-size: 13px; margin-left: 12px; }}
         .empty {{ color: var(--muted); }}
         .stat-grid {{
             display: grid;
@@ -219,6 +221,20 @@ def render_base(handler, body: str, title="rusin-note", navbar=None, extra_head=
 
 
 # ---------- 页面渲染 ----------
+def format_size(size) -> str:
+    """将字节数格式化为人类可读大小（B/KB/MB/GB，保留两位小数）"""
+    if not isinstance(size, (int, float)) or size < 0:
+        return ""
+    if size < 1024:
+        return f"{size} B"
+    elif size < 1024 * 1024:
+        return f"{size / 1024:.2f} KB"
+    elif size < 1024 * 1024 * 1024:
+        return f"{size / (1024 * 1024):.2f} MB"
+    else:
+        return f"{size / (1024 * 1024 * 1024):.2f} GB"
+
+
 def render_home(handler):
     lang = detect_lang(handler)
     body = f"""
@@ -287,7 +303,13 @@ def render_user_list(handler, username: str, notes: list[str]):
     note_items = ""
     if notes:
         for nid in notes:
-            note_items += f'<li><a href="/user/{html.escape(username)}/{html.escape(nid)}">{html.escape(nid)}</a></li>'
+            mtime = get_note_mtime(username, nid)
+            time_str = format_note_time(mtime) if mtime else ""
+            time_html = f'<span class="note-time">{html.escape(time_str)}</span>' if time_str else ""
+            size = get_note_size(username, nid)
+            size_html = f'<span class="note-size">{html.escape(format_size(size))}</span>' if size is not None else ""
+            note_items += (f'<li><a href="/user/{html.escape(username)}/{html.escape(nid)}">'
+                           f'{html.escape(nid)}</a>{time_html}{size_html}</li>')
     else:
         note_items = f'<li class="empty">{t(lang, "user_no_notes")}</li>'
     body = f"""
@@ -306,29 +328,18 @@ def render_user_list(handler, username: str, notes: list[str]):
 def render_count_page(handler):
     lang = detect_lang(handler)
     pub_cnt, pub_size, priv_cnt, priv_size, user_cnt = get_stats()
-
-    def fmt_size(sz):
-        if sz < 1024:
-            return f"{sz} B"
-        elif sz < 1024*1024:
-            return f"{sz/1024:.2f} KB"
-        elif sz < 1024*1024*1024:
-            return f"{sz/(1024*1024):.2f} MB"
-        else:
-            return f"{sz/(1024*1024*1024):.2f} GB"
-
     body = f"""
         <h1>{t(lang, "stats_title")}</h1>
         <div class="stat-grid">
             <div class="stat-card">
                 <h3>{t(lang, "stats_public")}</h3>
                 <div class="number">{pub_cnt}</div>
-                <div class="detail">{t(lang, "stats_total_size", size=fmt_size(pub_size))}</div>
+                <div class="detail">{t(lang, "stats_total_size", size=format_size(pub_size))}</div>
             </div>
             <div class="stat-card">
                 <h3>{t(lang, "stats_private")}</h3>
                 <div class="number">{priv_cnt}</div>
-                <div class="detail">{t(lang, "stats_total_size", size=fmt_size(priv_size))}</div>
+                <div class="detail">{t(lang, "stats_total_size", size=format_size(priv_size))}</div>
             </div>
             <div class="stat-card">
                 <h3>{t(lang, "stats_users")}</h3>
@@ -373,9 +384,19 @@ def render_disclaimer(handler):
     return render_base(handler, body, t(lang, "disclaimer_title"))
 
 
+def format_note_time(mtime) -> str:
+    """将 epoch 秒格式化为本地时间字符串 YYYY-MM-DD HH:MM:SS"""
+    if not mtime:
+        return ""
+    try:
+        return time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(mtime))
+    except (ValueError, OverflowError, OSError):
+        return ""
+
+
 def render_note_page(handler, note_id: str, content: str, username: str = None, is_world: bool = False,
                      action_url: str = None, navbar: str = None, title_prefix: str = None,
-                     hint_text: str = None, theme=None):
+                     hint_text: str = None, theme=None, mtime=None):
     lang = detect_lang(handler)
     escaped_id = html.escape(note_id)
     escaped_content = html.escape(content)
@@ -399,6 +420,10 @@ def render_note_page(handler, note_id: str, content: str, username: str = None, 
         theme = handler.get_theme()
     theme_attr = f' data-theme="{theme}"' if theme else ""
     save_btn_label = t(lang, "note_save_btn")
+    if mtime:
+        last_edited = f'{t(lang, "note_last_edited")}{format_note_time(mtime)}'
+    else:
+        last_edited = t(lang, "note_never_edited")
     l10n = json.dumps({
         "saving": t(lang, "save_status_saving"),
         "saved": t(lang, "save_status_saved"),
@@ -567,6 +592,15 @@ def render_note_page(handler, note_id: str, content: str, username: str = None, 
             color: #f44336;
             border-color: #f44336;
         }}
+        .note-mtime {{
+            position: fixed;
+            bottom: 24px;
+            left: 24px;
+            font-size: 12px;
+            color: var(--muted);
+            z-index: 10;
+            user-select: none;
+        }}
         @media (max-width: 640px) {{
             textarea {{
                 padding: 16px 18px;
@@ -590,6 +624,11 @@ def render_note_page(handler, note_id: str, content: str, username: str = None, 
                 font-size: 12px;
                 padding: 4px 14px;
             }}
+            .note-mtime {{
+                bottom: 16px;
+                left: 16px;
+                font-size: 11px;
+            }}
         }}
     </style>
 </head>
@@ -603,6 +642,7 @@ def render_note_page(handler, note_id: str, content: str, username: str = None, 
         {hint_text}
     </div>
     <div class="save-status" id="saveStatus"></div>
+    <div class="note-mtime" id="noteMtime">{html.escape(last_edited)}</div>
 
     <script>
         (function() {{

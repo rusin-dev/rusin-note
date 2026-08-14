@@ -19,6 +19,7 @@ from .auth import (
 from .i18n import LANG_COOKIE, detect_lang, t
 from .notes import (
     generate_random_id,
+    get_note_mtime,
     get_note_path,
     list_user_notes,
     read_note,
@@ -429,7 +430,8 @@ class NoteHandler(BaseHTTPRequestHandler):
                 return
 
             content = read_note("public", note_id)
-            page = templates.render_note_page(self, note_id, content, is_world=True)
+            page = templates.render_note_page(self, note_id, content, is_world=True,
+                                              mtime=get_note_mtime("public", note_id))
             self.send_response(200)
             self.send_header("Content-Type", self._HTML_HEADER)
             self.end_headers()
@@ -554,7 +556,8 @@ class NoteHandler(BaseHTTPRequestHandler):
                 return
 
             content = read_note(username, note_id)
-            page = templates.render_note_page(self, note_id, content, username=username, is_world=False)
+            page = templates.render_note_page(self, note_id, content, username=username, is_world=False,
+                                              mtime=get_note_mtime(username, note_id))
             self.send_response(200)
             self.send_header("Content-Type", self._HTML_HEADER)
             self.end_headers()
