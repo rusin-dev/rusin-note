@@ -50,7 +50,7 @@ python 版本 $\geq 3.10$。
 3. 启动服务
 
     ```bash
-    python3 main.py
+    python3 -m app
     ```
 
     然后打开 <https://localhost:8080> 查看效果。
@@ -75,10 +75,10 @@ python 版本 $\geq 3.10$。
 3. 启动服务
 
     ```bash
-    python3 main.py
+    python3 -m app
 
     # 后台运行
-    nohup python3 rusin-note.py > app.log 2>&1 &
+    nohup python3 -m app > app.log 2>&1 &
     ```
 
 4. 配置 Nginx（可选）
@@ -122,10 +122,22 @@ rusin-note:.
 │  config.json（配置项）
 │  Disclaimer.md（免责声明）
 │  LICENSE
-│  main.py（核心代码）
 │  README.md
 │  contribute.md（协作指南）
 │  
+├─app（核心代码）
+│  │  __init__.py
+│  │  __main__.py（入口：python3 -m app）
+│  │  config.py（配置加载与全局常量）
+│  │  store.py（用户/会话/分享数据存储）
+│  │  auth.py（密码哈希与会话认证）
+│  │  notes.py（笔记文件操作与统计）
+│  │  ratelimit.py（IP 限流）
+│  │  theme.py（暗色模式与 favicon）
+│  │  templates.py（页面渲染）
+│  │  handlers.py（HTTP 路由处理）
+│  │  server.py（服务器启动）
+│  │
 ├─image
 │      logo.png
 │      
@@ -140,7 +152,7 @@ rusin-note:.
 
 ### 配置项解析
 
-- `max_note_size_kb`：笔记最大大小（单位：**KB**）默认 $512$（即 $0.5$MB）。
+- `max_note_size_kb`：笔记最大大小（单位：**KB**）默认 $512$（即 $0.5$ MB）。
 - `sitename`：网页名称。填你的站点名。
 - `rate_limit` 速率限制。
    
@@ -195,3 +207,8 @@ rusin-note:.
    - `require_lowercase`：是否必须包含小写字母，默认 `true`；  
    - `require_digits`：是否必须包含数字，默认 `true`；  
    - `require_special`：是否必须包含特殊符号（不含 `/ \ ( ) " '`），默认 `true`； 
+- `benben` 犇犇动态（`/benben`，登录可发布、未登录只读）。
+   - `max_length`：单条犇犇最大长度（单位：**字符**），默认 `1024`（约 1KB）；
+   - `page_size`：每批加载条数，默认 `50`；
+
+   内容支持 Markdown 与 LaTeX 公式（`$...$` / `$$...$$`，依赖 `latex_render` 开关），渲染时经 bleach 安全清洗防止 XSS；每页显示 `page_size` 条，通过「加载更多」分批加载，加载与发布均受请求速率限制（GET/POST 限流）。
