@@ -5,7 +5,7 @@ import time
 import random
 
 from . import config
-from .store import NOTES_BASE, users
+from .store import NOTES_BASE, count_benben_posts, users
 
 # 禁止的笔记ID（与路由冲突）
 FORBIDDEN_NOTE_IDS = {"user", "world", "shares"}
@@ -130,7 +130,7 @@ _stats_cache_time = 0.0
 
 
 def get_stats():
-    """返回 (public_count, public_size, private_count, private_size, user_count)"""
+    """返回 (public_count, public_size, private_count, private_size, user_count, benben_count)"""
     global _stats_cache, _stats_cache_time
     now = time.time()
     if _stats_cache is not None and now - _stats_cache_time < STATS_CACHE_TTL:
@@ -164,7 +164,8 @@ def get_stats():
                         except:
                             pass
 
-    result = (public_count, public_size, private_count, private_size, user_count)
+    result = (public_count, public_size, private_count, private_size, user_count,
+              count_benben_posts())
     _stats_cache = result
     _stats_cache_time = now
     return result

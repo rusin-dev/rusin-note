@@ -247,6 +247,12 @@ def mark_benben_post(username: str):
         benben_last_post[username] = time.time()
 
 
+def count_benben_posts() -> int:
+    """返回犇犇总数"""
+    with benben_lock:
+        return len(benben_posts)
+
+
 def get_benben_posts(page: int, page_size: int):
     """按页返回犇犇（新→旧），page 从 1 开始。返回 (posts, has_more)。"""
     with benben_lock:
