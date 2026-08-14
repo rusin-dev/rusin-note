@@ -35,9 +35,11 @@ from .store import (
     add_benben_post,
     create_share,
     delete_share,
+    get_benben_cooldown,
     get_benben_posts,
     get_share,
     increment_share_views,
+    mark_benben_post,
     save_users,
     users,
     users_lock,
@@ -673,7 +675,22 @@ class NoteHandler(BaseHTTPRequestHandler):
                     f"内容超出长度限制（最多 {config.BENBEN_MAX_LENGTH} 字符）",
                     prefill=content).encode("utf-8"))
                 return
+
+            # 犇犇发布冷却：单用户两次发布的最小间隔（config.BENBEN_COOLDOWN_SECONDS，秒）
+            remaining = get_benben_cooldown(current_user)
+            if remaining > 0:
+                posts, has_more = get_benben_posts(1, config.BENBEN_PAGE_SIZE)
+                self.send_response(400)
+                self.send_header("Content-Type", self._HTML_HEADER)
+                self.end_headers()
+                self.wfile.write(templates.render_benben_page(
+                    self, posts, 1, has_more,
+                    f"发布过于频繁，请 {int(remaining) + 1} 秒后再试",
+                    prefill=content).encode("utf-8"))
+                return
+
             add_benben_post(current_user, content)
+            mark_benben_post(current_user)
             self._send_redirect("/benben")
             return
 

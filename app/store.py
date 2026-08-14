@@ -6,6 +6,7 @@ import secrets
 from threading import Lock
 
 from .config import (
+    BENBEN_COOLDOWN_SECONDS,
     config,
     DEFAULT_CONFIG,
     SHARE_TOKEN_CHARSET,
@@ -223,6 +224,26 @@ def add_benben_post(username: str, content: str) -> bool:
         })
     save_benben()
     return True
+
+
+# ---------- 犇犇发布冷却（单用户限流，内存态，重启清空） ----------
+# 格式: {username: 上次发布时间戳}。冷却时间由 config.BENBEN_COOLDOWN_SECONDS 控制。
+benben_last_post = {}
+benben_cooldown_lock = Lock()
+
+
+def get_benben_cooldown(username: str) -> float:
+    """返回该用户距下次可发布的剩余冷却秒数，0 表示可以发布"""
+    with benben_cooldown_lock:
+        last = benben_last_post.get(username, 0)
+    remaining = BENBEN_COOLDOWN_SECONDS - (time.time() - last)
+    return remaining if remaining > 0 else 0.0
+
+
+def mark_benben_post(username: str):
+    """记录用户最近一次成功发布犇犇的时间（发布成功后调用）"""
+    with benben_cooldown_lock:
+        benben_last_post[username] = time.time()
 
 
 def get_benben_posts(page: int, page_size: int):
