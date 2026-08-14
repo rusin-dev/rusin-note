@@ -104,8 +104,9 @@ python 版本 $\geq 3.10$。
     }
     ```
 
-    > 使用 Nginx 反代后，请将 `config.json` 中的 `trust_proxy_headers` 设为 `true`，
-    > 服务端才会信任 `X-Real-IP` 头按真实客户端 IP 限流（默认关闭以杜绝伪造头绕过限流）。
+    > 使用 Nginx/Cloudflare 反代后，请将 `config.json` 中的 `trust_proxy_headers` 设为 `true`，
+    > 服务端才会信任代理头按真实客户端 IP 限流（默认关闭以杜绝伪造头绕过限流）。
+    > 代理头可信度从高到低：`CF-Connecting-IP`（Cloudflare 直连）→ `X-Real-IP`（Nginx）→ `X-Forwarded-For` 最右一项（Nginx 追加的真客户端），客户端伪造的 XFF 左侧项不会被采信。
 
     ```bash
     # 启用并重载
