@@ -657,6 +657,13 @@ class NoteHandler(BaseHTTPRequestHandler):
                 return
             username = form.get("username", [""])[0].strip()
             password = form.get("password", [""])[0]
+            # BUG-108: 超长密码不进入 verify_password（PBKDF2 慢哈希），直接按凭证错误处理
+            if len(password) > config.PW_MAX_LENGTH:
+                self.send_response(401)
+                self.send_header("Content-Type", self._HTML_HEADER)
+                self.end_headers()
+                self.wfile.write(templates.render_login_form(self, t(self.get_lang(), "err_login_failed")).encode("utf-8"))
+                return
 
             with users_lock:
                 user = users.get(username)

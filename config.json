@@ -41,6 +41,7 @@
   },
   "password_policy": {
     "min_length": 8,
+    "max_length": 128,
     "require_uppercase": true,
     "require_lowercase": true,
     "require_digits": true,
