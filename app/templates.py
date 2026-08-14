@@ -331,7 +331,7 @@ def render_user_list(handler, username: str, notes: list[str]):
 
 def render_count_page(handler):
     lang = detect_lang(handler)
-    pub_cnt, pub_size, priv_cnt, priv_size, user_cnt = get_stats()
+    pub_cnt, pub_size, priv_cnt, priv_size, user_cnt, benben_cnt = get_stats()
     body = f"""
         <h1>{t(lang, "stats_title")}</h1>
         <div class="stat-grid">
@@ -349,6 +349,11 @@ def render_count_page(handler):
                 <h3>{t(lang, "stats_users")}</h3>
                 <div class="number">{user_cnt}</div>
                 <div class="detail">{t(lang, "stats_users_detail")}</div>
+            </div>
+            <div class="stat-card">
+                <h3>{t(lang, "stats_benben")}</h3>
+                <div class="number">{benben_cnt}</div>
+                <div class="detail">{t(lang, "stats_benben_detail")}</div>
             </div>
         </div>
         <p style="margin-top: 24px;"><a href="/">{t(lang, "back_home")}</a></p>
