@@ -1,0 +1,21 @@
+name: Trigger Fork Sync
+
+on:
+  push:
+    branches: [ main ]   # 当上游 main 分支有 push 时触发
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send repository_dispatch to fork
+        env:
+          PAT: ${{ secrets.FORK_REPO_PAT }}
+          FORK_OWNER: ruying-suixing
+          FORK_REPO: rusin-note
+        run: |
+          curl -X POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: token $PAT" \
+            https://api.github.com/repos/$FORK_OWNER/$FORK_REPO/dispatches \
+            -d '{"event_type":"sync-upstream"}'
