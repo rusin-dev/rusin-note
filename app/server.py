@@ -1,4 +1,5 @@
 """服务器启动（TimedThreadingHTTPServer 与 run_server）"""
+import time
 from http.server import ThreadingHTTPServer
 from threading import Thread
 
@@ -6,7 +7,17 @@ from . import config
 from .auth import purge_expired_sessions, session_cleanup_loop
 from .handlers import NoteHandler
 from .notes import note_cleanup_loop, purge_expired_notes
-from .store import NOTES_BASE, users
+from .store import NOTES_BASE, flush_share_views, users
+
+
+def share_views_flush_loop():
+    """后台线程：定期将内存中的分享视图计数写盘（BUG-06）"""
+    while True:
+        time.sleep(config.SHARE_VIEWS_FLUSH_INTERVAL)
+        try:
+            flush_share_views()
+        except Exception as e:
+            print(f"[错误] 分享视图刷新失败: {e}")
 
 
 class TimedThreadingHTTPServer(ThreadingHTTPServer):
@@ -25,6 +36,8 @@ def run_server(port=8080):
     # 避免 sessions.json 在超时关闭时无限增长
     purge_expired_sessions()  # 启动时清理一次过期会话
     Thread(target=session_cleanup_loop, daemon=True).start()
+    # BUG-06: 分享视图计数批量持久化线程（无条件启动，无脏数据时为空操作）
+    Thread(target=share_views_flush_loop, daemon=True).start()
     if config.NOTE_EXPIRATION_ENABLED:
         purge_expired_notes()  # 启动时清理一次过期笔记
         Thread(target=note_cleanup_loop, daemon=True).start()

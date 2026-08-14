@@ -132,6 +132,11 @@ SOCKET_TIMEOUT = 60
 # 后台会话清理线程的间隔（秒）（BUG-013）
 SESSION_CLEANUP_INTERVAL = 300
 
+# 分享视图计数批量持久化（BUG-06）：内存累计达到阈值或距上次写盘超过间隔时，
+# 才全量写一次 shares.json，避免每次访问分享链接都写盘
+SHARE_VIEWS_FLUSH_THRESHOLD = 30
+SHARE_VIEWS_FLUSH_INTERVAL = 60.0
+
 # ---------- ID生成配置 ----------
 ID_CFG = config.get("id_generation", DEFAULT_CONFIG["id_generation"])
 ID_LENGTH = ID_CFG.get("length", 6)

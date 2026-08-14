@@ -84,6 +84,7 @@ def delete_session(token: str):
 def get_session_user(token: str) -> str | None:
     """验证token，返回用户名，若超时或不存在则返回None"""
     token_hash = hash_token(token)
+    expired = False
     with sessions_lock:
         session = sessions.get(token_hash)
         if not session or not isinstance(session, dict):
@@ -98,9 +99,13 @@ def get_session_user(token: str) -> str | None:
             if elapsed > config.SESSION_TIMEOUT_SECONDS:
                 # 删除过期会话
                 del sessions[token_hash]
-                save_sessions()
-                return None
-        return username
+                # BUG-01: save_sessions 会再次获取 sessions_lock（threading.Lock 不可重入），
+                # 必须在持锁块外调用，否则死锁导致处理线程永久挂起
+                expired = True
+    if expired:
+        save_sessions()
+        return None
+    return username
 
 
 # ---------- 过期会话清理（BUG-013） ----------

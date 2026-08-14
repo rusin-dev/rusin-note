@@ -10,6 +10,8 @@ from .config import (
     DEFAULT_CONFIG,
     SHARE_TOKEN_CHARSET,
     SHARE_TOKEN_LENGTH,
+    SHARE_VIEWS_FLUSH_INTERVAL,
+    SHARE_VIEWS_FLUSH_THRESHOLD,
 )
 
 # ---------- 数据文件路径 ----------
@@ -146,14 +148,40 @@ def delete_share(username: str, token: str) -> bool:
     return True
 
 
+# 分享视图计数延迟批量持久化（BUG-06）：视图数非关键数据，允许延迟写盘。
+# 内存累计达到阈值或距上次写盘超时后，才全量写一次 shares.json，
+# 避免高并发下每次访问分享链接都触发原子写盘（全量 JSON + fsync）。
+_VIEWS_DIRTY = False
+_VIEWS_PENDING = 0
+_last_views_flush = time.time()
+
+
 def increment_share_views(token: str):
-    """每次访问分享链接时计数（持久化到 shares.json）"""
+    """每次访问分享链接时计数（内存累加，延迟批量写盘，BUG-06）"""
+    global _VIEWS_DIRTY, _VIEWS_PENDING, _last_views_flush
     with shares_lock:
         share = shares.get(token)
         if not isinstance(share, dict):
             return
         share["views"] = share.get("views", 0) + 1
-    save_shares()
+        _VIEWS_PENDING += 1
+        _VIEWS_DIRTY = True
+    if _VIEWS_PENDING >= SHARE_VIEWS_FLUSH_THRESHOLD or \
+            (time.time() - _last_views_flush) >= SHARE_VIEWS_FLUSH_INTERVAL:
+        flush_share_views()
+
+
+def flush_share_views():
+    """将内存中的分享视图计数写盘（阈值/超时触发，后台线程定期调用）"""
+    global _VIEWS_DIRTY, _VIEWS_PENDING, _last_views_flush
+    with shares_lock:
+        if not _VIEWS_DIRTY:
+            return
+    save_shares()  # save_shares 会自行获取 shares_lock，须在持锁块外调用
+    with shares_lock:
+        _VIEWS_PENDING = 0
+        _VIEWS_DIRTY = False
+        _last_views_flush = time.time()
 
 
 def list_user_shares(username: str) -> list:

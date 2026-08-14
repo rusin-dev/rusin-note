@@ -345,7 +345,8 @@ class NoteHandler(BaseHTTPRequestHandler):
             return
 
         # ---------- 分享查看/编辑：/share/<token> ----------
-        share_match = re.match(f'^/share/({config.SHARE_TOKEN_PATTERN})$', path)
+        # BUG-02: 允许尾部斜杠（GET 页面与 POST 保存行为一致，同 BUG-4 /world 处理）
+        share_match = re.match(f'^/share/({config.SHARE_TOKEN_PATTERN})/?$', path)
         if share_match:
             token = share_match.group(1)
             share = get_share(token)
