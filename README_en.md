@@ -30,7 +30,7 @@
 
 ### Requirements
 
-Python version $\geq 3.10$.
+Python version $\geq$ 3.10.
 
 ### Local Development
 
