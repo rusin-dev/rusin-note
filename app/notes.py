@@ -6,6 +6,9 @@ import random
 
 from . import config
 from .store import NOTES_BASE, count_benben_posts, users
+from .logger import create_logger
+
+logger = create_logger("notes")
 
 # 禁止的笔记ID（与路由冲突）
 FORBIDDEN_NOTE_IDS = {"user", "world", "shares"}
@@ -198,7 +201,7 @@ def purge_expired_notes() -> int:
             except (IOError, OSError):
                 pass
     if removed:
-        print(f"[清理] 已清除 {removed} 个过期笔记（保存超过 {config.NOTE_EXPIRATION_HOURS} 小时）")
+        logger.info(f"[清理] 已清除 {removed} 个过期笔记（保存超过 {config.NOTE_EXPIRATION_HOURS} 小时）")
     return removed
 
 
@@ -209,4 +212,4 @@ def note_cleanup_loop():
         try:
             purge_expired_notes()
         except Exception as e:
-            print(f"[错误] 过期笔记清理失败: {e}")
+            logger.error(f"[错误] 过期笔记清理失败: {e}")

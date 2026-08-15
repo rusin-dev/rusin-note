@@ -4,6 +4,7 @@ import json
 import time
 import secrets
 from threading import Lock
+from .logger import create_logger
 
 from .config import (
     BENBEN_COOLDOWN_SECONDS,
@@ -14,6 +15,8 @@ from .config import (
     SHARE_VIEWS_FLUSH_INTERVAL,
     SHARE_VIEWS_FLUSH_THRESHOLD,
 )
+
+logger = create_logger("store")
 
 # ---------- 数据文件路径 ----------
 USER_FILE = "users.json"
@@ -45,7 +48,7 @@ def _atomic_json_dump(path: str, data: dict) -> bool:
         os.replace(temp_path, path)
         return True
     except Exception as e:
-        print(f"[错误] 原子写入 {path} 失败: {e}")
+        logger.error(f"[错误] 原子写入 {path} 失败: {e}")
         try:
             if os.path.exists(temp_path):
                 os.remove(temp_path)
