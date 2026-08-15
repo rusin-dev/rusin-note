@@ -13,6 +13,10 @@
     "window_seconds": 60,
     "max_requests": 120
   },
+  "register_rate_limit": {
+    "window_seconds": 120,
+    "max_requests": 1
+  },
   "trust_proxy_headers": false,
   "secure_cookies": false,
   "id_generation": {

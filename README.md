@@ -170,6 +170,11 @@ rusin-note:.
    - `max_requests` ：请求数 $s$，默认 $120$;
 
    $t$ 秒内保存笔记最多 $s$ 次，与全局 POST 限流（`rate_limit`）互不干扰，避免频繁保存被误伤。
+- `register_rate_limit` 注册速率限制（单IP注册账号限制）。
+   - `window_seconds` ：时间 $t$，默认 $120$；
+   - `max_requests` ：请求数 $s$，默认 $1$;
+
+   $t$ 秒内单个IP最多注册 $s$ 个账号，防止恶意批量注册。
 - `trust_proxy_headers`：是否信任反向代理传递的 `X-Forwarded-For` / `X-Real-IP` 头，默认 `false`。
   
   **安全说明**：默认关闭，限流一律基于 TCP 直连 IP，防止客户端伪造请求头绕过限流。仅当部署在可信反向代理（如 Nginx）之后才置为 `true`。

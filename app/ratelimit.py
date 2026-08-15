@@ -107,3 +107,32 @@ def is_save_rate_limited(ip: str) -> bool:
             _save_sweep_counter = 0
             _sweep_rate_limit_entries(ip_save_requests, config.SAVE_RATE_WINDOW)
         return False
+
+
+# ---------- IP限流（注册请求） ----------
+ip_register_requests = defaultdict(list)
+ip_register_lock = Lock()
+MAX_REGISTER_RECORDS_PER_IP = config.REGISTER_RATE_MAX * 2
+REGISTER_SWEEP_INTERVAL = 500
+
+_register_sweep_counter = 0
+
+
+def is_register_rate_limited(ip: str) -> bool:
+    """检查单IP是否在注册窗口内达到注册次数限制"""
+    global _register_sweep_counter
+    now = time.time()
+    with ip_register_lock:
+        records = ip_register_requests[ip]
+        cutoff = now - config.REGISTER_RATE_WINDOW
+        cleanup_old_records(records, cutoff)
+        if len(records) >= config.REGISTER_RATE_MAX:
+            return True
+        records.append(now)
+        if len(records) > MAX_REGISTER_RECORDS_PER_IP:
+            del records[:len(records) - MAX_REGISTER_RECORDS_PER_IP]
+        _register_sweep_counter += 1
+        if _register_sweep_counter >= REGISTER_SWEEP_INTERVAL:
+            _register_sweep_counter = 0
+            _sweep_rate_limit_entries(ip_register_requests, config.REGISTER_RATE_WINDOW)
+        return False

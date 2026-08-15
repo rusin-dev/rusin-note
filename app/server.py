@@ -54,6 +54,7 @@ def run_server(port=None):
     logger.info(f"[限流] POST: 每个IP {config.RATE_MAX} 次 / {config.RATE_WINDOW} 秒")
     logger.info(f"[限流] GET:  每个IP {config.GET_RATE_MAX} 次 / {config.GET_RATE_WINDOW} 秒")
     logger.info(f"[限流] 保存: 每个IP {config.SAVE_RATE_MAX} 次 / {config.SAVE_RATE_WINDOW} 秒 (笔记保存独立限流)")
+    logger.info(f"[限流] 注册: 每个IP {config.REGISTER_RATE_MAX} 次 / {config.REGISTER_RATE_WINDOW} 秒 (防止批量注册)")
     logger.info(f"[连接] socket 超时: {config.SOCKET_TIMEOUT} 秒 (防止慢速连接挂起线程)")
     logger.info("[公开笔记] 访问 /world/<id> 即可匿名编辑")
     logger.info("[私有笔记] 注册登录后访问 /user/<username>/<id>")
