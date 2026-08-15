@@ -1,0 +1,64 @@
+name: 文档错误
+description: 用于反馈文档中的一些问题
+title: "[docu] \"标题\""
+labels: ["documentation"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ↑ 请将上方的 Title 中的 “标题” 替换成您实际的文档问题的概述。
+  - type: checkboxes
+    id: checkagain
+    attributes:
+      label: 请确认以下事项
+      description: |
+        1. 我已仔细阅读[协作指南](https://github.com/rusin-dev/rusin-note/blob/main/contribute.md)以及[项目结构](https://github.com/rusin-dev/rusin-note/blob/dev/README.md#%E9%A1%B9%E7%9B%AE%E7%BB%93%E6%9E%84)中的内容。
+        2. 文档问题长时间无人发现或修复。
+        3. 没有文档问题类似的、open/closed 的 issue。
+        4. 文件后缀名为 md（其他后缀名左转 Bug 反馈）。
+        5. 不要因为细微的语法问题而认为文档错误，特别是 README_en.md。
+      options:
+        - label: 我已确认以上事项
+          required: true
+  - type: checkboxes
+    id: place
+    attributes:
+      label: 重要性
+      description: |
+        您发现的文档问题是否影响文档阅读
+      options:
+        - label: 不影响，只是细微的错误
+        - label: 影响一般，导致部署可能失败或用户错误理解仓库结构
+        - label: 其它
+  - type: input
+    id: otherplace
+    attributes:
+      label: 更具体的重要性
+      description: |
+        如果您的重要性选择了「其它」，请在这里告诉我们具体的影响。
+  - type: input
+    id: name
+    attributes:
+      label: 错误位置
+      description: 格式：“文件目录” “行号”
+      placeholder: 例：./README.md 23~25
+    validations:
+      required: true
+  - type: dropdown 
+    id: content
+    attributes:
+      label: 错误类型
+      description: |
+        请在此选择错误类型。
+      options:
+        - 语法错误
+        - 文章结构混乱
+        - 未正确使用 Markdown 格式。
+    validations:
+      required: true
+  - type: input
+    id: remark
+    attributes:
+      label: 详细错误原因及修改方案
+      description: |
+        为什么错误呢？怎么修改？给出你的方案（可选，也可以不给）。
