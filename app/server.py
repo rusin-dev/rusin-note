@@ -11,6 +11,7 @@ from .notes import note_cleanup_loop, purge_expired_notes
 from .store import NOTES_BASE, flush_share_views, users
 from .logger import create_logger
 
+print("服务已启动：http://localhost:8080/")
 
 logger = create_logger("server")
 
