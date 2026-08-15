@@ -9,7 +9,9 @@ from .i18n import detect_lang, get_lang_switch, t
 from .notes import get_note_mtime, get_note_size, get_stats, list_user_notes
 from .store import list_user_shares
 from .theme import get_theme_script, get_theme_toggle_btn, THEME_VARS
+from .logger import create_logger
 
+logger = create_logger("templates")
 
 # ---------- 导航栏 ----------
 def get_navbar(handler, current_user=None) -> str:

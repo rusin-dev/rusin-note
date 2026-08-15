@@ -74,7 +74,12 @@ DEFAULT_CONFIG = {
         "page_size": 50,
         "cooldown_seconds": 3,
         "max_height_px": 1000
-    }
+    },
+    "logger": {
+        "max_size": 4294967296,
+        "path": "log/"
+    },
+    "debug": False
 }
 
 
@@ -232,3 +237,10 @@ try:
         BENBEN_MAX_HEIGHT_PX = 1000
 except (TypeError, ValueError):
     BENBEN_MAX_HEIGHT_PX = 1000
+
+# ---------- 日志功能 ----------
+LOGGER_CFG = config.get("logger", DEFAULT_CONFIG["logger"])
+LOGGER_MAX_SIZE = LOGGER_CFG.get("max_size", 4294967296)
+LOGGER_PATH = LOGGER_CFG.get("path_pattern", "log/{timestamp}.log")
+
+DEBUG = config.get("debug", False)

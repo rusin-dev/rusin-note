@@ -8,12 +8,15 @@ from threading import Thread
 
 from . import config
 from .store import sessions, sessions_lock, save_sessions
+from .logger import create_logger
 
 # BUG-9: 使用 PBKDF2-HMAC-SHA256 慢哈希（≥10 万次迭代），并加大盐长度。
 # 旧版单轮 SHA-256 哈希通过 verify_password 的向后兼容逻辑继续可验证（登录成功后自然升级）。
 PBKDF2_ITERATIONS = 100000
 PBKDF2_PREFIX = "pbkdf2_sha256"
 
+
+logger = create_logger("auth")
 
 # ---------- 密码哈希 ----------
 def generate_salt():
@@ -129,7 +132,7 @@ def purge_expired_sessions() -> int:
             del sessions[token_hash]
     if expired:
         save_sessions()
-        print(f"[清理] 已清除 {len(expired)} 个过期会话")
+        logger.info(f"[清除] 已清除 {len(expired)} 个过期会话")
     return len(expired)
 
 
@@ -140,7 +143,7 @@ def session_cleanup_loop():
         try:
             purge_expired_sessions()
         except Exception as e:
-            print(f"[错误] 会话清理失败: {e}")
+            logger.error(f"[错误] 会话清理失败: {e}")
 
 
 # ---------- 密码复杂度检查（根据配置） ----------
