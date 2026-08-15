@@ -91,18 +91,33 @@ class NoteHandler(BaseHTTPRequestHandler):
     def get_client_ip(self) -> str:
         """获取客户端 IP。
         BUG-3: 仅当显式配置了可信代理（trust_proxy_headers=true）时才信任
-        X-Forwarded-For / X-Real-IP 头，否则一律使用 TCP 对端地址，防止伪造头绕过限流。"""
+        代理头，否则一律使用 TCP 对端地址，防止伪造头绕过限流。
+        BUG-101: 代理头按可信度从高到低读取：
+          1. CF-Connecting-IP（Cloudflare 直连时由其写入，客户端无法伪造）
+          2. X-Real-IP（Nginx 用 proxy_set_header X-Real-IP $remote_addr
+             覆盖写入，客户端自带的同名头会被覆盖，可信）
+          3. X-Forwarded-For 最右一项（Nginx 会在其末尾追加真实客户端 IP，
+             客户端只能伪造位于左侧的项，取最右项即拿到真实 IP）；
+             从右往左逐个取第一个非空项，末尾为空（畸形头）时向左保底"""
         if config.TRUST_PROXY_HEADERS:
-            forwarded = self.headers.get("X-Forwarded-For")
-            if forwarded:
-                ip = forwarded.split(",", 1)[0].strip()
-                if ip:
-                    return ip
+            cf_ip = self.headers.get("CF-Connecting-IP")
+            if cf_ip:
+                cf_ip = cf_ip.strip()
+                if cf_ip:
+                    return cf_ip
             real_ip = self.headers.get("X-Real-IP")
             if real_ip:
                 real_ip = real_ip.strip()
                 if real_ip:
                     return real_ip
+            forwarded = self.headers.get("X-Forwarded-For")
+            if forwarded:
+                # 从右往左读取，取第一个非空项：Nginx 追加的真客户端在最右；
+                # 若末尾为空（畸形头如 "1.2.3.4, "），继续向左取非空项作保底
+                for item in reversed(forwarded.split(",")):
+                    ip = item.strip()
+                    if ip:
+                        return ip
         return self.client_address[0]
 
     def get_session_cookie(self) -> str | None:
