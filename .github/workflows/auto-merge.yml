@@ -32,20 +32,8 @@ jobs:
           git checkout main
           git reset --hard origin/main
 
-          # 备份 main 的 .github（如果存在）
-          if [ -d .github ]; then
-            mkdir -p /tmp/backup
-            cp -r .github /tmp/backup/
-          fi
-
           # 用 dev 的所有文件覆盖工作区（相当于应用 dev 的全部变更）
           git checkout origin/dev -- .
-
-          # 恢复 .github（保留 main 的版本）
-          if [ -d /tmp/backup/.github ]; then
-            rm -rf .github
-            cp -r /tmp/backup/.github .github
-          fi
 
           # 添加所有变更
           git add -A
