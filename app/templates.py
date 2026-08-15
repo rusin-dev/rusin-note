@@ -5,6 +5,7 @@ import os
 import time
 
 from . import config
+from . import csrf
 from .i18n import detect_lang, get_lang_switch, t
 from .notes import get_note_mtime, get_note_size, get_stats, list_user_notes
 from .store import list_user_shares
@@ -382,10 +383,12 @@ def render_home(handler):
 def render_register_form(handler, error=""):
     lang = detect_lang(handler)
     req_desc = config.get_password_requirements_description(lang)
+    csrf_field = f'<input type="hidden" name="{csrf.CSRF_FIELD_NAME}" value="{html.escape(handler._csrf_token or "")}">'
     body = f"""
         <h1>{t(lang, "register_title")}</h1>
         {f'<p class="error">{html.escape(error)}</p>' if error else ''}
         <form method="POST" action="/register">
+            {csrf_field}
             <div class="form-group">
                 <label>{t(lang, "reg_username_label")}</label>
                 <input type="text" name="username" required pattern="[a-zA-Z0-9_\\-]+">
@@ -407,10 +410,12 @@ def render_register_form(handler, error=""):
 
 def render_login_form(handler, error=""):
     lang = detect_lang(handler)
+    csrf_field = f'<input type="hidden" name="{csrf.CSRF_FIELD_NAME}" value="{html.escape(handler._csrf_token or "")}">'
     body = f"""
         <h1>{t(lang, "login_title")}</h1>
         {f'<p class="error">{html.escape(error)}</p>' if error else ''}
         <form method="POST" action="/login">
+            {csrf_field}
             <div class="form-group">
                 <label>{t(lang, "login_username")}</label>
                 <input type="text" name="username" required>
@@ -798,6 +803,7 @@ def render_note_page(handler, note_id: str, content: str, username: str = None, 
             // BUG-12: 使用 json.dumps 生成合法的 JS 字符串字面量，防止 hint 含引号/反斜杠时破坏脚本或注入
             const DEFAULT_HINT = {json.dumps(hint_text, ensure_ascii=False)};
             const L10N = {l10n};
+            const CSRF_TOKEN = {json.dumps(handler._csrf_token or "", ensure_ascii=False)};
 
             // ADDED: Tab键插入4个空格
             textarea.addEventListener('keydown', function(e) {{
@@ -875,7 +881,7 @@ def render_note_page(handler, note_id: str, content: str, username: str = None, 
                     headers: {{
                         'Content-Type': 'application/x-www-form-urlencoded',
                     }},
-                    body: 'content=' + encodeURIComponent(content)
+                    body: 'content=' + encodeURIComponent(content) + '&{csrf.CSRF_FIELD_NAME}=' + encodeURIComponent(CSRF_TOKEN)
                 }})
                 .then(response => {{
                     isSaving = false;
@@ -992,6 +998,7 @@ def render_shares_page(handler, username: str, error=""):
     lang = detect_lang(handler)
     my_shares = list_user_shares(username)
     notes = list_user_notes(username)
+    csrf_field = f'<input type="hidden" name="{csrf.CSRF_FIELD_NAME}" value="{html.escape(handler._csrf_token or "")}">'
 
     note_options = ""
     if notes:
@@ -1013,6 +1020,7 @@ def render_shares_page(handler, username: str, error=""):
                     <td>{s.get("views", 0)}</td>
                     <td>
                         <form method="POST" action="/user/{html.escape(username)}/shares/delete" style="display:inline;">
+                            {csrf_field}
                             <input type="hidden" name="token" value="{tok}">
                             <button type="submit" class="btn-sm">{t(lang, "shares_delete")}</button>
                         </form>
@@ -1027,6 +1035,7 @@ def render_shares_page(handler, username: str, error=""):
         <div style="margin: 20px 0;">
             <h2 style="border:none; margin-bottom: 12px;">{t(lang, "shares_create")}</h2>
             <form method="POST" action="/user/{html.escape(username)}/shares/" style="max-width: 420px;">
+                {csrf_field}
                 <div class="form-group">
                     <label>{t(lang, "shares_select_note")}</label>
                     <select name="note_id">{note_options}</select>
@@ -1091,8 +1100,7 @@ def render_benben_page(handler, posts, page, has_more, error="", prefill=""):
             time_str = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(ts))
         else:
             time_str = ""
-        ip_str = str(post.get("ip", "")).strip()
-        ip_html = f'<span class="benben-ip">IP:{html.escape(ip_str)}</span>' if ip_str else ""
+        ip_html = ""
         items += f"""
             <div class="benben-post">
                 <div class="benben-head">{html.escape(username)}<span class="benben-time">{time_str}</span>{ip_html}</div>
@@ -1103,10 +1111,12 @@ def render_benben_page(handler, posts, page, has_more, error="", prefill=""):
         items = f'<p class="empty">{t(lang, "benben_empty")}</p>'
 
     error_html = f'<p class="error">{html.escape(error)}</p>' if error else ""
+    csrf_field = f'<input type="hidden" name="{csrf.CSRF_FIELD_NAME}" value="{html.escape(handler._csrf_token or "")}">'
     if current_user:
         form_area = f"""
             {error_html}
             <form method="POST" action="/benben" class="benben-form">
+                {csrf_field}
                 <div class="form-group">
                     <label>{t(lang, "benben_label", max=config.BENBEN_MAX_LENGTH)}</label>
                     <textarea name="content" id="benbenInput" rows="4" maxlength="{config.BENBEN_MAX_LENGTH}">{html.escape(prefill)}</textarea>
@@ -1159,7 +1169,6 @@ _BENBEN_CSS_TEMPLATE = """
             .benben-post { border: 1px solid var(--card-border); border-radius: 8px; padding: 12px 16px; margin-bottom: 12px; background: var(--card-bg); }
             .benben-head { font-weight: 500; margin-bottom: 6px; }
             .benben-time { color: var(--muted); font-size: 13px; font-weight: 400; margin-left: 8px; }
-            .benben-ip { color: var(--muted); font-size: 12px; font-weight: 400; margin-left: 8px; font-family: Consolas, monospace; }
             .benben-body { font-size: 15px; word-break: break-word; max-height: __BENBEN_MAX_HEIGHT_PX__px; overflow-y: auto; }
             .benben-form { max-width: 720px; margin: 16px 0 24px; }
             .benben-more { text-align: center; margin-top: 16px; }

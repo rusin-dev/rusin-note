@@ -6,6 +6,7 @@ import urllib.parse
 from http.server import BaseHTTPRequestHandler
 
 from . import config
+from . import csrf
 from . import templates
 from .auth import (
     check_password_complexity,
@@ -31,6 +32,7 @@ from .notes import (
 from .ratelimit import (
     is_get_rate_limited,
     is_rate_limited,
+    is_register_rate_limited,
     is_save_rate_limited,
 )
 from .store import (
@@ -51,6 +53,36 @@ from .theme import get_favicon, get_theme_script, THEME_VARS
 
 class NoteHandler(BaseHTTPRequestHandler):
     _HTML_HEADER = "text/html; charset=utf-8"
+
+    def __init__(self, *args, **kwargs):
+        self._csrf_token = None
+        self._csrf_new = False
+        super().__init__(*args, **kwargs)
+
+    def _ensure_csrf_token(self):
+        token = csrf.read_csrf_cookie(self)
+        if token:
+            self._csrf_token = token
+            self._csrf_new = False
+        else:
+            self._csrf_token = csrf.generate_token()
+            self._csrf_new = True
+
+    def _validate_csrf_or_error(self, form_data: dict) -> bool:
+        if not csrf.validate_csrf(self, form_data):
+            self.send_error(403, "CSRF token missing or invalid")
+            return False
+        return True
+
+    def end_headers(self):
+        if self._csrf_new:
+            self.send_header(
+                "Set-Cookie",
+                f"{csrf.CSRF_COOKIE_NAME}={self._csrf_token}; "
+                f"Path=/; Max-Age={csrf.COOKIE_MAX_AGE}; SameSite=Lax",
+            )
+            self._csrf_new = False
+        super().end_headers()
 
     def log_request(self, code='-', size='-'):
         if code != 200:
@@ -168,6 +200,7 @@ class NoteHandler(BaseHTTPRequestHandler):
 
     # ---------- GET 请求 ----------
     def do_GET(self):
+        self._ensure_csrf_token()
         client_ip = self.get_client_ip()
         # ADDED: GET独立限流
         if is_get_rate_limited(client_ip):
@@ -580,6 +613,7 @@ class NoteHandler(BaseHTTPRequestHandler):
         return False
 
     def do_POST(self):
+        self._ensure_csrf_token()
         client_ip = self.get_client_ip()
         parsed = urllib.parse.urlparse(self.path)
         path = parsed.path
@@ -594,8 +628,14 @@ class NoteHandler(BaseHTTPRequestHandler):
 
         # 处理注册
         if path == "/register":
+            # 检查注册速率限制
+            if is_register_rate_limited(client_ip):
+                self.send_error(429, f"Too many registration attempts (max {config.REGISTER_RATE_MAX} per {config.REGISTER_RATE_WINDOW}s)")
+                return
             form = self._read_form_body(1024 * 10, max_fields=5)
             if form is None:
+                return
+            if not self._validate_csrf_or_error(form):
                 return
             username = form.get("username", [""])[0].strip()
             password = form.get("password", [""])[0]
@@ -655,6 +695,8 @@ class NoteHandler(BaseHTTPRequestHandler):
             form = self._read_form_body(1024 * 10, max_fields=5)
             if form is None:
                 return
+            if not self._validate_csrf_or_error(form):
+                return
             username = form.get("username", [""])[0].strip()
             password = form.get("password", [""])[0]
             # BUG-108: 超长密码不进入 verify_password（PBKDF2 慢哈希），直接按凭证错误处理
@@ -697,6 +739,8 @@ class NoteHandler(BaseHTTPRequestHandler):
                 return
             form = self._read_form_body(1024 * 32, max_fields=5)
             if form is None:
+                return
+            if not self._validate_csrf_or_error(form):
                 return
             content = form.get("content", [""])[0].strip()
             if not content:
@@ -749,6 +793,8 @@ class NoteHandler(BaseHTTPRequestHandler):
             form = self._read_form_body(1024 * 10, max_fields=5)
             if form is None:
                 return
+            if not self._validate_csrf_or_error(form):
+                return
             note_id = form.get("note_id", [""])[0].strip()
             editable = form.get("editable", ["0"])[0] in ("1", "on", "true")
 
@@ -785,6 +831,8 @@ class NoteHandler(BaseHTTPRequestHandler):
             form = self._read_form_body(1024 * 10, max_fields=5)
             if form is None:
                 return
+            if not self._validate_csrf_or_error(form):
+                return
             token = form.get("token", [""])[0].strip()
             if not re.match(f'^{config.SHARE_TOKEN_PATTERN}$', token):
                 self.send_error(400, "Invalid share token")
@@ -815,6 +863,8 @@ class NoteHandler(BaseHTTPRequestHandler):
             form = self._read_form_body(config.MAX_CONTENT_BYTES, max_fields=10)
             if form is None:
                 return
+            if not self._validate_csrf_or_error(form):
+                return
             content = form.get("content", [""])[0]
             # 写回分享者的原笔记
             if write_note(share.get("owner", ""), share.get("note_id", ""), content):
@@ -840,6 +890,8 @@ class NoteHandler(BaseHTTPRequestHandler):
 
             form = self._read_form_body(config.MAX_CONTENT_BYTES, max_fields=10)
             if form is None:
+                return
+            if not self._validate_csrf_or_error(form):
                 return
             content = form.get("content", [""])[0]
 
@@ -871,6 +923,8 @@ class NoteHandler(BaseHTTPRequestHandler):
 
             form = self._read_form_body(config.MAX_CONTENT_BYTES, max_fields=10)
             if form is None:
+                return
+            if not self._validate_csrf_or_error(form):
                 return
             content = form.get("content", [""])[0]
 
