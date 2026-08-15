@@ -1,0 +1,12 @@
+bug:
+  - 'bug|fix|错误|故障'
+enhancement:
+  - 'feature|enhancement|新功能|改进'
+documentation:
+  - 'doc|documentation|文档'
+question:
+  - 'question|疑问|help|求助'
+duplicate:
+  - 'duplicate|重复'
+wontfix:
+  - 'wontfix|不修复'
