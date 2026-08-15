@@ -35,6 +35,10 @@ DEFAULT_CONFIG = {
         "window_seconds": 60,
         "max_requests": 120
     },
+    "register_rate_limit": {                # 注册速率限制：单IP在window_seconds内最多注册max_requests个账号
+        "window_seconds": 120,
+        "max_requests": 1
+    },
     "trust_proxy_headers": False,           # 仅当部署在可信反向代理之后才置 True，否则一律用直连 IP
     "secure_cookies": False,                # HTTPS 部署时置 True，为会话 Cookie 添加 Secure 标志
     "id_generation": {
@@ -108,6 +112,11 @@ GET_RATE_MAX = GET_RATE_CFG.get("max_requests", 45)
 SAVE_RATE_CFG = config.get("save_rate_limit", DEFAULT_CONFIG["save_rate_limit"])
 SAVE_RATE_WINDOW = SAVE_RATE_CFG.get("window_seconds", 60)
 SAVE_RATE_MAX = SAVE_RATE_CFG.get("max_requests", 120)
+
+# 注册速率限制配置：单IP在window_seconds内最多注册max_requests个账号
+REGISTER_RATE_CFG = config.get("register_rate_limit", DEFAULT_CONFIG["register_rate_limit"])
+REGISTER_RATE_WINDOW = REGISTER_RATE_CFG.get("window_seconds", 120)
+REGISTER_RATE_MAX = REGISTER_RATE_CFG.get("max_requests", 1)
 
 # 可信代理配置（BUG-3：默认不信任 X-Forwarded-For / X-Real-IP，防止伪造头绕过限流）
 TRUST_PROXY_HEADERS = bool(config.get("trust_proxy_headers", False))

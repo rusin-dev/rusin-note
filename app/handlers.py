@@ -31,6 +31,7 @@ from .notes import (
 from .ratelimit import (
     is_get_rate_limited,
     is_rate_limited,
+    is_register_rate_limited,
     is_save_rate_limited,
 )
 from .store import (
@@ -594,6 +595,10 @@ class NoteHandler(BaseHTTPRequestHandler):
 
         # 处理注册
         if path == "/register":
+            # 检查注册速率限制
+            if is_register_rate_limited(client_ip):
+                self.send_error(429, f"Too many registration attempts (max {config.REGISTER_RATE_MAX} per {config.REGISTER_RATE_WINDOW}s)")
+                return
             form = self._read_form_body(1024 * 10, max_fields=5)
             if form is None:
                 return
