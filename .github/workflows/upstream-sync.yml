@@ -5,10 +5,6 @@ on:
     types: [sync-upstream]
   workflow_dispatch:
 
-permissions:
-  contents: write
-  workflows: write
-
 jobs:
   sync:
     runs-on: ubuntu-latest
@@ -24,54 +20,10 @@ jobs:
       - name: Fetch upstream
         run: git fetch upstream main
 
-      - name: Debug before merge
-        run: |
-          {
-            echo "=== Timestamp ==="
-            date
-            echo "=== Current branch ==="
-            git branch
-            echo "=== Git status ==="
-            git status
-            echo "=== Recent commits (local) ==="
-            git log --oneline -5
-            echo "=== Recent commits (upstream) ==="
-            git log upstream/main --oneline -5
-          } | tee debug.log
-
       - name: Merge upstream changes
         run: git merge upstream/main --allow-unrelated-histories -m "Merge upstream updates"
-        id: merge
 
-      - name: Debug after merge
-        if: always()
+      - name: Push changes (using PAT)
         run: |
-          {
-            echo "=== Merge exit code ==="
-            echo "Exit code: ${{ steps.merge.outcome }}"
-            echo "=== Git status after merge ==="
-            git status
-            echo "=== Current commit log ==="
-            git log --oneline -5
-          } | tee -a debug.log
-
-      - name: Push changes
-        run: git push origin main
-        id: push
-
-      - name: Debug after push
-        if: always()
-        run: |
-          {
-            echo "=== Push exit code ==="
-            echo "Exit code: ${{ steps.push.outcome }}"
-            echo "=== Git status after push ==="
-            git status
-          } | tee -a debug.log
-
-      - name: Upload debug logs
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: upstream-sync-debug
-          path: debug.log
+          git remote set-url origin https://x-access-token:${{ secrets.GH_PAT }}@github.com/ruying-suixing/rusin-note.git
+          git push origin main
