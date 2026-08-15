@@ -1,6 +1,6 @@
 > [!IMPORTANT]
 >
-> Note: If you are a member of rusin-dev (this organization) and want to contribute, please see the [Collaboration Guide](https://github.com/rusin-dev/rusin-note/blob/main/contributing.md). If you are not a member of this organization, you can join or open an Issue.
+> Note: If you are a member of rusin-dev (this organization) and want to contribute, please see the [Collaboration Guide](https://github.com/rusin-dev/rusin-note?tab=contributing-ov-file). If you are not a member of this organization, you can join or open an Issue.
 
 <div align="center">
     <a href="https://github.com/rusin-dev/rusin-note"><img width="15%" alt="logo" src="./image/logo.png" /></a>
@@ -30,7 +30,7 @@
 
 ### Requirements
 
-Python version $\geq 3.10$.
+Python version $\geq$ 3.10.
 
 ### Local Development
 
@@ -142,12 +142,10 @@ rusin-note:.
 │      logo.png
 │      
 ├─.github
-│  └─workflows
-│          check.yml (test PR)
-│          auto-merge.yml (auto-merge)
-│          labeler.yml (auto-labeling)
-│          
-└─notes
+   └─workflows
+           check.yml (test PR)
+           auto-merge.yml (auto-merge)
+           labeler.yml (auto-labeling)
 ```
 
 ### Configuration Options

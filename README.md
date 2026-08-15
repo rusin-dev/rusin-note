@@ -1,6 +1,6 @@
 > [!IMPORTANT]
 >
-> 注：如果您是 rusin-dev（本组织）的成员，想要贡献，请参见[协作指南](https://github.com/rusin-dev/rusin-note/blob/main/contributing.md)，如果您不是本组织的，可以加入或开个 Issue。
+> 注：如果您是 rusin-dev（本组织）的成员，想要贡献，请参见[协作指南](https://github.com/rusin-dev/rusin-note?tab=contributing-ov-file)，如果您不是本组织的，可以加入或开个 Issue。
 
 <div align="center">
     <a href="https://github.com/rusin-dev/rusin-note"><img width="15%" alt="logo" src="./image/logo.png" /></a>
@@ -30,7 +30,7 @@
 
 ### 要求
 
-python 版本 $\geq 3.10$。
+python 版本 $\geq$ 3.10。
 
 ### 本地开发
 
@@ -143,12 +143,10 @@ rusin-note:.
 │      logo.png
 │      
 ├─.github
-│  └─workflows
-│          check.yml（测试 PR）
-│          auto-merge.yml（自动合并）
-│          labeler.yml（自动打标签）
-│          
-└─notes
+   └─workflows
+           check.yml（测试 PR）
+           auto-merge.yml（自动合并）
+           labeler.yml（自动打标签）
 ```
 
 ### 配置项解析
