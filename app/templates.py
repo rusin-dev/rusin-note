@@ -1091,8 +1091,7 @@ def render_benben_page(handler, posts, page, has_more, error="", prefill=""):
             time_str = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(ts))
         else:
             time_str = ""
-        ip_str = str(post.get("ip", "")).strip()
-        ip_html = f'<span class="benben-ip">IP:{html.escape(ip_str)}</span>' if ip_str else ""
+        ip_html = ""
         items += f"""
             <div class="benben-post">
                 <div class="benben-head">{html.escape(username)}<span class="benben-time">{time_str}</span>{ip_html}</div>
@@ -1159,7 +1158,6 @@ _BENBEN_CSS_TEMPLATE = """
             .benben-post { border: 1px solid var(--card-border); border-radius: 8px; padding: 12px 16px; margin-bottom: 12px; background: var(--card-bg); }
             .benben-head { font-weight: 500; margin-bottom: 6px; }
             .benben-time { color: var(--muted); font-size: 13px; font-weight: 400; margin-left: 8px; }
-            .benben-ip { color: var(--muted); font-size: 12px; font-weight: 400; margin-left: 8px; font-family: Consolas, monospace; }
             .benben-body { font-size: 15px; word-break: break-word; max-height: __BENBEN_MAX_HEIGHT_PX__px; overflow-y: auto; }
             .benben-form { max-width: 720px; margin: 16px 0 24px; }
             .benben-more { text-align: center; margin-top: 16px; }
