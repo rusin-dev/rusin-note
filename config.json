@@ -56,5 +56,6 @@
   "logger": {
     "max_size": 4294967296,
     "path_pattern": "log/{timestamp}.log"
-  }
+  },
+  "debug": false
 }

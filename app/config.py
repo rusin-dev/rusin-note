@@ -78,7 +78,8 @@ DEFAULT_CONFIG = {
     "logger": {
         "max_size": 4294967296,
         "path": "log/"
-    }
+    },
+    "debug": False
 }
 
 
@@ -241,3 +242,5 @@ except (TypeError, ValueError):
 LOGGER_CFG = config.get("logger", DEFAULT_CONFIG["logger"])
 LOGGER_MAX_SIZE = LOGGER_CFG.get("max_size", 4294967296)
 LOGGER_PATH = LOGGER_CFG.get("path_pattern", "log/{timestamp}.log")
+
+DEBUG = config.get("debug", False)
