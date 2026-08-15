@@ -52,5 +52,9 @@
     "page_size": 50,
     "cooldown_seconds": 3,
     "max_height_px": 1000
+  },
+  "logger": {
+    "max_size": 4294967296,
+    "path_pattern": "log/{timestamp}.log"
   }
 }
