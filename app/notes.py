@@ -48,7 +48,11 @@ def get_note_path(username: str, note_id: str) -> str | None:
         return None
     user_dir = get_user_note_dir(username)
     safe_id = os.path.basename(note_id)
-    return os.path.join(user_dir, f"{safe_id}.txt")
+    base_dir = os.path.realpath(user_dir)
+    candidate = os.path.realpath(os.path.join(user_dir, f"{safe_id}.txt"))
+    if os.path.commonpath([base_dir, candidate]) != base_dir:
+        return None
+    return candidate
 
 
 def read_note(username: str, note_id: str) -> str:
