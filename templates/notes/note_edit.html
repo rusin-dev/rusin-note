@@ -12,6 +12,7 @@
     {{ theme_script|safe }}
     <script defer src="https://cdn.jsdmirror.cn/npm/marked@12.0.2/marked.min.js"></script>
     <script defer src="https://cdn.jsdmirror.cn/npm/dompurify@3.1.7/dist/purify.min.js"></script>
+    {{ latex_head|safe }}
     <style>
         {{ theme_vars|safe }}
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -225,11 +226,22 @@
                 catch (e) { previewBody.innerHTML = '<p class="error">渲染失败</p>'; return; }
                 if (window.DOMPurify) {
                     html = window.DOMPurify.sanitize(html, {
-                        ALLOWED_TAGS: ['p','br','strong','em','u','strike','a','ul','ol','li','blockquote','pre','code','h1','h2','h3','h4','h5','h6','hr','table','thead','tbody','tr','th','td','div','span','img'],
-                        ALLOWED_ATTR: ['href','title','target','class','src','alt','rel']
+                        ALLOWED_TAGS: ['p','br','strong','em','u','strike','a','ul','ol','li','blockquote','pre','code','h1','h2','h3','h4','h5','h6','hr','table','thead','tbody','tr','th','td','div','span','img','input','dl','dt','dd','details','summary','abbr','sup','sub'],
+                        ALLOWED_ATTR: ['href','title','target','class','src','alt','rel','type','checked','disabled','id']
                     });
                 }
                 previewBody.innerHTML = html;
+                if (window.renderMathInElement) {
+                    window.renderMathInElement(previewBody, {
+                        delimiters: [
+                            {left: '$$', right: '$$', display: true},
+                            {left: '$', right: '$', display: false},
+                            {left: '\\(', right: '\\)', display: false},
+                            {left: '\\[', right: '\\]', display: true}
+                        ],
+                        throwOnError: false
+                    });
+                }
             }
 
             // Debounced preview on input
@@ -247,7 +259,7 @@
                 if (showing) updatePreview();
             });
 
-            // Initial render once both libraries are loaded (defer attributes)
+            // Initial render once all libraries are loaded (defer attributes)
             function whenReady(cb) {
                 if (window.marked && window.DOMPurify) return cb();
                 setTimeout(function() { whenReady(cb); }, 50);
