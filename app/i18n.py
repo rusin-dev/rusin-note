@@ -6,6 +6,8 @@
 """
 import html
 
+from flask import Flask, g, request
+
 LANG_COOKIE = "rusin-lang"
 LANGS = ("zh", "en")
 DEFAULT_LANG = "zh"
@@ -286,7 +288,7 @@ STRINGS = {
 
 
 def detect_lang(handler) -> str:
-    """检测请求语言：Cookie rusin-lang > Accept-Language 首项 > 默认中文"""
+    """兼容旧 BaseHTTPRequestHandler 接口（保留供其他模块调用）"""
     cookie = handler.headers.get("Cookie", "")
     for pair in cookie.split(";"):
         pair = pair.strip()
@@ -301,6 +303,44 @@ def detect_lang(handler) -> str:
     if first.startswith("en"):
         return "en"
     return DEFAULT_LANG
+
+
+def detect_lang_from_request() -> str:
+    """Flask 请求上下文下的语言检测（Cookie > Accept-Language > 默认中文）"""
+    cookie = request.headers.get("Cookie", "")
+    for pair in cookie.split(";"):
+        pair = pair.strip()
+        if pair.startswith(f"{LANG_COOKIE}="):
+            value = pair[len(LANG_COOKIE) + 1:].strip()
+            if value in LANGS:
+                return value
+    accept = request.headers.get("Accept-Language", "")
+    first = accept.split(",")[0].strip().lower()
+    if first.startswith("zh"):
+        return "zh"
+    if first.startswith("en"):
+        return "en"
+    return DEFAULT_LANG
+
+
+def register_i18n(app: Flask) -> None:
+    """注册 Jinja2 全局上下文，使模板可直接用 {{ t('key') }} / {{ lang }} / {{ theme }} / {{ theme_script }} / {{ theme_vars }} / {{ current_user }} / {{ site_name }}"""
+    from . import config as _cfg
+    from .theme import THEME_VARS, get_theme_script
+
+    @app.context_processor
+    def inject_globals():
+        lang = getattr(g, "lang", DEFAULT_LANG)
+        return {
+            "t": lambda key, **kw: t(lang, key, **kw),
+            "lang": lang,
+            "lang_switch_url": "/lang/" + ("en" if lang == "zh" else "zh"),
+            "theme": getattr(g, "theme", None),
+            "theme_script": get_theme_script(lang),
+            "theme_vars": THEME_VARS,
+            "current_user": getattr(g, "current_user", None),
+            "site_name": _cfg.SITE_NAME,
+        }
 
 
 def t(lang: str, key: str, **fmt) -> str:

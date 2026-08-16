@@ -1,0 +1,5 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>{{ t('auth_required_title') }}</h1>
+<p>{% if shares %}{{ t('auth_required_body_shares') }}{% else %}{{ t('auth_required_body') }}{% endif %}</p>
+{% endblock %}
