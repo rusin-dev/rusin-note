@@ -1,6 +1,4 @@
 """视图层共享的工具：note 上下文构建等"""
-import json
-
 from flask import g
 
 from .. import config
@@ -39,7 +37,7 @@ def build_note_context(
     else:
         last_edited = t(lang, "note_never_edited")
 
-    l10n = json.dumps({
+    l10n = {
         "saving": t(lang, "save_status_saving"),
         "saved": t(lang, "save_status_saved"),
         "failedStatus": t(lang, "save_status_failed"),
@@ -47,7 +45,7 @@ def build_note_context(
         "savedHint": t(lang, "save_hint_saved"),
         "retryHint": t(lang, "save_hint_retry"),
         "failedMsg": t(lang, "save_failed_msg"),
-    }, ensure_ascii=False)
+    }
 
     return {
         "theme_vars": THEME_VARS,
