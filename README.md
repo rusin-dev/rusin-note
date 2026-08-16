@@ -26,6 +26,17 @@
     </p>
 </div>
 
+## 产品特性
+
+- **开箱即用的云端剪贴板**：基于 Flask 的轻量实现，适合部署在 VPS 或个人服务器上，用浏览器即可快速保存和访问文本内容。
+- **公开与私有笔记**：支持随机短路径公开笔记，也支持访客账号下的私有笔记列表，兼顾临时分享和个人留存。
+- **安全分享链接**：可为用户笔记生成带随机 token 的分享链接，并支持分享内容写回，便于跨设备协作。
+- **Markdown 与 LaTeX 渲染**：只读页面和犇犇动态支持 Markdown 与 KaTeX 公式渲染，适合保存代码片段、说明文档和数学内容。
+- **犇犇动态**：内置轻量动态流，登录用户可发布内容，未登录用户可浏览，支持实时预览、分页加载和发布冷却。
+- **多语言界面**：内置简体中文与 English，可手动切换，也可按浏览器语言自动选择。
+- **部署友好**：配置集中在 `config.json`，支持笔记过期清理、会话超时、密码策略、反向代理真实 IP、HTTPS Cookie 等常见部署选项。
+- **基础防护完善**：包含 CSRF 防护、请求限流、保存限流、注册限流、内容安全清洗和代理头信任开关，降低公开部署风险。
+
 ## 快速开始
 
 ### 要求
@@ -115,38 +126,97 @@ python 版本 $\geq$ 3.10。
     sudo ufw allow 'Nginx Full'
     ```
 
+### Zeabur 自动部署
+
+使用 Zeabur 从 GitHub 自动部署时，应用目录会在每次部署时重新构建。为了避免剪贴板、用户、分享链接和犇犇动态被清空，请把运行数据写入持久化卷：
+
+1. 在 Zeabur 项目中打开当前服务。
+2. 进入 `Storage` / `Volumes`，新增一个 Volume。
+3. 将 Volume 挂载路径设置为 `/data`。
+4. 进入 `Environment Variables`，新增环境变量 `RUSIN_DATA_DIR=/data`。
+5. 重新部署服务。
+
+不要把 Volume 挂载到项目根目录，否则可能覆盖部署出来的应用代码。设置完成后，运行数据会保存在 `/data` 下：
+
+```plaintext
+/data/notes/
+/data/users.json
+/data/sessions.json
+/data/shares.json
+/data/benben.json
+/data/log/
+```
+
 ## 项目结构
 
 ```plaintext
 rusin-note:.
-│  README_en.md
 │  config.json（配置项）
+│  contributing.md（协作指南）
+│  Disclaimer-en.md（英文免责声明）
 │  Disclaimer.md（免责声明）
-│  LICENSE
+│  favicon.ico
 │  README.md
-│  contribute.md（协作指南）
-│  
+│  README_en.md
+│  requirements.txt（Python 依赖）
+│  zbpack.json（打包配置）
+│
 ├─app（核心代码）
 │  │  __init__.py
 │  │  __main__.py（入口：python3 -m app）
-│  │  config.py（配置加载与全局常量）
-│  │  store.py（用户/会话/分享数据存储）
 │  │  auth.py（密码哈希与会话认证）
+│  │  background.py（后台清理任务）
+│  │  config.py（配置加载与全局常量）
+│  │  extensions.py（Flask 扩展实例）
+│  │  i18n.py（多语言支持）
+│  │  logger.py（日志记录）
+│  │  middleware.py（请求钩子与限流辅助）
 │  │  notes.py（笔记文件操作与统计）
-│  │  ratelimit.py（IP 限流）
-│  │  theme.py（暗色模式与 favicon）
-│  │  templates.py（页面渲染）
-│  │  handlers.py（HTTP 路由处理）
-│  │  server.py（服务器启动）
+│  │  store.py（用户/会话/分享/犇犇数据存储）
+│  │  theme.py（主题与静态资源辅助）
+│  │  utils.py（通用工具函数）
+│  │  wsgi.py（WSGI 入口）
 │  │
-├─image
+│  └─views（蓝图与路由）
+│          __init__.py（蓝图注册）
+│          _helpers.py（视图辅助函数）
+│          auth.py（登录与注册）
+│          benben.py（犇犇动态）
+│          home.py（首页）
+│          share.py（分享页面）
+│          static_routes.py（静态与说明页面）
+│          user.py（用户与用户笔记）
+│          world.py（公开笔记）
+│          world_short.py（短链接公开笔记）
+│
+├─templates（Jinja2 模板）
+│  │  base.html（基础布局）
+│  │  count.html（统计页面）
+│  │  disclaimer.html（免责声明页面）
+│  │  home.html（首页）
+│  │
+│  ├─auth（认证页面）
+│  ├─benben（犇犇页面）
+│  ├─errors（错误页）
+│  ├─notes（笔记页面）
+│  ├─partials（公共片段）
+│  └─share（分享页面）
+│
+├─image（图片资源）
 │      logo.png
-│      
+│
 ├─.github
-   └─workflows
-           check.yml（测试 PR）
-           auto-merge.yml（自动合并）
-           labeler.yml（自动打标签）
+│  │  issue-labeler.yml（Issue 标签配置）
+│  │
+│  ├─ISSUE_TEMPLATE（Issue 模板）
+│  └─workflows（GitHub Actions）
+│          auto-merge.yml（自动合并）
+│          check.yml（检查）
+│          codeql.yml（CodeQL 分析）
+│          labeler.yml（自动打标签）
+│          release.yml（发布）
+│          trigger-fork-sync.yml（触发 Fork 同步）
+│          upstream-sync.yml（上游同步）
 ```
 
 ### 配置项解析
@@ -212,6 +282,9 @@ rusin-note:.
    - `require_lowercase`：是否必须包含小写字母，默认 `true`；  
    - `require_digits`：是否必须包含数字，默认 `true`；  
    - `require_special`：是否必须包含特殊符号（不含 `/ \ ( ) " '`），默认 `true`； 
+- `RUSIN_DATA_DIR`：可选环境变量，用于指定运行数据目录，默认当前项目目录。
+
+   笔记、用户、会话、分享、犇犇动态和日志会写入该目录下的 `notes/`、`users.json`、`sessions.json`、`shares.json`、`benben.json`、`log/`。在 Zeabur 等自动部署平台上建议挂载持久化卷到 `/data`，并设置 `RUSIN_DATA_DIR=/data`，避免每次部署清空剪贴板数据。
 - **多语言**：界面支持简体中文与 English。导航栏右侧提供语言切换链接（`/lang/zh` / `/lang/en`），选择后通过 Cookie（`rusin-lang`）记住偏好；未设置时自动按浏览器 `Accept-Language` 判断，默认中文。切换后全站文本（导航、按钮、提示、错误信息、犇犇预览等）即时切换语言。 
 - `benben` 犇犇动态（`/benben`，登录可发布、未登录只读）。
    - `max_length`：单条犇犇最大长度（单位：**字符**），默认 `1024`（约 1KB）；

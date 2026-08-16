@@ -98,6 +98,14 @@ def load_config():
 
 
 config = load_config()
+DATA_DIR = os.environ.get("RUSIN_DATA_DIR", ".")
+os.makedirs(DATA_DIR, exist_ok=True)
+
+
+def data_path(*parts: str) -> str:
+    return os.path.join(DATA_DIR, *parts)
+
+
 SITE_NAME = config.get("sitename", "")
 MAX_CONTENT_BYTES = config.get("max_note_size_kb", 5120) * 1024
 RATE_WINDOW = config.get("rate_limit", {}).get("window_seconds", 60)
@@ -250,6 +258,6 @@ except (TypeError, ValueError):
 # ---------- 日志功能 ----------
 LOGGER_CFG = config.get("logger", DEFAULT_CONFIG["logger"])
 LOGGER_MAX_SIZE = LOGGER_CFG.get("max_size", 4294967296)
-LOGGER_PATH = LOGGER_CFG.get("path_pattern", "log/{timestamp}.log")
+LOGGER_PATH = data_path(LOGGER_CFG.get("path_pattern", "log/{timestamp}.log"))
 
 DEBUG = config.get("debug", False)

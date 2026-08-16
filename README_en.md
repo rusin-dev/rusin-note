@@ -26,6 +26,17 @@
     </p>
 </div>
 
+## Features
+
+- **Cloud clipboard that works out of the box**: A lightweight Flask implementation for VPS or personal-server deployment, letting you save and access text quickly from any browser.
+- **Public and private notes**: Use random short paths for public notes, or keep private note lists under guest accounts for both temporary sharing and personal storage.
+- **Secure share links**: Generate random-token share links for user notes, with optional write-back support for simple cross-device collaboration.
+- **Markdown and LaTeX rendering**: Read-only pages and the benben feed support Markdown and KaTeX math, making the app useful for code snippets, notes, documentation, and formulas.
+- **Benben feed**: A built-in lightweight feed where logged-in users can post and anonymous users can read, with live preview, paginated loading, and post cooldowns.
+- **Multi-language UI**: Simplified Chinese and English are built in, with manual switching and browser-language fallback.
+- **Deployment-friendly configuration**: Common options live in `config.json`, including note expiration, session timeout, password policy, trusted proxy IP handling, and HTTPS cookies.
+- **Practical baseline protection**: Includes CSRF protection, request rate limits, save limits, registration limits, content sanitization, and a proxy-header trust switch for safer public deployments.
+
 ## Quick Start
 
 ### Requirements
@@ -114,38 +125,97 @@ Connect to your server, then:
     sudo ufw allow 'Nginx Full'
     ```
 
+### Zeabur Auto Deployment
+
+When deploying from GitHub on Zeabur, the application directory is rebuilt on each deployment. To prevent clipboards, users, share links, and benben posts from being cleared, store runtime data in a persistent volume:
+
+1. Open the current service in your Zeabur project.
+2. Go to `Storage` / `Volumes` and create a new Volume.
+3. Set the Volume mount path to `/data`.
+4. Go to `Environment Variables` and add `RUSIN_DATA_DIR=/data`.
+5. Redeploy the service.
+
+Do not mount the Volume to the project root, or it may hide the deployed application code. After setup, runtime data is stored under `/data`:
+
+```plaintext
+/data/notes/
+/data/users.json
+/data/sessions.json
+/data/shares.json
+/data/benben.json
+/data/log/
+```
+
 ## Project Structure
 
 ```plaintext
 rusin-note:.
-│  README_en.md
 │  config.json (configuration)
+│  contributing.md (collaboration guide)
+│  Disclaimer-en.md (English disclaimer)
 │  Disclaimer.md (disclaimer)
-│  LICENSE
+│  favicon.ico
 │  README.md
-│  contribute.md (collaboration guide)
-│  
+│  README_en.md
+│  requirements.txt (Python dependencies)
+│  zbpack.json (packaging configuration)
+│
 ├─app (core code)
 │  │  __init__.py
 │  │  __main__.py (entry: python3 -m app)
-│  │  config.py (configuration loading & global constants)
-│  │  store.py (users/sessions/shares data storage)
 │  │  auth.py (password hashing & session auth)
+│  │  background.py (background cleanup tasks)
+│  │  config.py (configuration loading & global constants)
+│  │  extensions.py (Flask extension instances)
+│  │  i18n.py (multi-language support)
+│  │  logger.py (logging)
+│  │  middleware.py (request hooks and rate-limit helpers)
 │  │  notes.py (note file operations & stats)
-│  │  ratelimit.py (IP rate limiting)
-│  │  theme.py (dark mode & favicon)
-│  │  templates.py (page rendering)
-│  │  handlers.py (HTTP routing)
-│  │  server.py (server startup)
+│  │  store.py (users/sessions/shares/benben data storage)
+│  │  theme.py (theme and static resource helpers)
+│  │  utils.py (shared utilities)
+│  │  wsgi.py (WSGI entry)
 │  │
-├─image
+│  └─views (blueprints and routes)
+│          __init__.py (blueprint registration)
+│          _helpers.py (view helpers)
+│          auth.py (login and registration)
+│          benben.py (benben feed)
+│          home.py (home page)
+│          share.py (share pages)
+│          static_routes.py (static and documentation pages)
+│          user.py (user and user notes)
+│          world.py (public notes)
+│          world_short.py (short-link public notes)
+│
+├─templates (Jinja2 templates)
+│  │  base.html (base layout)
+│  │  count.html (statistics page)
+│  │  disclaimer.html (disclaimer page)
+│  │  home.html (home page)
+│  │
+│  ├─auth (auth pages)
+│  ├─benben (benben pages)
+│  ├─errors (error pages)
+│  ├─notes (note pages)
+│  ├─partials (shared partials)
+│  └─share (share pages)
+│
+├─image (image assets)
 │      logo.png
-│      
+│
 ├─.github
-   └─workflows
-           check.yml (test PR)
-           auto-merge.yml (auto-merge)
-           labeler.yml (auto-labeling)
+│  │  issue-labeler.yml (Issue label configuration)
+│  │
+│  ├─ISSUE_TEMPLATE (Issue templates)
+│  └─workflows (GitHub Actions)
+│          auto-merge.yml (auto-merge)
+│          check.yml (checks)
+│          codeql.yml (CodeQL analysis)
+│          labeler.yml (auto-labeling)
+│          release.yml (release)
+│          trigger-fork-sync.yml (trigger fork sync)
+│          upstream-sync.yml (upstream sync)
 ```
 
 ### Configuration Options
@@ -213,6 +283,9 @@ rusin-note:.
    - `require_lowercase`: whether lowercase letters are required, default `true`;  
    - `require_digits`: whether digits are required, default `true`;  
    - `require_special`: whether special characters (excluding `/ \ ( ) " '`) are required, default `true`;
+- `RUSIN_DATA_DIR`: optional environment variable for the runtime data directory, defaulting to the current project directory.
+
+   Notes, users, sessions, shares, benben posts, and logs are written under this directory as `notes/`, `users.json`, `sessions.json`, `shares.json`, `benben.json`, and `log/`. On auto-deploy platforms such as Zeabur, mount a persistent volume at `/data` and set `RUSIN_DATA_DIR=/data` to prevent clipboard data from being cleared on each deployment.
 - **Multi-language**: The interface supports Simplified Chinese and English. Language switch links (`/lang/zh` / `/lang/en`) are provided on the right side of the navbar; the preference is remembered via a cookie (`rusin-lang`); when unset, it falls back to the browser's `Accept-Language`, defaulting to Chinese. After switching, all site text (navbar, buttons, hints, error messages, benben previews, etc.) switches language instantly.
 - `benben` (feed at `/benben`, logged-in users can post, anonymous read-only).
    - `max_length`: max length of a single feed post (in **characters**), default `1024` (~1KB);

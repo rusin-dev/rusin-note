@@ -9,6 +9,7 @@ from .logger import create_logger
 from .config import (
     BENBEN_COOLDOWN_SECONDS,
     config,
+    data_path,
     DEFAULT_CONFIG,
     SHARE_TOKEN_CHARSET,
     SHARE_TOKEN_LENGTH,
@@ -19,11 +20,11 @@ from .config import (
 logger = create_logger("store")
 
 # ---------- 数据文件路径 ----------
-USER_FILE = "users.json"
-SESSION_FILE = "sessions.json"
-SHARE_FILE = "shares.json"
-BENBEN_FILE = "benben.json"
-NOTES_BASE = "notes"
+USER_FILE = data_path("users.json")
+SESSION_FILE = data_path("sessions.json")
+SHARE_FILE = data_path("shares.json")
+BENBEN_FILE = data_path("benben.json")
+NOTES_BASE = data_path("notes")
 os.makedirs(NOTES_BASE, exist_ok=True)
 
 users = {}
