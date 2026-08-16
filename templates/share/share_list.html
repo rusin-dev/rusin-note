@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block extra_head %}
+<style>
+    .share-table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+    .share-table th, .share-table td { border: 1px solid var(--navbar-border); padding: 8px 10px; text-align: left; font-size: 14px; word-break: break-all; }
+    .share-table th { background: var(--navbar-bg); font-weight: 500; }
+    .share-link { font-family: Consolas, monospace; font-size: 12px; color: var(--link); }
+    .btn-sm { width: auto; padding: 4px 14px; font-size: 13px; }
+</style>
+{% endblock %}
+{% block content %}
+<h1>{{ t('shares_title') }}</h1>
+{% if error %}<p class="error">{{ error }}</p>{% endif %}
+<div style="margin: 20px 0;">
+    <h2 style="margin-bottom: 12px;">{{ t('shares_create') }}</h2>
+    <form method="POST" action="/user/{{ username|e }}/shares/" style="max-width: 420px;">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="form-group">
+            <label>{{ t('shares_select_note') }}</label>
+            <select name="note_id">
+                {% for nid in notes %}
+                <option value="{{ nid|e }}">{{ nid|e }}</option>
+                {% else %}
+                <option value="">{{ t('shares_no_notes') }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-group" style="display:flex; align-items:center; gap:8px;">
+            <input type="checkbox" name="editable" value="1" id="editable_cb" style="width:auto;">
+            <label for="editable_cb" style="margin:0;">{{ t('shares_editable_label') }}</label>
+        </div>
+        <button type="submit">{{ t('shares_create_btn') }}</button>
+    </form>
+</div>
+<h2 style="margin-bottom: 12px;">{{ t('shares_my', count=rows|length) }}</h2>
+<table class="share-table">
+    <thead>
+        <tr><th>{{ t('shares_col_note') }}</th><th>{{ t('shares_col_link') }}</th><th>{{ t('shares_col_perm') }}</th><th>{{ t('shares_col_views') }}</th><th>{{ t('shares_col_action') }}</th></tr>
+    </thead>
+    <tbody>
+        {% for row in rows %}
+        <tr>
+            <td>{{ row.note_id|e }}</td>
+            <td><a class="share-link" href="/share/{{ row.token }}" target="_blank">/share/{{ row.token }}</a></td>
+            <td>{% if row.editable %}{{ t('shares_editable') }}{% else %}{{ t('shares_readonly') }}{% endif %}</td>
+            <td>{{ row.views }}</td>
+            <td>
+                <form method="POST" action="/user/{{ username|e }}/shares/delete" style="display:inline;">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="token" value="{{ row.token }}">
+                    <button type="submit" class="btn-sm">{{ t('shares_delete') }}</button>
+                </form>
+            </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="5" class="empty">{{ t('shares_empty') }}</td></tr>
+        {% endfor %}
+    </tbody>
+</table>
+<p style="margin-top: 24px;"><a href="/user/{{ username|e }}/">{{ t('shares_back') }}</a></p>
+{% endblock %}

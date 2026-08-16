@@ -1,0 +1,5 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="disclaimer markdown-body">{{ content|safe }}</div>
+<p style="margin-top: 20px;"><a href="/">{{ t('back_home') }}</a></p>
+{% endblock %}

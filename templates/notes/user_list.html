@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>{{ t('user_notes_title', username=username) }}</h1>
+<div style="margin-bottom: 16px;">
+    <a href="/user/{{ username|e }}/new">{{ t('user_new_note') }}</a>
+</div>
+<ul class="note-list">
+    {% for item in items %}
+    <li>
+        <a href="/user/{{ username|e }}/{{ item.id|e }}">{{ item.id|e }}</a>
+        {% if item.mtime %}<span class="note-time">{{ item.mtime }}</span>{% endif %}
+        {% if item.size %}<span class="note-size">{{ item.size }}</span>{% endif %}
+    </li>
+    {% else %}
+    <li class="empty">{{ t('user_no_notes') }}</li>
+    {% endfor %}
+</ul>
+{% endblock %}

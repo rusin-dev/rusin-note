@@ -1,24 +1,93 @@
+"""Flask app factory：组装所有扩展、蓝图、请求钩子
+
+用法：
+    from app import create_app
+    app = create_app()
 """
-rusin-note - 极简在线笔记服务 (支持匿名公开笔记 /world/ 和私有用户笔记 /user/)
-- 公开笔记无需登录，直接访问 /world/<id> 即可编辑
-- 私有笔记需注册登录，路径 /user/<username>/<note_id>
-- 顶部导航栏，登录/注册/登出
-- 密码强度要求可配置
-- 支持 /<剪贴板名称> 短链接自动重定向到公开笔记 /world/<剪贴板名称>
-- 支持 /<剪贴板名称>.md 直接渲染为 Markdown；其他扩展名 (.html/.exe/.pdf 等) 一律 404
-- 保留关键词（login/logout 等）禁止注册为用户名
-- 统计页面 /count
-- 免责声明 /disclaimer，支持Markdown渲染
-- Cookie使用SHA-256哈希存储，会话支持超时清除
-- 支持将公开笔记渲染为 Markdown（只读）：/world/<id>/md 或 /world/<id>.md
-- 支持将私有笔记渲染为 Markdown（仅本人）：/user/<用户名>/<笔记ID>/md 或 /user/<用户名>/<笔记ID>.md
-- 支持将分享渲染为 Markdown（只读）：/share/<token>/md 或 /share/<token>.md
-- 分享功能：私有笔记可生成分享链接 /share/<token>（长度与字符集可配置，支持只读/可编辑）
-- 分享管理：/user/<用户名>/shares/（创建/删除/查看次数）
-- 犇犇动态：/benben（登录可发布，未登录只读；每条显示用户名+时间，支持 Markdown/LaTeX，安全清洗防 XSS，每页 50 条分批加载）
-- LaTeX 公式渲染：Markdown 只读页面支持 $...$ / $$...$$（KaTeX 洛谷同款，可配置开关与 CDN）
-- 暗色模式：所有页面支持切换（localStorage 记忆 + 跟随系统偏好，导航栏按钮切换）
-- XSS防护：使用bleach清洗Markdown渲染后的HTML
-- GET请求独立限流（45次/分钟）
-- 编辑区 Tab 键插入 4 个空格
-"""
+import os
+import secrets
+
+from flask import Flask, render_template
+from werkzeug.middleware.proxy_fix import ProxyFix
+
+from . import config
+from .background import start_background_threads
+from .extensions import csrf, limiter
+from .i18n import register_i18n
+from .middleware import register_request_hooks
+from .views import register_blueprints
+
+
+def create_app() -> Flask:
+    app = Flask(
+        __name__,
+        template_folder=os.path.join(os.path.dirname(os.path.dirname(__file__)), "templates"),
+        static_folder=None,
+    )
+
+    secret = os.environ.get("RUSIN_SECRET_KEY")
+    if not secret:
+        secret = secrets.token_hex(32)
+
+    app.config.update(
+        SECRET_KEY=secret,
+        MAX_CONTENT_LENGTH=config.MAX_CONTENT_BYTES,
+        SESSION_COOKIE_SECURE=config.SECURE_COOKIES,
+        SESSION_COOKIE_HTTPONLY=True,
+        SESSION_COOKIE_SAMESITE="Lax",
+        WTF_CSRF_TIME_LIMIT=None,
+        RATELIMIT_STORAGE_URI="memory://",
+    )
+
+    if config.TRUST_PROXY_HEADERS:
+        app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=0)
+
+    csrf.init_app(app)
+    limiter.init_app(app)
+    register_request_hooks(app)
+    register_i18n(app)
+    register_blueprints(app)
+    register_error_handlers(app)
+
+    if not app.config.get("TESTING"):
+        start_background_threads()
+
+    return app
+
+
+def register_error_handlers(app: Flask) -> None:
+    from flask import abort, g
+
+    @app.errorhandler(400)
+    def err_400(e):
+        return render_template("errors/400.html",
+                               message=str(getattr(e, "description", "Bad Request"))), 400
+
+    @app.errorhandler(401)
+    def err_401(e):
+        shares = False
+        from flask import request
+        if request.path.startswith("/user/") and "/shares" in request.path:
+            shares = True
+        return render_template("errors/401.html", shares=shares), 401
+
+    @app.errorhandler(403)
+    def err_403(e):
+        return render_template("errors/400.html",
+                               message=str(getattr(e, "description", "Forbidden"))), 403
+
+    @app.errorhandler(404)
+    def err_404(e):
+        return render_template("errors/404.html"), 404
+
+    @app.errorhandler(413)
+    def err_413(e):
+        return render_template("errors/400.html", message="Request body too large"), 413
+
+    @app.errorhandler(429)
+    def err_429(e):
+        return render_template("errors/429.html"), 429
+
+    @app.errorhandler(500)
+    def err_500(e):
+        return render_template("errors/500.html"), 500

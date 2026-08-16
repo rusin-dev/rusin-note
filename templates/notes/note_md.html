@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block extra_head %}{{ latex_head|safe }}{% endblock %}
+{% block content %}
+<h1>{{ title_label }} · {{ note_id|e }} <span style="font-size:0.6em; font-weight:400; color:#888;">{{ t('md_readonly') }}</span></h1>
+<div class="markdown-body" style="margin-top:20px; padding-bottom:40px;">
+    {{ html_content|safe }}
+</div>
+<p style="margin-top: 20px;"><a href="{{ back_url }}">{{ back_label }}</a> · <a href="/">{{ t('md_home') }}</a></p>
+{% endblock %}
