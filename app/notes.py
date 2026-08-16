@@ -34,7 +34,10 @@ def validate_note_id(note_id: str) -> bool:
 
 
 # ---------- 笔记文件操作 ----------
-def get_user_note_dir(username: str) -> str:
+def get_user_note_dir(username: str) -> str | None:
+    # "public" 是内部公开笔记存储命名空间，不是用户账号，需放行（validate_username 会拒绝它）
+    if username != "public" and not validate_username(username):
+        return None
     path = os.path.join(NOTES_BASE, username)
     os.makedirs(path, exist_ok=True)
     return path
@@ -47,12 +50,15 @@ def get_note_path(username: str, note_id: str) -> str | None:
     if not validate_note_id(note_id):
         return None
     user_dir = get_user_note_dir(username)
-    safe_id = os.path.basename(note_id)
-    base_dir = os.path.realpath(user_dir)
-    candidate = os.path.realpath(os.path.join(user_dir, f"{safe_id}.txt"))
-    if os.path.commonpath([base_dir, candidate]) != base_dir:
+    if user_dir is None:
         return None
-    return candidate
+
+    base_dir = os.path.realpath(user_dir)
+    safe_id = os.path.basename(note_id)
+    note_path = os.path.realpath(os.path.join(base_dir, f"{safe_id}.txt"))
+    if os.path.commonpath([base_dir, note_path]) != base_dir:
+        return None
+    return note_path
 
 
 def read_note(username: str, note_id: str) -> str:
@@ -120,6 +126,8 @@ def write_note(username: str, note_id: str, content: str) -> bool:
 
 def list_user_notes(username: str) -> list[str]:
     user_dir = get_user_note_dir(username)
+    if user_dir is None:
+        return []
     notes = []
     for fname in os.listdir(user_dir):
         if fname.endswith(".txt"):
