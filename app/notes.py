@@ -34,7 +34,10 @@ def validate_note_id(note_id: str) -> bool:
 
 
 # ---------- 笔记文件操作 ----------
-def get_user_note_dir(username: str) -> str:
+def get_user_note_dir(username: str) -> str | None:
+    # "public" 是内部公开笔记存储命名空间，不是用户账号，需放行（validate_username 会拒绝它）
+    if username != "public" and not validate_username(username):
+        return None
     path = os.path.join(NOTES_BASE, username)
     os.makedirs(path, exist_ok=True)
     return path
@@ -126,6 +129,8 @@ def write_note(username: str, note_id: str, content: str) -> bool:
 
 def list_user_notes(username: str) -> list[str]:
     user_dir = get_user_note_dir(username)
+    if user_dir is None:
+        return []
     notes = []
     for fname in os.listdir(user_dir):
         if fname.endswith(".txt"):

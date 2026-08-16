@@ -97,5 +97,5 @@ def run_server(port=None):
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:
-        logger.log("\n[停止] 服务已停止")
+        logger.info("\n[停止] 服务已停止")
         httpd.shutdown()

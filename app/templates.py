@@ -15,13 +15,25 @@ from .logger import create_logger
 logger = create_logger("templates")
 
 # ---------- 导航栏 ----------
+def get_navbar_brand() -> str:
+    """左上角 favicon + 站点名，点击返回首页"""
+    site_name = html.escape(config.SITE_NAME or "rusin-note")
+    return f"""
+            <a class="navbar-brand" href="/" title="Home">
+                <img src="/favicon.ico" alt="" class="navbar-brand-icon">
+                <span class="navbar-brand-name">{site_name}</span>
+            </a>"""
+
+
 def get_navbar(handler, current_user=None) -> str:
     if current_user is None:
         current_user = handler.get_current_user()
     lang = detect_lang(handler)
+    brand = get_navbar_brand()
     if current_user:
         return f"""
             <div class="navbar">
+                {brand}
                 <span class="user-info">{html.escape(t(lang, "nav_user_prefix") + current_user)}</span>
                 <span class="nav-links">
                     <a href="/user/{html.escape(current_user)}/"><i class="fa-solid fa-file-lines" aria-hidden="true"></i>{t(lang, "nav_my_notes")}</a>
@@ -37,6 +49,7 @@ def get_navbar(handler, current_user=None) -> str:
     else:
         return f"""
             <div class="navbar">
+                {brand}
                 <span class="user-info">{t(lang, "nav_anonymous")}</span>
                 <span class="nav-links">
                     <a href="/register"><i class="fa-solid fa-user-plus" aria-hidden="true"></i>{t(lang, "nav_register")}</a>
@@ -82,19 +95,67 @@ def render_base(handler, body: str, title="rusin-note", navbar=None, extra_head=
             background: var(--navbar-bg);
             padding: 10px 24px;
             border-bottom: 1px solid var(--navbar-border);
-            display: flex;
-            justify-content: space-between;
+            display: grid;
+            grid-template-columns: 1fr auto 1fr;
             align-items: center;
-            flex-wrap: wrap;
+            gap: 16px;
             font-size: 14px;
+        }}
+        .navbar-brand {{
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            color: var(--text);
+            text-decoration: none;
+            font-size: 16px;
+            font-weight: 600;
+            min-width: 0;
+            overflow: hidden;
+        }}
+        .navbar-brand-name {{
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }}
+        .navbar-brand:hover {{
+            color: var(--link);
+        }}
+        .navbar-brand-icon {{
+            width: 22px;
+            height: 22px;
+            border-radius: 4px;
+            flex-shrink: 0;
         }}
         .navbar .user-info {{
             font-weight: 500;
+            text-align: center;
+            white-space: nowrap;
+        }}
+        .navbar .nav-links {{
+            display: flex;
+            justify-content: flex-end;
+            align-items: center;
+            flex-wrap: wrap;
+            min-width: 0;
         }}
         .navbar .nav-links a {{
             margin-left: 16px;
             color: var(--link);
             text-decoration: none;
+        }}
+        @media (max-width: 640px) {{
+            .navbar {{
+                grid-template-columns: 1fr 1fr;
+                grid-template-areas:
+                    "brand links"
+                    "user  user";
+                row-gap: 6px;
+                column-gap: 12px;
+                padding: 10px 16px;
+            }}
+            .navbar-brand {{ grid-area: brand; }}
+            .navbar .user-info {{ grid-area: user; text-align: center; }}
+            .navbar .nav-links {{ grid-area: links; justify-content: flex-end; }}
         }}
         .navbar .nav-links a:hover {{
             text-decoration: underline;
@@ -597,10 +658,10 @@ def render_note_page(handler, note_id: str, content: str, username: str = None, 
             background: var(--navbar-bg);
             padding: 8px 24px;
             border-bottom: 1px solid var(--navbar-border);
-            display: flex;
-            justify-content: space-between;
+            display: grid;
+            grid-template-columns: 1fr auto 1fr;
             align-items: center;
-            flex-wrap: wrap;
+            gap: 16px;
             font-size: 14px;
             position: fixed;
             top: 0;
@@ -608,8 +669,42 @@ def render_note_page(handler, note_id: str, content: str, username: str = None, 
             right: 0;
             z-index: 30;
         }}
+        .navbar-brand {{
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            color: var(--text);
+            text-decoration: none;
+            font-size: 16px;
+            font-weight: 600;
+            min-width: 0;
+            overflow: hidden;
+        }}
+        .navbar-brand-name {{
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }}
+        .navbar-brand:hover {{
+            color: var(--link);
+        }}
+        .navbar-brand-icon {{
+            width: 22px;
+            height: 22px;
+            border-radius: 4px;
+            flex-shrink: 0;
+        }}
         .navbar .user-info {{
             font-weight: 500;
+            text-align: center;
+            white-space: nowrap;
+        }}
+        .navbar .nav-links {{
+            display: flex;
+            justify-content: flex-end;
+            align-items: center;
+            flex-wrap: wrap;
+            min-width: 0;
         }}
         .navbar .nav-links a {{
             margin-left: 16px;
@@ -747,6 +842,19 @@ def render_note_page(handler, note_id: str, content: str, username: str = None, 
             user-select: none;
         }}
         @media (max-width: 640px) {{
+            .navbar {{
+                grid-template-columns: 1fr 1fr;
+                grid-template-areas:
+                    "brand links"
+                    "user  user";
+                row-gap: 6px;
+                column-gap: 12px;
+                padding: 8px 16px;
+            }}
+            .navbar-brand {{ grid-area: brand; }}
+            .navbar .user-info {{ grid-area: user; text-align: center; }}
+            .navbar .nav-links {{ grid-area: links; justify-content: flex-end; }}
+            form {{ padding-top: 88px; }}
             textarea {{
                 padding: 16px 18px;
                 font-size: 15px;
