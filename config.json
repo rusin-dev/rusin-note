@@ -43,6 +43,10 @@
     "enabled": true,
     "cdn": "https://cdn.jsdmirror.cn/npm/katex@0.18.4/dist"
   },
+  "code_highlight": {
+    "enabled": true,
+    "cdn": "https://cdn.jsdmirror.cn/gh/highlightjs/cdn-release@11.9.0/build"
+  },
   "password_policy": {
     "min_length": 8,
     "max_length": 128,

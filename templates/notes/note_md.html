@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block extra_head %}{{ latex_head|safe }}{% endblock %}
+{% block extra_head %}{{ latex_head|safe }}{{ code_highlight_head|safe }}{% endblock %}
 {% block content %}
 <h1>{{ title_label }} · {{ note_id|e }} <span style="font-size:0.6em; font-weight:400; color:#888;">{{ t('md_readonly') }}</span></h1>
 <div class="markdown-body" style="margin-top:20px; padding-bottom:40px;">

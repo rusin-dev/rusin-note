@@ -13,7 +13,8 @@ from ..store import (
     get_benben_posts,
     mark_benben_post,
 )
-from ..utils import render_markdown_html
+from ..i18n import t
+from ..utils import render_latex_head, render_markdown_html
 
 
 bp = Blueprint("benben", __name__)
@@ -50,6 +51,11 @@ def benben_get():
         max_length=config.BENBEN_MAX_LENGTH,
         page_size=config.BENBEN_PAGE_SIZE,
         current_user=get_current_user(),
+        preview_l10n={
+            "loadFailed": t(getattr(g, "lang", "zh"), "preview_load_failed"),
+            "renderFailed": t(getattr(g, "lang", "zh"), "preview_render_failed"),
+        },
+        latex_head=render_latex_head(),
     )
 
 
@@ -90,6 +96,11 @@ def benben_post():
             max_length=config.BENBEN_MAX_LENGTH,
             page_size=config.BENBEN_PAGE_SIZE,
             current_user=get_current_user(),
+            preview_l10n={
+                "loadFailed": t(lang, "preview_load_failed"),
+                "renderFailed": t(lang, "preview_render_failed"),
+            },
+            latex_head=render_latex_head(),
         ), 400
 
     if not content:

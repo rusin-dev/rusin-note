@@ -329,6 +329,7 @@ def register_i18n(app: Flask) -> None:
     """注册 Jinja2 全局上下文，使模板可直接用 {{ t('key') }} / {{ lang }} / {{ theme }} / {{ theme_script }} / {{ theme_vars }} / {{ current_user }} / {{ site_name }}"""
     from . import config as _cfg
     from .theme import THEME_VARS, get_theme_script
+    from .utils import render_code_highlight_head
 
     @app.context_processor
     def inject_globals():
@@ -342,6 +343,7 @@ def register_i18n(app: Flask) -> None:
             "theme_vars": THEME_VARS,
             "current_user": getattr(g, "current_user", None),
             "site_name": _cfg.SITE_NAME,
+            "code_highlight_head": render_code_highlight_head(),
         }
 
 

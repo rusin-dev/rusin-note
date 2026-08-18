@@ -7,7 +7,7 @@ from flask import Blueprint, redirect, render_template, url_for
 from .. import config
 from ..extensions import limiter
 from ..notes import read_note
-from ..utils import render_markdown_html
+from ..utils import render_latex_head, render_markdown_html
 from ._helpers import check_note_id
 
 
@@ -34,4 +34,5 @@ def short_link_md(note_id):
         title_label=None,
         back_url=url_for("world.world_note_get", note_id=note_id),
         back_label=None,
+        latex_head=render_latex_head(),
     )

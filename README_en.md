@@ -276,6 +276,11 @@ rusin-note:.
     - `cdn`：Base directory of KaTeX static files, default jsdelivr (e.g. BootCDN mirror for China: `https://cdn.bootcdn.net/ajax/libs/katex/0.16.11`).
 
     When enabled, Markdown read-only pages support `$...$` inline and `$$...$$` display math (KaTeX, client-side rendering, no server dependency).
+- `code_highlight`: code highlighting (highlight.js, client-side rendering).
+    - `enabled`: Enable highlighting, default `true`.
+    - `cdn`: Base directory of highlight.js static files, default jsdelivr's `@highlightjs/cdn-assets` package; China mirrors can use jsdmirror (e.g. `https://cdn.jsdmirror.cn/gh/highlightjs/cdn-release@11.9.0/build`).
+
+    When enabled, code blocks in all Markdown-rendered locations (note read-only pages, editor live preview, benben feed, disclaimer) get automatic syntax highlighting with line numbers, following the site's light/dark theme with no server dependency.
 - `password_policy`: password policy, defining the complexity requirements for guest passwords.  
    - `min_length`: minimum password length, default `8`;  
    - `max_length`: maximum password length, default `128` (hard cap `128`, preventing oversized passwords from entering the PBKDF2 slow hash and consuming CPU);  

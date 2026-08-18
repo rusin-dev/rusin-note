@@ -13,6 +13,7 @@
     <script defer src="https://cdn.jsdmirror.cn/npm/marked@12.0.2/marked.min.js"></script>
     <script defer src="https://cdn.jsdmirror.cn/npm/dompurify@3.1.7/dist/purify.min.js"></script>
     {{ latex_head|safe }}
+    {{ code_highlight_head|safe }}
     <style>
         {{ theme_vars|safe }}
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -231,6 +232,7 @@
                     });
                 }
                 previewBody.innerHTML = html;
+                if (window.CodeHighlight) window.CodeHighlight.apply(previewBody);
                 if (window.renderMathInElement) {
                     window.renderMathInElement(previewBody, {
                         delimiters: [

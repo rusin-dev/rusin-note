@@ -74,7 +74,7 @@
         .markdown-body { font-size: 16px; line-height: 1.6; }
         .markdown-body h1, .markdown-body h2, .markdown-body h3 { border-bottom: 1px solid var(--heading-border); padding-bottom: 6px; }
         .markdown-body ul, .markdown-body ol { padding-left: 2em; }
-        .markdown-body code { background: var(--code-bg); padding: 2px 6px; border-radius: 4px; }
+        .markdown-body code { background: var(--code-bg); padding: 2px 6px; border-radius: 4px; font-family: Consolas, Monaco, "Courier New", monospace; font-size: 0.9em; }
         .markdown-body pre { background: var(--code-bg); padding: 12px; border-radius: 4px; overflow-x: auto; }
         .markdown-body blockquote { border-left: 4px solid var(--quote-border); padding-left: 16px; color: var(--quote-text); }
         .markdown-body a { color: var(--link); }
@@ -110,7 +110,7 @@
         .home-card:hover .home-card-arrow { transform: translateX(4px); color: var(--hover); }
         {{ extra_css|safe }}
     </style>
-    {{ extra_head|safe }}
+    {% block extra_head %}{{ extra_head|safe }}{% endblock %}
 </head>
 <body>
     {% include "partials/_navbar.html" %}

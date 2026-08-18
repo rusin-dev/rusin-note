@@ -65,6 +65,10 @@ DEFAULT_CONFIG = {
         "enabled": True,
         "cdn": "https://cdn.jsdelivr.net/npm/katex@0.16.11/dist"
     },
+    "code_highlight": {
+        "enabled": True,
+        "cdn": "https://cdn.jsdelivr.net/npm/@highlightjs/cdn-assets@11.9.0"
+    },
     "password_policy": {
         "min_length": 8,
         "max_length": 128,
@@ -158,6 +162,13 @@ MAX_NOTE_ID_LENGTH = config.get("max_note_id_length", 250)
 LATEX_RENDER_ENABLED = config.get("latex_render", {}).get("enabled", True)
 LATEX_CDN = config.get("latex_render", {}).get(
     "cdn", "https://cdn.jsdelivr.net/npm/katex@0.16.11/dist")
+
+# 代码高亮配置（客户端 highlight.js 渲染，仿 latex_render 开关）
+# cdn 为 highlight.js 静态文件基础目录，自动拼接 styles/github.min.css、
+# styles/github-dark.min.css 与 highlight.min.js（浏览器 UMD 构建）
+CODE_HIGHLIGHT_ENABLED = config.get("code_highlight", {}).get("enabled", True)
+CODE_HIGHLIGHT_CDN = config.get("code_highlight", {}).get(
+    "cdn", "https://cdn.jsdelivr.net/npm/@highlightjs/cdn-assets@11.9.0")
 
 # socket 超时（秒）：防止慢速连接长期占用线程（BUG-008）
 SOCKET_TIMEOUT = 60
