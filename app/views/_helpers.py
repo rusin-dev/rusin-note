@@ -1,10 +1,26 @@
 """视图层共享的工具：note 上下文构建等"""
-from flask import g
+from flask import abort, g
 
 from .. import config
 from ..i18n import t
+from ..notes import validate_note_id
 from ..theme import get_theme_script, THEME_VARS
 from ..utils import format_note_time, render_latex_head
+
+
+def check_note_id(note_id: str) -> None:
+    """校验剪贴板名称（笔记 ID）。
+
+    长度超过 MAX_NOTE_ID_LENGTH 时以 400 结束并提示「URL 不合法」；
+    含点的视为文件类路径返回 404；其余非法名称返回通用 400。
+    """
+    if validate_note_id(note_id):
+        return
+    if len(note_id) > config.MAX_NOTE_ID_LENGTH:
+        abort(400, description=t(getattr(g, "lang", "zh"), "err_url_invalid"))
+    if "." in note_id:
+        abort(404)
+    abort(400)
 
 
 def build_note_context(

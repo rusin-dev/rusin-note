@@ -30,6 +30,8 @@ def validate_username(username: str) -> bool:
 def validate_note_id(note_id: str) -> bool:
     if note_id in FORBIDDEN_NOTE_IDS:
         return False
+    if not isinstance(note_id, str) or len(note_id) > config.MAX_NOTE_ID_LENGTH:
+        return False
     return bool(re.match(r'^[a-zA-Z0-9_\-]+$', note_id))
 
 

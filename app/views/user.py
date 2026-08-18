@@ -24,7 +24,7 @@ from ..store import (
     list_user_shares,
 )
 from ..utils import format_note_time, format_size, render_latex_head, render_markdown_html
-from ._helpers import build_note_context
+from ._helpers import build_note_context, check_note_id
 
 
 bp = Blueprint("user", __name__)
@@ -69,10 +69,9 @@ def user_new(username):
 @bp.route("/user/<username>/<note_id>/", methods=["GET"])
 @limiter.limit(lambda: f"{config.GET_RATE_MAX} per {config.GET_RATE_WINDOW} second")
 def user_note_get(username, note_id):
-    if not validate_username(username) or not validate_note_id(note_id):
-        if "." in note_id:
-            abort(404)
+    if not validate_username(username):
         abort(400)
+    check_note_id(note_id)
     _require_auth(username)
     content = read_note(username, note_id)
     ctx = build_note_context(note_id, username=username, mtime=get_note_mtime(username, note_id))
@@ -91,10 +90,9 @@ def user_note_get(username, note_id):
 @bp.route("/user/<username>/<note_id>/", methods=["POST"])
 @limiter.limit(lambda: f"{config.SAVE_RATE_MAX} per {config.SAVE_RATE_WINDOW} second")
 def user_note_post(username, note_id):
-    if not validate_username(username) or not validate_note_id(note_id):
-        if "." in note_id:
-            abort(404)
+    if not validate_username(username):
         abort(400)
+    check_note_id(note_id)
     _require_auth(username)
     content = request.form.get("content", "")
     if not write_note(username, note_id, content):
@@ -106,8 +104,9 @@ def user_note_post(username, note_id):
 @bp.route("/user/<username>/<note_id>.md", methods=["GET"])
 @limiter.limit(lambda: f"{config.GET_RATE_MAX} per {config.GET_RATE_WINDOW} second")
 def user_md(username, note_id):
-    if not validate_username(username) or not validate_note_id(note_id):
+    if not validate_username(username):
         abort(400)
+    check_note_id(note_id)
     _require_auth(username)
     content = read_note(username, note_id)
     lang = getattr(g, "lang", "zh")
@@ -142,6 +141,8 @@ def shares_post(username):
     _require_auth(username)
     note_id = request.form.get("note_id", "").strip()
     editable = request.form.get("editable", "0") in ("1", "on", "true")
+    if len(note_id) > config.MAX_NOTE_ID_LENGTH:
+        return _render_shares(username, error=t(getattr(g, "lang", "zh"), "err_url_invalid")), 400
     if not validate_note_id(note_id):
         return _render_shares(username, error=t(getattr(g, "lang", "zh"), "err_share_invalid_note")), 400
     note_path = get_note_path(username, note_id)

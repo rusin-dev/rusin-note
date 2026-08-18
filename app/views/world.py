@@ -11,11 +11,10 @@ from ..notes import (
     generate_random_id,
     get_note_mtime,
     read_note,
-    validate_note_id,
     write_note,
 )
 from ..utils import render_latex_head, render_markdown_html
-from ._helpers import build_note_context
+from ._helpers import build_note_context, check_note_id
 
 
 bp = Blueprint("world", __name__)
@@ -32,10 +31,7 @@ def world_new():
 @bp.route("/world/<note_id>", methods=["GET"])
 @limiter.limit(lambda: f"{config.GET_RATE_MAX} per {config.GET_RATE_WINDOW} second")
 def world_note_get(note_id):
-    if not validate_note_id(note_id):
-        if "." in note_id:
-            abort(404)
-        abort(400)
+    check_note_id(note_id)
     content = read_note("public", note_id)
     ctx = build_note_context(note_id, is_world=True, mtime=get_note_mtime("public", note_id))
     return render_template(
@@ -51,10 +47,7 @@ def world_note_get(note_id):
 @bp.route("/world/<note_id>", methods=["POST"])
 @limiter.limit(lambda: f"{config.SAVE_RATE_MAX} per {config.SAVE_RATE_WINDOW} second")
 def world_note_post(note_id):
-    if not validate_note_id(note_id):
-        if "." in note_id:
-            abort(404)
-        abort(400)
+    check_note_id(note_id)
     content = request.form.get("content", "")
     if not write_note("public", note_id, content):
         abort(500)
@@ -65,8 +58,7 @@ def world_note_post(note_id):
 @bp.route("/world/<note_id>.md", methods=["GET"])
 @limiter.limit(lambda: f"{config.GET_RATE_MAX} per {config.GET_RATE_WINDOW} second")
 def world_md(note_id):
-    if not validate_note_id(note_id):
-        abort(400)
+    check_note_id(note_id)
     content = read_note("public", note_id)
     lang = getattr(g, "lang", "zh")
     return render_template(
