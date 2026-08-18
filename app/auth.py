@@ -7,7 +7,14 @@ import secrets
 from threading import Thread
 
 from . import config
-from .store import sessions, sessions_lock, save_sessions
+from .store import (
+    delete_sessions_if,
+    reload_sessions,
+    remove_session,
+    sessions,
+    sessions_lock,
+    store_session,
+)
 from .logger import create_logger
 
 # BUG-9: 使用 PBKDF2-HMAC-SHA256 慢哈希（≥10 万次迭代），并加大盐长度。
@@ -64,28 +71,34 @@ def hash_token(token: str) -> str:
 
 
 def create_session(username: str) -> str:
-    """创建会话，返回原始token，存储时使用哈希作为键"""
+    """创建会话，返回原始token，存储时使用哈希作为键（跨进程安全落盘）"""
     token = generate_session_token()
     token_hash = hash_token(token)
-    with sessions_lock:
-        sessions[token_hash] = {
-            "username": username,
-            "created_at": time.time()
-        }
-    save_sessions()
+    store_session(token_hash, {
+        "username": username,
+        "created_at": time.time()
+    })
     return token
 
 
 def delete_session(token: str):
-    token_hash = hash_token(token)
-    with sessions_lock:
-        if token_hash in sessions:
-            del sessions[token_hash]
-    save_sessions()
+    remove_session(hash_token(token))
+
+
+# 多进程部署下，本进程内存中的 sessions 可能与磁盘（其它 worker 写入）不一致。
+# 读取前周期性重载：保证其它 worker 创建的会话可见、登出/过期立即生效。
+_SESSIONS_RESYNC_INTERVAL = 2.0
+_last_sessions_resync = 0.0
 
 
 def get_session_user(token: str) -> str | None:
     """验证token，返回用户名，若超时或不存在则返回None"""
+    global _last_sessions_resync
+    now = time.time()
+    if now - _last_sessions_resync >= _SESSIONS_RESYNC_INTERVAL:
+        _last_sessions_resync = now
+        reload_sessions()
+
     token_hash = hash_token(token)
     expired = False
     with sessions_lock:
@@ -98,15 +111,10 @@ def get_session_user(token: str) -> str | None:
         # 检查超时
         created_at = session.get("created_at")
         if config.SESSION_TIMEOUT_ENABLED and isinstance(created_at, (int, float)):
-            elapsed = time.time() - created_at
-            if elapsed > config.SESSION_TIMEOUT_SECONDS:
-                # 删除过期会话
-                del sessions[token_hash]
-                # BUG-01: save_sessions 会再次获取 sessions_lock（threading.Lock 不可重入），
-                # 必须在持锁块外调用，否则死锁导致处理线程永久挂起
+            if time.time() - created_at > config.SESSION_TIMEOUT_SECONDS:
                 expired = True
     if expired:
-        save_sessions()
+        remove_session(token_hash)
         return None
     return username
 
@@ -118,22 +126,19 @@ def purge_expired_sessions() -> int:
         return 0
     now = time.time()
     cutoff = now - config.SESSION_TIMEOUT_SECONDS
-    expired = []
-    with sessions_lock:
-        for token_hash, sess in sessions.items():
-            if not isinstance(sess, dict):
-                continue
-            created_at = sess.get("created_at")
-            if not isinstance(created_at, (int, float)):
-                continue  # 损坏/旧版数据，跳过（BUG-7）
-            if created_at < cutoff:
-                expired.append(token_hash)
-        for token_hash in expired:
-            del sessions[token_hash]
-    if expired:
-        save_sessions()
-        logger.info(f"[清除] 已清除 {len(expired)} 个过期会话")
-    return len(expired)
+
+    def _is_expired(_hash, sess):
+        if not isinstance(sess, dict):
+            return False  # 损坏/旧版数据，跳过（BUG-7）
+        created_at = sess.get("created_at")
+        if not isinstance(created_at, (int, float)):
+            return False
+        return created_at < cutoff
+
+    removed = delete_sessions_if(_is_expired)
+    if removed:
+        logger.info(f"[清除] 已清除 {removed} 个过期会话")
+    return removed
 
 
 def session_cleanup_loop():

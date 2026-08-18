@@ -15,7 +15,7 @@ from ..auth import (
 from ..extensions import limiter
 from ..i18n import LANG_COOKIE
 from ..notes import RESERVED_USERNAMES, validate_username
-from ..store import save_users, users, users_lock
+from ..store import get_user, register_user
 from ..middleware import get_session_token
 
 
@@ -27,15 +27,12 @@ def _set_session_cookie(resp, token: str):
         max_age = int(config.SESSION_TIMEOUT_SECONDS)
     else:
         max_age = config.COOKIE_MAX_AGE_DEFAULT
-    cookie = f"session={token}; Path=/; Max-Age={max_age}; HttpOnly; SameSite=Lax"
-    if config.SECURE_COOKIES:
-        cookie += "; Secure"
-    resp.set_cookie("session", value=token, max_age=max_age, httponly=True, samesite="Lax",
-                    secure=config.SECURE_COOKIES, path="/")
+    resp.set_cookie(config.SESSION_COOKIE, value=token, max_age=max_age, httponly=True,
+                    samesite="Lax", secure=config.SECURE_COOKIES, path="/")
 
 
 def _clear_session_cookie(resp):
-    resp.delete_cookie("session", path="/")
+    resp.delete_cookie(config.SESSION_COOKIE, path="/")
 
 
 # ---------- GET ----------
@@ -105,13 +102,10 @@ def register_post():
         msg = t(lang, "err_password_weak", req=req_desc)
         return render_template("auth/register.html", error=msg), 400
 
-    with users_lock:
-        if username in users:
-            return render_template("auth/register.html", error="err_username_taken"), 400
-        salt = generate_salt()
-        hashed = hash_password(password, salt)
-        users[username] = {"salt": salt, "hash": hashed}
-    save_users()
+    salt = generate_salt()
+    hashed = hash_password(password, salt)
+    if not register_user(username, {"salt": salt, "hash": hashed}):
+        return render_template("auth/register.html", error="err_username_taken"), 400
 
     token = create_session(username)
     resp = make_response(redirect(f"/user/{username}/new"))
@@ -128,8 +122,7 @@ def login_post():
     if len(password) > config.PW_MAX_LENGTH:
         return render_template("auth/login.html", error="err_login_failed"), 401
 
-    with users_lock:
-        user = users.get(username)
+    user = get_user(username)
 
     salt = user.get("salt") if isinstance(user, dict) else None
     hashed = user.get("hash") if isinstance(user, dict) else None

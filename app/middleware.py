@@ -41,10 +41,11 @@ def get_theme_from_cookie() -> str | None:
 
 def get_session_token() -> str | None:
     cookie = request.headers.get("Cookie", "")
+    prefix = f"{config.SESSION_COOKIE}="
     for pair in cookie.split(";"):
         pair = pair.strip()
-        if pair.startswith("session="):
-            return pair[len("session="):]
+        if pair.startswith(prefix):
+            return pair[len(prefix):]
     return None
 
 
