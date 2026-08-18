@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% block extra_head %}
+<style>
+    .benben-post { border: 1px solid var(--card-border); border-radius: 8px; padding: 12px 16px; margin-bottom: 12px; background: var(--card-bg); }
+    .benben-head { font-weight: 500; margin-bottom: 6px; }
+    .benben-time { color: var(--muted); font-size: 13px; font-weight: 400; margin-left: 8px; }
+    .benben-body { font-size: 15px; word-break: break-word; max-height: {{ max_height_px }}px; overflow-y: auto; }
+    .benben-form { max-width: 720px; margin: 16px 0 24px; }
+    .benben-more { text-align: center; margin-top: 16px; }
+    .benben-preview { border: 1px dashed var(--border); border-radius: 8px; padding: 12px 16px; margin-bottom: 16px; background: var(--card-bg); font-size: 15px; word-break: break-word; display: none; }
+</style>
+{{ latex_head|safe }}
+<script defer src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    var L10N = {{ preview_l10n|tojson }};
+    var ta = document.getElementById('benbenInput');
+    var pre = document.getElementById('benbenPreview');
+    if (!ta || !pre) return;
+    var timer = null;
+    function renderPreview() {
+        var text = ta.value.trim();
+        if (!text) { pre.style.display = 'none'; return; }
+        if (!window.marked) { pre.textContent = L10N.loadFailed; pre.style.display = 'block'; return; }
+        var html = '';
+        try { html = window.marked.parse(text); } catch (e) { html = '<p class="error">' + L10N.renderFailed + '</p>'; }
+        var tmp = document.createElement('div');
+        tmp.innerHTML = html;
+        tmp.querySelectorAll('script, iframe, object, embed, link, meta, style').forEach(function(el) { el.remove(); });
+        tmp.querySelectorAll('*').forEach(function(el) {
+            ['onerror','onclick','onload','onmouseover','onmouseout','onfocus','onblur','onchange','onsubmit'].forEach(function(a) { el.removeAttribute(a); });
+        });
+        tmp.querySelectorAll('a').forEach(function(a) {
+            a.setAttribute('rel', 'noopener noreferrer');
+            var href = a.getAttribute('href') || '';
+            if (!/^(https?:|mailto:|#)/i.test(href)) a.removeAttribute('href');
+        });
+        pre.innerHTML = tmp.innerHTML;
+        pre.style.display = 'block';
+        if (window.renderMathInElement) {
+            try {
+                window.renderMathInElement(pre, {
+                    delimiters: [
+                        {left: '$$', right: '$$', display: true},
+                        {left: '$', right: '$', display: false},
+                        {left: '\\(', right: '\\)', display: false},
+                        {left: '\\[', right: '\\]', display: true}
+                    ],
+                    throwOnError: false
+                });
+            } catch (e) {}
+        }
+    }
+    ta.addEventListener('input', function() { clearTimeout(timer); timer = setTimeout(renderPreview, 300); });
+    renderPreview();
+});
+</script>
+{% endblock %}
+{% block content %}
+<h1>{{ t('benben_title') }}</h1>
+<p style="color: var(--muted); margin: 12px 0 16px;">{{ t('benben_page_info', page=page, size=page_size) }}</p>
+{% if error %}<p class="error">{{ error }}</p>{% endif %}
+{% if current_user %}
+<form method="POST" action="/benben" class="benben-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="form-group">
+        <label>{{ t('benben_label', max=max_length) }}</label>
+        <textarea name="content" id="benbenInput" rows="4" maxlength="{{ max_length }}">{{ prefill|e }}</textarea>
+    </div>
+    <div id="benbenPreview" class="benben-preview markdown-body"></div>
+    <button type="submit" style="width:auto;">{{ t('benben_submit') }}</button>
+</form>
+{% else %}
+<p style="color: var(--muted);">{{ t('benben_readonly') }}</p>
+{% endif %}
+<div class="benben-list">
+    {% for item in items %}
+    <div class="benben-post">
+        <div class="benben-head">{{ item.username|e }}<span class="benben-time">{{ item.time_str }}</span></div>
+        <div class="benben-body markdown-body">{{ item.content_html|safe }}</div>
+    </div>
+    {% else %}
+    <p class="empty">{{ t('benben_empty') }}</p>
+    {% endfor %}
+</div>
+{% if has_more %}
+<p class="benben-more"><a href="/benben?page={{ page + 1 }}">{{ t('benben_more') }}</a></p>
+{% else %}
+<p class="benben-more empty">{{ t('benben_no_more') }}</p>
+{% endif %}
+{% endblock %}

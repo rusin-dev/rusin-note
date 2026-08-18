@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>{{ t('stats_title') }}</h1>
+<div class="stat-grid">
+    <div class="stat-card">
+        <h3>{{ t('stats_public') }}</h3>
+        <div class="number">{{ pub_cnt }}</div>
+        <div class="detail">{{ t('stats_total_size', size=pub_size) }}</div>
+    </div>
+    <div class="stat-card">
+        <h3>{{ t('stats_private') }}</h3>
+        <div class="number">{{ priv_cnt }}</div>
+        <div class="detail">{{ t('stats_total_size', size=priv_size) }}</div>
+    </div>
+    <div class="stat-card">
+        <h3>{{ t('stats_users') }}</h3>
+        <div class="number">{{ user_cnt }}</div>
+        <div class="detail">{{ t('stats_users_detail') }}</div>
+    </div>
+    <div class="stat-card">
+        <h3>{{ t('stats_benben') }}</h3>
+        <div class="number">{{ benben_cnt }}</div>
+        <div class="detail">{{ t('stats_benben_detail') }}</div>
+    </div>
+</div>
+<p style="margin-top: 24px;"><a href="/">{{ t('back_home') }}</a></p>
+{% endblock %}

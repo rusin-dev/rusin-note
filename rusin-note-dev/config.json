@@ -1,0 +1,66 @@
+{
+  "max_note_size_kb": 512,
+  "sitename": "如形の笔记",
+  "rate_limit": {
+    "window_seconds": 60,
+    "max_requests": 30
+  },
+  "get_rate_limit": {
+    "window_seconds": 60,
+    "max_requests": 45
+  },
+  "save_rate_limit": {
+    "window_seconds": 60,
+    "max_requests": 120
+  },
+  "register_rate_limit": {
+    "window_seconds": 120,
+    "max_requests": 1
+  },
+  "trust_proxy_headers": false,
+  "secure_cookies": false,
+  "id_generation": {
+    "length": 4,
+    "use_uppercase": false,
+    "use_lowercase": true,
+    "use_digits": false
+  },
+  "share_token": {
+    "length": 64,
+    "use_uppercase": true,
+    "use_lowercase": true,
+    "use_digits": true
+  },
+  "session_timeout": {
+    "enabled": false,
+    "minutes": 1440
+  },
+  "note_expiration": {
+    "enabled": false,
+    "hours": 24
+  },
+  "latex_render": {
+    "enabled": true,
+    "cdn": "https://cdn.jsdelivr.net/npm/katex@0.16.11/dist"
+  },
+  "password_policy": {
+    "min_length": 8,
+    "max_length": 128,
+    "require_uppercase": true,
+    "require_lowercase": true,
+    "require_digits": true,
+    "require_special": true
+  },
+  "benben": {
+    "max_length": 1024,
+    "page_size": 50,
+    "cooldown_seconds": 3,
+    "max_height_px": 1000
+  },
+  "max_note_id_length": 250,
+  "logger": {
+    "max_size": 4294967296,
+    "path_pattern": "log/{timestamp}.log"
+  },
+  "debug": false
+}

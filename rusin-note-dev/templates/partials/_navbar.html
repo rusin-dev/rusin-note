@@ -1,0 +1,34 @@
+<div class="navbar">
+    <a class="navbar-brand" href="/" title="Home">
+        <img src="/favicon.ico" alt="" class="navbar-brand-icon">
+        <span class="navbar-brand-name">{{ (site_name or 'rusin-note')|e }}</span>
+    </a>
+    {% if current_user %}
+        <span class="user-info">{{ t('nav_user_prefix')|e }}{{ current_user|e }}</span>
+        <span class="nav-links">
+            <a herf="https://github.com/rusin-dev/rusin-note">Github</a>
+            <a href="/user/{{ current_user|e }}/"><i class="fa-solid fa-file-lines" aria-hidden="true"></i>{{ t('nav_my_notes') }}</a>
+            <a href="/user/{{ current_user|e }}/new"><i class="fa-solid fa-square-plus" aria-hidden="true"></i>{{ t('nav_new_note') }}</a>
+            <a href="/user/{{ current_user|e }}/shares/"><i class="fa-solid fa-share-nodes" aria-hidden="true"></i>{{ t('nav_share_mgmt') }}</a>
+            <a href="/benben"><i class="fa-solid fa-sticky-note" aria-hidden="true"></i>{{ t('nav_benben') }}</a>
+            <a href="/logout"><i class="fa-solid fa-right-from-bracket" aria-hidden="true"></i>{{ t('nav_logout') }}</a>
+            <a href="{{ lang_switch_url }}"><i class="fa-solid fa-language" aria-hidden="true"></i>{{ t('lang_switch') }}</a>
+            <button type="button" id="themeBtn" class="theme-toggle" onclick="toggleTheme()">
+                <i class="fa-solid {% if theme == 'dark' %}fa-sun{% else %}fa-moon{% endif %}" aria-hidden="true"></i>
+            </button>
+        </span>
+    {% else %}
+        <span class="user-info">{{ t('nav_anonymous') }}</span>
+        <span class="nav-links">
+            <a href="/register"><i class="fa-solid fa-user-plus" aria-hidden="true"></i>{{ t('nav_register') }}</a>
+            <a href="/login"><i class="fa-solid fa-right-to-bracket" aria-hidden="true"></i>{{ t('nav_login') }}</a>
+            <a href="/benben"><i class="fa-solid fa-sticky-note" aria-hidden="true"></i>{{ t('nav_benben') }}</a>
+            <a href="/count"><i class="fa-solid fa-chart-simple" aria-hidden="true"></i>{{ t('nav_stats') }}</a>
+            <a href="/disclaimer"><i class="fa-solid fa-circle-info" aria-hidden="true"></i>{{ t('nav_disclaimer') }}</a>
+            <a href="{{ lang_switch_url }}"><i class="fa-solid fa-language" aria-hidden="true"></i>{{ t('lang_switch') }}</a>
+            <button type="button" id="themeBtn" class="theme-toggle" onclick="toggleTheme()">
+                <i class="fa-solid {% if theme == 'dark' %}fa-sun{% else %}fa-moon{% endif %}" aria-hidden="true"></i>
+            </button>
+        </span>
+    {% endif %}
+</div>
