@@ -18,6 +18,41 @@ from .middleware import register_request_hooks
 from .views import register_blueprints
 
 
+def _load_or_create_secret_key() -> str:
+    """持久化 SECRET_KEY：多 worker/多次重启共用同一密钥（否则 CSRF 签名跨进程随机失效）。
+
+    优先级：环境变量 RUSIN_SECRET_KEY > DATA_DIR/.secret_key 文件（原子独占创建）。
+    """
+    key_file = config.data_path(".secret_key")
+    key = None
+    try:
+        fd = os.open(key_file, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        try:
+            key = secrets.token_hex(32)
+            os.write(fd, key.encode("utf-8"))
+            os.fsync(fd)
+        finally:
+            os.close(fd)
+        try:
+            os.chmod(key_file, 0o600)
+        except OSError:
+            pass
+    except FileExistsError:
+        pass
+    except OSError:
+        pass
+    if key is None:
+        try:
+            with open(key_file, "r", encoding="utf-8") as f:
+                key = f.read().strip()
+        except (IOError, OSError):
+            key = None
+    if not key:
+        # 兜底：无法持久化时退回随机密钥（仅影响重启/多 worker 一致性）
+        key = secrets.token_hex(32)
+    return key
+
+
 def create_app() -> Flask:
     app = Flask(
         __name__,
@@ -27,7 +62,7 @@ def create_app() -> Flask:
 
     secret = os.environ.get("RUSIN_SECRET_KEY")
     if not secret:
-        secret = secrets.token_hex(32)
+        secret = _load_or_create_secret_key()
 
     app.config.update(
         SECRET_KEY=secret,
