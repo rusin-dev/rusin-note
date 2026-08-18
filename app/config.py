@@ -79,6 +79,7 @@ DEFAULT_CONFIG = {
         "cooldown_seconds": 3,
         "max_height_px": 1000
     },
+    "max_note_id_length": 250,
     "logger": {
         "max_size": 4294967296,
         "path": "log/"
@@ -145,6 +146,9 @@ NOTE_EXPIRATION_HOURS = config.get("note_expiration", {}).get("hours", 24)
 NOTE_EXPIRATION_SECONDS = NOTE_EXPIRATION_HOURS * 3600
 # 后台过期笔记清理线程的扫描间隔（秒）
 NOTE_CLEANUP_INTERVAL = 1800
+
+# 剪贴板名称（笔记 ID）最大长度：超过该长度的 URL 视为不合法
+MAX_NOTE_ID_LENGTH = config.get("max_note_id_length", 250)
 
 # LaTeX 公式渲染配置（客户端 KaTeX 渲染，洛谷同款，仅影响 Markdown 只读页面）
 # cdn 为 KaTeX 静态文件基础目录，自动拼接 katex.min.css / katex.min.js / contrib/auto-render.min.js

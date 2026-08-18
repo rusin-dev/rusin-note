@@ -132,6 +132,7 @@ STRINGS = {
         "err_share_invalid_note": "请选择有效的笔记",
         "err_share_note_missing": "笔记不存在，请选择已有的笔记",
         "err_share_delete": "删除失败：分享不存在或无权删除",
+        "err_url_invalid": "URL 不合法",
         "share_edit_hint": " 可编辑分享：保存后将写入分享者原笔记",
         # 犇犇
         "benben_title": "犇犇",
@@ -268,6 +269,7 @@ STRINGS = {
         "err_share_invalid_note": "Please select a valid note",
         "err_share_note_missing": "Note does not exist, please select an existing one",
         "err_share_delete": "Delete failed: share not found or not yours",
+        "err_url_invalid": "Invalid URL",
         "share_edit_hint": " Editable share: saves will be written back to the owner's note",
         # Benben
         "benben_title": "Benben",
