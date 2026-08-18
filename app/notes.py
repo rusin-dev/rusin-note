@@ -3,6 +3,7 @@ import os
 import re
 import time
 import random
+from threading import Lock
 
 from . import config
 from .store import NOTES_BASE, count_benben_posts, users
@@ -11,7 +12,7 @@ from .logger import create_logger
 logger = create_logger("notes")
 
 # 禁止的笔记ID（与路由冲突）
-FORBIDDEN_NOTE_IDS = {"user", "world", "shares"}
+FORBIDDEN_NOTE_IDS = {"user", "world", "shares", "login", "register"}
 
 # 保留用户名（与固定路由或 notes/ 目录冲突，禁止注册）
 # 注意：public 与公开笔记存储目录 notes/public/ 冲突，必须保留
@@ -29,6 +30,8 @@ def validate_username(username: str) -> bool:
 
 def validate_note_id(note_id: str) -> bool:
     if note_id in FORBIDDEN_NOTE_IDS:
+        return False
+    if not isinstance(note_id, str) or len(note_id) > config.MAX_NOTE_ID_LENGTH:
         return False
     return bool(re.match(r'^[a-zA-Z0-9_\-]+$', note_id))
 
@@ -99,19 +102,43 @@ def get_note_size(username: str, note_id: str) -> int | None:
         return None
 
 
+# 按笔记路径隔离的写入锁（线程内互斥，保证同一笔记的保存顺序，避免慢写入覆盖新写入）
+_note_locks_guard = Lock()
+_note_locks: dict[str, Lock] = {}
+
+
+def _get_note_lock(path: str) -> Lock:
+    with _note_locks_guard:
+        lock = _note_locks.get(path)
+        if lock is None:
+            lock = Lock()
+            _note_locks[path] = lock
+        return lock
+
+
 def write_note(username: str, note_id: str, content: str) -> bool:
     path = get_note_path(username, note_id)
     if path is None:
         return False
+    with _get_note_lock(path):
+        return _write_note_locked(path, content)
+
+
+def _write_note_locked(path: str, content: str) -> bool:
     if content == "":
         try:
             if os.path.exists(path):
                 os.remove(path)
             return True
+        except FileNotFoundError:
+            # 并发保存时另一请求已删除该文件，视为删除成功
+            return True
         except OSError:
             return False
+    # 唯一临时文件（进程 PID + 随机数）：避免并发保存同一笔记时共享 .tmp，
+    # 一方 os.replace 后另一方再 replace 抛 FileNotFoundError，导致偶发 500
+    temp_path = f"{path}.{os.getpid()}.{random.randrange(1 << 32):08x}.tmp"
     try:
-        temp_path = path + ".tmp"
         with open(temp_path, "w", encoding="utf-8") as f:
             f.write(content)
             f.flush()
@@ -122,7 +149,7 @@ def write_note(username: str, note_id: str, content: str) -> bool:
         try:
             if os.path.exists(temp_path):
                 os.remove(temp_path)
-        except:
+        except OSError:
             pass
         return False
 

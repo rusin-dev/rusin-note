@@ -41,7 +41,7 @@
   },
   "latex_render": {
     "enabled": true,
-    "cdn": "https://cdn.jsdelivr.net/npm/katex@0.16.11/dist"
+    "cdn": "https://cdn.jsdmirror.cn/npm/katex@0.18.4/dist"
   },
   "password_policy": {
     "min_length": 8,
@@ -57,6 +57,7 @@
     "cooldown_seconds": 3,
     "max_height_px": 1000
   },
+  "max_note_id_length": 250,
   "logger": {
     "max_size": 4294967296,
     "path_pattern": "log/{timestamp}.log"

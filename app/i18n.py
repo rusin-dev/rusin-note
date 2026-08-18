@@ -51,7 +51,7 @@ STRINGS = {
         # 注册
         "register_title": "注册",
         "reg_username_label": "用户名",
-        "reg_password_label": "密码 (要求: {req})",
+        "reg_password_label": "密码",
         "reg_confirm_label": "确认密码",
         "reg_submit": "注册",
         "reg_have_account": "已有账号？登录",
@@ -132,6 +132,7 @@ STRINGS = {
         "err_share_invalid_note": "请选择有效的笔记",
         "err_share_note_missing": "笔记不存在，请选择已有的笔记",
         "err_share_delete": "删除失败：分享不存在或无权删除",
+        "err_url_invalid": "URL 不合法",
         "share_edit_hint": " 可编辑分享：保存后将写入分享者原笔记",
         # 犇犇
         "benben_title": "犇犇",
@@ -186,8 +187,8 @@ STRINGS = {
         "home_github_desc": "Fully open source. Star it and contribute!",
         # Register
         "register_title": "Register",
-        "reg_username_label": "Username (letters, digits, _, -; reserved keywords not allowed)",
-        "reg_password_label": "Password (requires: {req})",
+        "reg_username_label": "Username",
+        "reg_password_label": "Password",
         "reg_confirm_label": "Confirm Password",
         "reg_submit": "Register",
         "reg_have_account": "Already have an account? Log in",
@@ -268,6 +269,7 @@ STRINGS = {
         "err_share_invalid_note": "Please select a valid note",
         "err_share_note_missing": "Note does not exist, please select an existing one",
         "err_share_delete": "Delete failed: share not found or not yours",
+        "err_url_invalid": "Invalid URL",
         "share_edit_hint": " Editable share: saves will be written back to the owner's note",
         # Benben
         "benben_title": "Benben",

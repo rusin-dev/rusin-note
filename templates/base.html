@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{ full_title|default(title)|e }}{% if site_name %} | {{ site_name|e }}{% endif %}</title>
+    <title>{% if full_title or title %}{{ full_title|default(title)|e }} | {% endif %}{{ site_name|e }}</title>
     <link rel="icon" href="/favicon.ico" type="image/x-icon">
     <link rel="preload" href="https://cdn.jsdmirror.cn/npm/@fortawesome/fontawesome-free@6.5.2/webfonts/fa-solid-900.woff2" as="font" type="font/woff2" crossorigin>
     <link rel="preload" href="https://cdn.jsdmirror.cn/npm/@fortawesome/fontawesome-free@6.5.2/webfonts/fa-brands-400.woff2" as="font" type="font/woff2" crossorigin>

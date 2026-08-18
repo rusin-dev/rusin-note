@@ -272,7 +272,7 @@ rusin-note:.
     开启后，超过设定小时数未被修改的剪贴板（公开+私有）将被后台线程自动删除，每 30 分钟扫描一次。
 - `latex_render` LaTeX 公式渲染。
    - `enabled` ：是否开启，默认 `true`；
-   - `cdn` ：KaTeX 静态文件基础目录，默认 jsdelivr（国内可换用 BootCDN：`https://cdn.bootcdn.net/ajax/libs/katex/0.16.11`）；
+   - `cdn` ：KaTeX 静态文件基础目录，默认 jsdelivr；
 
     开启后，Markdown 只读页面支持 `$...$` 行内公式与 `$$...$$` 块级公式（KaTeX 洛谷同款，客户端渲染，无需服务端依赖）。
 - `password_policy`：密码策略，定义访客密码的复杂度要求。  

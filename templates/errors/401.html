@@ -1,5 +1,11 @@
 {% extends "base.html" %}
 {% block content %}
-<h1>{{ t('auth_required_title') }}</h1>
-<p>{% if shares %}{{ t('auth_required_body_shares') }}{% else %}{{ t('auth_required_body') }}{% endif %}</p>
+<center><img src="https://vjudge.net/static/bundle/0a6fd055fc93cf088685.gif">&nbsp;&nbsp;&nbsp;
+<img src="https://vjudge.net/static/bundle/dda63739bf980acb02eb.gif">&nbsp;&nbsp;&nbsp;
+<img src="https://vjudge.net/static/bundle/aefa23944a61f63d7b1f.gif">&nbsp;&nbsp;&nbsp;
+<img src="https://vjudge.net/static/bundle/b6ddd3c30025e489da46.gif">&nbsp;&nbsp;&nbsp;
+<img src="https://vjudge.net/static/bundle/b919d41b16809efb2d09.gif"></center>
+<center><p><img src="https://vjudge.net/static/bundle/b3bb0b0cf13cd630088c.jpg" alt="悲剧" width="500"></p></center>
+<center><h1><span style="color: rgb(204, 85, 16); ">401 {{ t('auth_required_title') }}</span></h1></center>
+<center><p>{% if shares %}{{ t('auth_required_body_shares') }}{% else %}{{ t('auth_required_body') }}{% endif %}</p></center>
 {% endblock %}
