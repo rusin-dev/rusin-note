@@ -30,3 +30,4 @@ benben.json
 
 # 其他
 note/
+.secret_key

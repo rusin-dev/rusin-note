@@ -25,8 +25,9 @@ Rusin-Note 是一个受 note.ms 启发的轻量级云端剪贴板 / 在线记事
 | `users.json` | 用户 | `{username: {salt, hash}}`，hash 为 PBKDF2 格式 |
 | `sessions.json` | 会话 | `{sha256(token): {username, created_at}}` |
 | `shares.json` | 分享链接 | `{token: {owner, note_id, created_at, editable, views}}` |
-| `benben.json` | 犇犇动态 | `[{username, content, time, ip}]`，旧→新 |
 | `log/` | 日志 | `log/{timestamp}.log`，RotatingFileHandler |
+
+犇犇动态为**纯内存存储**（`store.benben_posts`，重启清空，不再落盘，也没有 `benben.json`）。
 
 所有 JSON 写入走 `store._atomic_json_dump`（临时文件 + flush + fsync + `os.replace`）。并发用 `threading.Lock`（`users_lock`/`sessions_lock`/`shares_lock`/`benben_lock`）。注意：`threading.Lock` 不可重入——持锁块内绝不能调用 `save_sessions()` 等会再次加锁的函数（见 `auth.get_session_user` 的 BUG-01 注释）。
 
@@ -60,7 +61,7 @@ Rusin-Note 是一个受 note.ms 启发的轻量级云端剪贴板 / 在线记事
 | `i18n.py` | 中英双语：`STRINGS` 字典（zh/en 成对），`t(lang, key)` 取翻译（缺 key 返回 key 本身）；语言检测 Cookie `rusin-lang` > Accept-Language > zh；`register_i18n` 注入模板全局 `t`/`lang`/`theme`/`current_user`/`site_name` 等 |
 | `theme.py` | 暗色主题 CSS 变量（`THEME_VARS`）与切换脚本（Cookie + localStorage + 系统偏好）、favicon 内存缓存 |
 | `logger.py` | `create_logger(name)` 返回写入 `log/{timestamp}.log` 的 RotatingFileHandler 日志器 |
-| `utils.py` | `format_size`/`format_note_time` 格式化、`render_markdown_html`（markdown + bleach 清洗防 XSS）、`render_latex_head`（KaTeX CDN 引入）、`read_disclaimer` |
+| `utils.py` | `format_size`/`format_note_time` 格式化、`render_markdown_html`（markdown + codehilite/Pygments 高亮+行号 + bleach 清洗防 XSS）、`render_pygments_head`（亮/暗两套高亮 CSS，注入 base）、`render_latex_head`（KaTeX CDN 引入）、`read_disclaimer` |
 | `background.py` | 后台守护线程：会话清理、分享视图定期刷盘、过期笔记清理（`start_background_threads()` 一次性启动） |
 
 ## app/views/ 蓝图与路由
@@ -86,7 +87,7 @@ Rusin-Note 是一个受 note.ms 启发的轻量级云端剪贴板 / 在线记事
 - `auth/` 注册/登录；`notes/` 笔记（`note_edit.html` 编辑页、`note_md.html` Markdown 只读页、`user_list.html` 笔记列表）；`share/share_list.html` 分享管理；`benben/benben.html` 犇犇
 - `errors/` 错误页 400/401/404/429/500（403/413 复用 400 模板）
 
-模板可直接用 i18n 注入的全局：`{{ t('key') }}`、`{{ lang }}`、`{{ theme }}`、`{{ theme_script }}`、`{{ theme_vars }}`、`{{ current_user }}`、`{{ site_name }}`、`{{ lang_switch_url }}`。
+模板可直接用 i18n 注入的全局：`{{ t('key') }}`、`{{ lang }}`、`{{ theme }}`、`{{ theme_script }}`、`{{ theme_vars }}`、`{{ pygments_head }}`、`{{ current_user }}`、`{{ site_name }}`、`{{ lang_switch_url }}`。
 
 ## 安全与限流机制（改动时必须保持）
 
@@ -108,6 +109,7 @@ Rusin-Note 是一个受 note.ms 启发的轻量级云端剪贴板 / 在线记事
 - `latex_render`（KaTeX CDN，默认 jsdelivr，可换 BootCDN）
 - `password_policy`（密码复杂度）
 - `benben`（犇犇最大长度 1024 / 每页 50 / 冷却 3s / 最大高度 1000px）
+- `note_editor`（`live_preview_default` 编辑页实时渲染默认值，默认 false，访客可手动开、以 localStorage 记住）
 - `max_note_id_length`（250）、`logger`（日志大小/路径）、`debug`
 
 ## 常见改动点

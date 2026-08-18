@@ -5,7 +5,7 @@
 
 ## 技术栈
 - Python 3.10+, Flask 3, Flask-WTF, Flask-Limiter, waitress/gunicorn
-- Markdown 渲染：markdown + bleach（防 XSS）
+- Markdown 渲染：markdown + bleach（防 XSS）+ Pygments（代码高亮、行号）
 - 前端：Jinja2 模板，支持中英双语（i18n）
 
 ## 常用命令
@@ -19,7 +19,7 @@
 - `notes/`：笔记文件（公开/用户）
 - `users.json`、`sessions.json`：用户与会话
 - `shares.json`：分享链接
-- `benben.json`：动态消息
+- `benben.json`：动态消息（已改为内存态，重启清空，不再落盘）
 - `log/`：日志文件
 
 持久化采用原子写入（临时文件+`os.replace`），并发操作使用 `threading.Lock`。

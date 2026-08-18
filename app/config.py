@@ -18,6 +18,13 @@ except ImportError:
     bleach = None
     BLEACH_AVAILABLE = False
 
+try:
+    import pygments
+    PYGMENTS_AVAILABLE = True
+except ImportError:
+    pygments = None
+    PYGMENTS_AVAILABLE = False
+
 # ---------- 加载配置 ----------
 CONFIG_FILE = "config.json"
 DEFAULT_CONFIG = {
@@ -78,6 +85,9 @@ DEFAULT_CONFIG = {
         "page_size": 50,
         "cooldown_seconds": 3,
         "max_height_px": 1000
+    },
+    "note_editor": {
+        "live_preview_default": False
     },
     "max_note_id_length": 250,
     "logger": {
@@ -261,6 +271,12 @@ try:
         BENBEN_MAX_HEIGHT_PX = 1000
 except (TypeError, ValueError):
     BENBEN_MAX_HEIGHT_PX = 1000
+
+# ---------- 笔记编辑器配置 ----------
+# 实时渲染开关的默认值（访客可在编辑页手动切换，选择以 localStorage 记住）。
+# 默认 False：关闭实时渲染，访客需点击开关开启。
+NOTE_EDITOR_CFG = config.get("note_editor", DEFAULT_CONFIG["note_editor"])
+LIVE_PREVIEW_DEFAULT = bool(NOTE_EDITOR_CFG.get("live_preview_default", False))
 
 # ---------- 日志功能 ----------
 LOGGER_CFG = config.get("logger", DEFAULT_CONFIG["logger"])

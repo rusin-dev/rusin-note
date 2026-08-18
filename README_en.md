@@ -142,9 +142,10 @@ Do not mount the Volume to the project root, or it may hide the deployed applica
 /data/users.json
 /data/sessions.json
 /data/shares.json
-/data/benben.json
 /data/log/
 ```
+
+Benben posts are stored purely in memory and cleared on restart, so they do not need persistence.
 
 ## Project Structure
 
@@ -285,7 +286,7 @@ rusin-note:.
    - `require_special`: whether special characters (excluding `/ \ ( ) " '`) are required, default `true`;
 - `RUSIN_DATA_DIR`: optional environment variable for the runtime data directory, defaulting to the current project directory.
 
-   Notes, users, sessions, shares, benben posts, and logs are written under this directory as `notes/`, `users.json`, `sessions.json`, `shares.json`, `benben.json`, and `log/`. On auto-deploy platforms such as Zeabur, mount a persistent volume at `/data` and set `RUSIN_DATA_DIR=/data` to prevent clipboard data from being cleared on each deployment.
+   Notes, users, sessions, shares, and logs are written under this directory as `notes/`, `users.json`, `sessions.json`, `shares.json`, and `log/` (benben posts are stored purely in memory and cleared on restart). On auto-deploy platforms such as Zeabur, mount a persistent volume at `/data` and set `RUSIN_DATA_DIR=/data` to prevent clipboard data from being cleared on each deployment.
 - **Multi-language**: The interface supports Simplified Chinese and English. Language switch links (`/lang/zh` / `/lang/en`) are provided on the right side of the navbar; the preference is remembered via a cookie (`rusin-lang`); when unset, it falls back to the browser's `Accept-Language`, defaulting to Chinese. After switching, all site text (navbar, buttons, hints, error messages, benben previews, etc.) switches language instantly.
 - `benben` (feed at `/benben`, logged-in users can post, anonymous read-only).
    - `max_length`: max length of a single feed post (in **characters**), default `1024` (~1KB);

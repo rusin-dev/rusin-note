@@ -19,7 +19,7 @@
 - `notes/`：笔记文件（公开/用户）
 - `users.json`、`sessions.json`：用户与会话
 - `shares.json`：分享链接
-- `benben.json`：动态消息
+- `benben.json`：动态消息（已改为内存态，重启清空，不再落盘）
 - `log/`：日志文件
 
 持久化采用原子写入（临时文件+`os.replace`），并发操作使用 `threading.Lock`。
