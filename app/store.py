@@ -1,10 +1,76 @@
-"""用户/会话/分享的字典存储与原子持久化，以及笔记文件路径与分享业务"""
+"""用户/会话/分享的字典存储与原子持久化，以及笔记文件路径与分享业务
+
+多进程部署（gunicorn 多 worker）说明：
+- 各进程内的字典（users/sessions）只是磁盘 JSON 的缓存副本。
+- 写入走「进程内 Lock + 跨进程文件锁 + 原子写」保证不丢更新；
+  读取在未命中/周期性从磁盘重载，保证其它 worker 的变更可见。
+"""
 import os
 import json
 import time
 import secrets
 from threading import Lock
 from .logger import create_logger
+
+try:
+    import fcntl  # POSIX 跨进程文件锁
+    _HAS_FCNTL = True
+except ImportError:
+    _HAS_FCNTL = False
+    try:
+        import msvcrt  # Windows 跨进程文件锁
+    except ImportError:
+        msvcrt = None
+
+
+class _ProcessFileLock:
+    """跨进程文件锁（POSIX fcntl.flock / Windows msvcrt.locking）。
+
+    同一进程内的并发由各 store 的 threading.Lock 串行化，因此这里只会被
+    单个线程持有，锁只用于仲裁不同 worker 进程之间的读改写。
+    """
+
+    def __init__(self, path: str):
+        self._lock_path = path + ".lock"
+        self._fh = None
+
+    def acquire(self):
+        fh = open(self._lock_path, "a+b")
+        try:
+            if _HAS_FCNTL:
+                fcntl.flock(fh.fileno(), fcntl.LOCK_EX)
+            elif msvcrt is not None:
+                fh.seek(0)
+                if fh.read(1) == b"":
+                    fh.write(b"\0")
+                    fh.flush()
+                fh.seek(0)
+                msvcrt.locking(fh.fileno(), msvcrt.LK_LOCK, 1)
+        except Exception:
+            fh.close()
+            raise
+        self._fh = fh
+        return self
+
+    def release(self):
+        fh = self._fh
+        if fh is None:
+            return
+        try:
+            if _HAS_FCNTL:
+                fcntl.flock(fh.fileno(), fcntl.LOCK_UN)
+            elif msvcrt is not None:
+                fh.seek(0)
+                msvcrt.locking(fh.fileno(), msvcrt.LK_UNLCK, 1)
+        finally:
+            fh.close()
+            self._fh = None
+
+    def __enter__(self):
+        return self.acquire()
+
+    def __exit__(self, *exc):
+        self.release()
 
 from .config import (
     BENBEN_COOLDOWN_SECONDS,
@@ -71,6 +137,52 @@ def load_users():
         users = {}
 
 
+def _read_json_safely(path: str):
+    """读取 JSON 文件内容；文件缺失返回 {}，文件损坏返回 None（由调用方决定是否回退）"""
+    if not os.path.exists(path):
+        return {}
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return None
+
+
+def reload_users() -> None:
+    """从磁盘重新加载用户表（多进程下同步其它 worker 的注册）。原地更新以保持引用有效。"""
+    with users_lock:
+        data = _read_json_safely(USER_FILE)
+        if isinstance(data, dict):
+            users.clear()
+            users.update(data)
+
+
+def get_user(username: str) -> dict | None:
+    """跨进程读取用户记录：内存未命中时先从磁盘重载再查"""
+    with users_lock:
+        user = users.get(username)
+    if user is not None:
+        return user
+    reload_users()
+    with users_lock:
+        return users.get(username)
+
+
+def register_user(username: str, data: dict) -> bool:
+    """跨进程安全注册：文件锁下重读最新用户表后检查并写入。
+    返回 True 表示注册成功，False 表示用户名已存在或写入失败。"""
+    with users_lock:
+        with _ProcessFileLock(USER_FILE):
+            disk = _read_json_safely(USER_FILE)
+            if isinstance(disk, dict):
+                users.clear()
+                users.update(disk)
+            if username in users:
+                return False
+            users[username] = data
+            return _atomic_json_dump(USER_FILE, users)
+
+
 def save_users():
     with users_lock:
         _atomic_json_dump(USER_FILE, users)
@@ -87,6 +199,58 @@ def load_sessions():
             sessions = {}
     else:
         sessions = {}
+
+
+def reload_sessions() -> None:
+    """从磁盘重新加载会话（多进程下同步其它 worker 的登录/登出）。原地更新以保持引用有效。"""
+    with sessions_lock:
+        data = _read_json_safely(SESSION_FILE)
+        if isinstance(data, dict):
+            sessions.clear()
+            sessions.update(data)
+
+
+def store_session(token_hash: str, data: dict) -> bool:
+    """跨进程安全写入会话：文件锁下重读最新数据，避免多 worker 并发登录丢失更新"""
+    with sessions_lock:
+        with _ProcessFileLock(SESSION_FILE):
+            disk = _read_json_safely(SESSION_FILE)
+            if isinstance(disk, dict):
+                sessions.clear()
+                sessions.update(disk)
+            sessions[token_hash] = data
+            return _atomic_json_dump(SESSION_FILE, sessions)
+
+
+def remove_session(token_hash: str) -> bool:
+    """跨进程安全删除会话，返回是否存在并删除成功"""
+    with sessions_lock:
+        with _ProcessFileLock(SESSION_FILE):
+            disk = _read_json_safely(SESSION_FILE)
+            if isinstance(disk, dict):
+                sessions.clear()
+                sessions.update(disk)
+            if token_hash not in sessions:
+                return False
+            del sessions[token_hash]
+            return _atomic_json_dump(SESSION_FILE, sessions)
+
+
+def delete_sessions_if(pred) -> int:
+    """跨进程安全删除满足 pred(token_hash, session) 的会话并落盘，返回删除数量。
+    pred 需容忍 session 非 dict 的脏数据。"""
+    with sessions_lock:
+        with _ProcessFileLock(SESSION_FILE):
+            disk = _read_json_safely(SESSION_FILE)
+            if isinstance(disk, dict):
+                sessions.clear()
+                sessions.update(disk)
+            doomed = [h for h, s in sessions.items() if pred(h, s)]
+            for h in doomed:
+                del sessions[h]
+            if doomed:
+                _atomic_json_dump(SESSION_FILE, sessions)
+            return len(doomed)
 
 
 def save_sessions():

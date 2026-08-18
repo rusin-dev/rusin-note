@@ -134,6 +134,9 @@ TRUST_PROXY_HEADERS = bool(config.get("trust_proxy_headers", False))
 SECURE_COOKIES = bool(config.get("secure_cookies", False))
 # 会话 Cookie 的 Max-Age：与服务器端会话超时保持一致；未启用超时时默认 30 天
 COOKIE_MAX_AGE_DEFAULT = 30 * 24 * 3600
+# 登录会话 Cookie 名称：不能与 Flask 的 session cookie（默认名 "session"，
+# 存放 Flask-WTF CSRF token）冲突，否则打开带 CSRF 表单的页面会把登录态覆盖掉
+SESSION_COOKIE = "rusin_session"
 
 # 会话超时配置
 SESSION_TIMEOUT_ENABLED = config.get("session_timeout", {}).get("enabled", False)
