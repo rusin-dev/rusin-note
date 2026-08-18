@@ -27,15 +27,12 @@ def _set_session_cookie(resp, token: str):
         max_age = int(config.SESSION_TIMEOUT_SECONDS)
     else:
         max_age = config.COOKIE_MAX_AGE_DEFAULT
-    cookie = f"session={token}; Path=/; Max-Age={max_age}; HttpOnly; SameSite=Lax"
-    if config.SECURE_COOKIES:
-        cookie += "; Secure"
-    resp.set_cookie("session", value=token, max_age=max_age, httponly=True, samesite="Lax",
-                    secure=config.SECURE_COOKIES, path="/")
+    resp.set_cookie(config.SESSION_COOKIE, value=token, max_age=max_age, httponly=True,
+                    samesite="Lax", secure=config.SECURE_COOKIES, path="/")
 
 
 def _clear_session_cookie(resp):
-    resp.delete_cookie("session", path="/")
+    resp.delete_cookie(config.SESSION_COOKIE, path="/")
 
 
 # ---------- GET ----------
