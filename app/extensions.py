@@ -1,9 +1,12 @@
-"""Flask 扩展单例（CSRF / 限流）
+"""Flask 扩展单例（CSRF / 限流 / 缓存）
 
 单例放在独立模块以避免与 app factory 循环导入。
 
 限流存储：默认 memory://（单实例可用）。设置 REDIS_URL（如
 redis://default:pass@host:port）后使用 Redis 计数，多实例共享限流状态。
+
+缓存后端：Redis（REDIS_URL）或 SimpleCache（内存），可通过 config.json 的
+cache.backend 切换，无服务器环境自动降级到 SimpleCache。
 """
 import os
 
@@ -28,3 +31,8 @@ limiter = Limiter(
     storage_uri=os.environ.get("REDIS_URL") or "memory://",
     headers_enabled=True,
 )
+
+# ---------- 缓存 ----------
+from flask_caching import Cache
+
+cache = Cache()

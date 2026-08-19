@@ -85,7 +85,14 @@
             white-space: normal;
             display: none;
         }
-        .navbar.menu-collapsed .nav-links a { margin-left: 0; padding: 10px 0; border-bottom: 1px solid var(--navbar-border); }
+        .navbar.menu-collapsed .nav-links a {
+            margin-left: 0; padding: 10px 0;
+            border-bottom: 1px solid var(--navbar-border);
+            border-radius: 0;
+            justify-content: flex-start;
+        }
+        .navbar.menu-collapsed .nav-links a:hover { background: var(--card-bg); color: var(--text); }
+        .navbar.menu-collapsed .nav-links a:active { transform: none; }
         .navbar.menu-collapsed .nav-links a:last-child { border-bottom: none; }
         .navbar.menu-collapsed.menu-open .nav-links {
             display: flex;

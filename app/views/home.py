@@ -2,6 +2,7 @@
 from flask import Blueprint, g, render_template
 
 from .. import config
+from ..extensions import cache
 from ..i18n import t
 from ..notes import get_stats
 from ..utils import format_size, read_disclaimer
@@ -9,7 +10,13 @@ from ..utils import format_size, read_disclaimer
 bp = Blueprint("home", __name__)
 
 
+def _index_cache_key():
+    user = getattr(g, "current_user", None)
+    return f"home_index:{user or 'anonymous'}"
+
+
 @bp.route("/")
+@cache.cached(timeout=config.CACHE_TIMEOUT_INDEX, make_cache_key=_index_cache_key)
 def index():
     lang = getattr(g, "lang", "zh")
     current_user = getattr(g, "current_user", None)

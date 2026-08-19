@@ -47,6 +47,12 @@
     "enabled": true,
     "cdn": "https://cdn.jsdmirror.cn/gh/highlightjs/cdn-release@11.9.0/build"
   },
+  "cache": {
+    "enabled": true,
+    "backend": "redis",
+    "default_timeout": 300,
+    "redis_url": "redis://localhost:6379/0"
+  },
   "password_policy": {
     "min_length": 8,
     "max_length": 128,

@@ -14,7 +14,7 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 
 from . import config
 from .background import start_background_threads
-from .extensions import csrf, limiter
+from .extensions import csrf, limiter, cache
 from .i18n import register_i18n
 from .middleware import register_request_hooks
 from .storage import StorageError, storage
@@ -44,6 +44,28 @@ def _load_or_create_secret_key() -> str:
     return secrets.token_hex(32)
 
 
+def _init_cache_backend(app: Flask) -> None:
+    """根据 config.json 的 cache.backend 配置初始化缓存后端，自动降级到 SimpleCache"""
+    if not config.CACHE_ENABLED:
+        cache.init_app(app, config={"CACHE_TYPE": "null"})
+        return
+    backend = config.CACHE_BACKEND
+    if backend == "redis":
+        try:
+            cache.init_app(app, config={
+                "CACHE_TYPE": "RedisCache",
+                "CACHE_DEFAULT_TIMEOUT": config.CACHE_DEFAULT_TIMEOUT,
+                "CACHE_REDIS_HOST": config.CACHE_REDIS_URL,
+            })
+            return
+        except Exception:
+            pass
+    cache.init_app(app, config={
+        "CACHE_TYPE": "SimpleCache",
+        "CACHE_DEFAULT_TIMEOUT": config.CACHE_DEFAULT_TIMEOUT,
+    })
+
+
 def create_app() -> Flask:
     app = Flask(
         __name__,
@@ -71,6 +93,7 @@ def create_app() -> Flask:
 
     csrf.init_app(app)
     limiter.init_app(app)
+    _init_cache_backend(app)
     register_request_hooks(app)
     register_i18n(app)
     register_blueprints(app)

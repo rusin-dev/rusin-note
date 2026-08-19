@@ -5,7 +5,7 @@ POST 受全局 POST 限流约束（限流在蓝图层显式标注）。
 from flask import Blueprint, abort, g, redirect, render_template, request
 
 from .. import config
-from ..extensions import limiter
+from ..extensions import cache, limiter
 from ..middleware import get_client_ip, get_current_user
 from ..store import (
     add_benben_post,
@@ -20,8 +20,14 @@ from ..utils import render_latex_head, render_markdown_html
 bp = Blueprint("benben", __name__)
 
 
+def _benben_cache_key():
+    from flask import request
+    return f"benben:page:{request.args.get('page', '1')}"
+
+
 @bp.route("/benben", methods=["GET"])
 @limiter.limit(lambda: f"{config.GET_RATE_MAX} per {config.GET_RATE_WINDOW} second")
+@cache.cached(timeout=config.CACHE_TIMEOUT_BENBEN, make_cache_key=_benben_cache_key)
 def benben_get():
     try:
         page = max(1, int(request.args.get("page", "1")))
@@ -115,4 +121,5 @@ def benben_post():
 
     add_benben_post(current_user, content, get_client_ip())
     mark_benben_post(current_user)
+    cache.delete("benben:page:1")
     return redirect("/benben")

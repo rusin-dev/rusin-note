@@ -1,4 +1,0 @@
-```python
-def hi():
-    pass
-```

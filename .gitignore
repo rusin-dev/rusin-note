@@ -9,7 +9,6 @@ env/
 .venv/
 
 # 编辑器/IDE
-.vscode/
 .idea/
 *.swp
 *.swo

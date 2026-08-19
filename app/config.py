@@ -76,6 +76,12 @@ DEFAULT_CONFIG = {
         "enabled": True,
         "cdn": "https://cdn.jsdelivr.net/npm/@highlightjs/cdn-assets@11.9.0"
     },
+    "cache": {
+        "enabled": True,
+        "backend": "redis",
+        "default_timeout": 300,
+        "redis_url": "redis://localhost:6379/0"
+    },
     "password_policy": {
         "min_length": 8,
         "max_length": 128,
@@ -328,3 +334,14 @@ LOGGER_MAX_SIZE = LOGGER_CFG.get("max_size", 4294967296)
 LOGGER_PATH = data_path(LOGGER_CFG.get("path_pattern", "log/{timestamp}.log"))
 
 DEBUG = config.get("debug", False)
+
+# ---------- 页面缓存配置 ----------
+CACHE_CFG = config.get("cache", DEFAULT_CONFIG["cache"])
+CACHE_ENABLED = bool(CACHE_CFG.get("enabled", True))
+CACHE_BACKEND = CACHE_CFG.get("backend", "redis")
+CACHE_DEFAULT_TIMEOUT = int(CACHE_CFG.get("default_timeout", 300))
+CACHE_REDIS_URL = os.environ.get("REDIS_URL") or CACHE_CFG.get("redis_url", "redis://localhost:6379/0")
+# 页面缓存 TTL（秒）
+CACHE_TIMEOUT_INDEX = 1800    # 首页 30min
+CACHE_TIMEOUT_NOTES = 300     # 笔记页面 5min
+CACHE_TIMEOUT_BENBEN = 60     # 犇犇 1min
