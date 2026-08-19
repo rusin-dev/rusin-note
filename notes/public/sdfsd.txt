@@ -1,0 +1,48 @@
+```cpp
+#include <bits/stdc++.h>
+using namespace std;
+const int Maxn=50005;
+long long ans;
+int T,n,m,k,cnt,mu[Maxn],prim[Maxn],sum[Maxn];
+bool vis[Maxn];
+void init(void)
+{
+	mu[1]=1;
+	for(int i=2;i<=50000;i++){
+		if(!vis[i]) prim[++cnt]=i,mu[i]=-1;
+		for(int j=1;j<=cnt&&i*prim[j]<=50000;j++){
+			vis[i*prim[j]]=true;
+			if(i%prim[j]==0){
+				mu[i*prim[j]]=0;
+				break;
+			}
+			
+			mu[i*prim[j]]=-mu[i];
+		}
+	}
+	for(int i=1;i<=50000;i++)
+		sum[i]=sum[i-1]+mu[i];
+}
+void fuctr(){
+    for(int i=1;i<=n;++i)
+}
+int main(){
+	scanf("%d",&T);
+	init();
+	while(T--)
+	{
+		ans=0;
+		scanf("%d%d%d",&n,&m,&k);
+		int End=0,N=n/k,M=m/k;
+        fcktr();
+		if(N<M) swap(N,M);
+		for(int Start=1;Start<=M;Start=End+1)
+		{
+			End=min(N/(N/Start),M/(M/Start));
+			ans+=(sum[End]-sum[Start-1])*(long long)(N/Start)*(M/Start);
+		}
+		printf("%lld\n",ans);
+	}
+	return 0;
+}
+```

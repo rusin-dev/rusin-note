@@ -1,6 +1,13 @@
 {% extends "base.html" %}
 {% block content %}
-<h1>{{ t('user_notes_title', username=username) }}</h1>
+<h1>
+    {% set av = get_avatar(username) %}
+    {% if av %}<img class="avatar page-avatar" src="{{ av|e }}" alt="" loading="lazy" referrerpolicy="no-referrer">{% endif %}
+    {{ t('user_notes_title', username=username) }}
+</h1>
+<style>
+    .page-avatar { width: 32px; height: 32px; margin-right: 8px; }
+</style>
 <div style="margin-bottom: 16px;">
     <a href="/user/{{ username|e }}/new">{{ t('user_new_note') }}</a>
 </div>

@@ -20,6 +20,7 @@ env/
 
 # 日志 / 临时文件
 *.log
+log/
 *.tmp
 
 # 本地 json

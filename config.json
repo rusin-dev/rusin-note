@@ -62,12 +62,18 @@
     "max_height_px": 1000
   },
   "note_editor": {
-    "live_preview_default": false
+    "live_preview_default": false,
+    "markdown_manual_url": "https://markdown.com.cn"
+  },
+  "avatar": {
+    "enabled": true,
+    "url_template": "https://cn.cravatar.com/avatar/{hash}?d=identicon&f=y",
+    "size": 24
   },
   "max_note_id_length": 250,
   "logger": {
     "max_size": 4294967296,
     "path_pattern": "log/{timestamp}.log"
   },
-  "debug": false
+  "debug": true
 }

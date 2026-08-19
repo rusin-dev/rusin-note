@@ -110,11 +110,13 @@ Rusin-Note 是一个受 note.ms 启发的轻量级云端剪贴板 / 在线记事
 - `password_policy`（密码复杂度）
 - `benben`（犇犇最大长度 1024 / 每页 50 / 冷却 3s / 最大高度 1000px）
 - `note_editor`（`live_preview_default` 编辑页实时渲染默认值，默认 false，访客可手动开、以 localStorage 记住）
+- `avatar`（用户头像：`enabled` 默认 true；`url_template` 默认 cn.cravatar.com，占位符 `{hash}`=md5(用户名)、`{username}`=URL 编码用户名；`size` 备用值）
 - `max_note_id_length`（250）、`logger`（日志大小/路径）、`debug`
 
 ## 常见改动点
 
 - **新增页面/路由**：在 `app/views/` 加蓝图模块并更新 `views/__init__.py` 注册；若新增根级 catch-all 路由注意注册顺序
 - **新增翻译文案**：`i18n.py` 的 zh/en 字典必须成对添加；模板用 `{{ t('key') }}`
+- **新增头像显示位**：模板直接用 `{{ get_avatar(username) }}`（已由 i18n 注入全局），空串时用 `{% if av %}` 隐藏 `<img>`；生成逻辑见 `utils.get_avatar_url`，配置在 `config.json` 的 `avatar`
 - **改限流**：`config.json` 对应键 + 视图函数 `@limiter.limit` 字符串
 - **改数据格式**：留意 `store.py`/`auth.py` 中的旧数据兼容注释（BUG-7 损坏数据跳过等）；加字段时给 `get_*` 用 `.get()` 兜底

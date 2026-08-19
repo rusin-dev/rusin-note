@@ -3,6 +3,7 @@
 <style>
     .benben-post { border: 1px solid var(--card-border); border-radius: 8px; padding: 12px 16px; margin-bottom: 12px; background: var(--card-bg); }
     .benben-head { font-weight: 500; margin-bottom: 6px; }
+    .benben-avatar { width: 24px; height: 24px; margin-right: 6px; }
     .benben-time { color: var(--muted); font-size: 13px; font-weight: 400; margin-left: 8px; }
     .benben-body { font-size: 15px; word-break: break-word; max-height: {{ max_height_px }}px; overflow-y: auto; }
     .benben-form { max-width: 720px; margin: 16px 0 24px; }
@@ -78,7 +79,11 @@ document.addEventListener('DOMContentLoaded', function() {
 <div class="benben-list">
     {% for item in items %}
     <div class="benben-post">
-        <div class="benben-head">{{ item.username|e }}<span class="benben-time">{{ item.time_str }}</span></div>
+        <div class="benben-head">
+            {% set av = get_avatar(item.username) %}
+            {% if av %}<img class="avatar benben-avatar" src="{{ av|e }}" alt="" loading="lazy" referrerpolicy="no-referrer">{% endif %}
+            {{ item.username|e }}<span class="benben-time">{{ item.time_str }}</span>
+        </div>
         <div class="benben-body markdown-body">{{ item.content_html|safe }}</div>
     </div>
     {% else %}

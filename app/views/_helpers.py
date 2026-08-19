@@ -63,6 +63,8 @@ def build_note_context(
         "failedMsg": t(lang, "save_failed_msg"),
         "livePreview": t(lang, "note_live_preview"),
         "previewOffHint": t(lang, "note_live_preview_hint"),
+        "previewShow": t(lang, "preview_show"),
+        "previewEdit": t(lang, "preview_edit"),
     }
 
     return {
@@ -76,4 +78,5 @@ def build_note_context(
         "l10n": l10n,
         "latex_head": render_latex_head(),
         "live_preview_default": config.LIVE_PREVIEW_DEFAULT,
+        "md_manual_url": config.MARKDOWN_MANUAL_URL,
     }

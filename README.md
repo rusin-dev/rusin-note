@@ -281,6 +281,10 @@ rusin-note:.
    - `cdn` ：highlight.js 静态文件基础目录，默认 jsdelivr 的 `@highlightjs/cdn-assets` 包；国内可换 jsdmirror 镜像（如 `https://cdn.jsdmirror.cn/gh/highlightjs/cdn-release@11.9.0/build`）；
 
     开启后，所有 Markdown 渲染处（笔记只读页、编辑页实时预览、犇犇动态、免责声明）的代码块自动语法高亮并显示行号，跟随站点浅色/暗色主题切换，无需服务端依赖。
+- `avatar` 用户头像（通过第三方服务生成，显示在导航栏当前用户、犇犇动态发布者与用户笔记列表标题处）。
+   - `enabled` ：是否开启，默认 `true`；置 `false` 后完全关闭头像显示；
+   - `url_template` ：头像 URL 模板，默认 `https://cn.cravatar.com/avatar/{hash}?d=identicon&f=y`。支持两个占位符：`{hash}`（`md5(用户名)` 小写十六进制）、`{username}`（URL 编码后的用户名）。由于本站用户没有邮箱，默认用 `md5(用户名)` 作为哈希，`d=identicon` 会让 Gravatar 系服务为每个哈希生成确定性的几何头像；也可换成其他按用户名生成头像的服务（如 DiceBear：`https://api.dicebear.com/9.x/identicon/svg?seed={username}`）；
+   - `size` ：模板中的默认尺寸（当前仅作为备用值，模板内按位置使用固定尺寸）。
 - `password_policy`：密码策略，定义访客密码的复杂度要求。  
    - `min_length`：密码最小长度，默认 `8`；  
    - `max_length`：密码最大长度，默认 `128`（硬上限 `128`，防止超长密码进入 PBKDF2 慢哈希消耗 CPU）；  

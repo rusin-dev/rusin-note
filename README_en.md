@@ -282,6 +282,10 @@ rusin-note:.
     - `cdn`: Base directory of highlight.js static files, default jsdelivr's `@highlightjs/cdn-assets` package; China mirrors can use jsdmirror (e.g. `https://cdn.jsdmirror.cn/gh/highlightjs/cdn-release@11.9.0/build`).
 
     When enabled, code blocks in all Markdown-rendered locations (note read-only pages, editor live preview, benben feed, disclaimer) get automatic syntax highlighting with line numbers, following the site's light/dark theme with no server dependency.
+- `avatar`: user avatars (generated via a third-party service, shown next to the current user in the navbar, benben post authors, and the user notes list title).
+    - `enabled`: enable avatars, default `true`; set `false` to hide avatars entirely.
+    - `url_template`: avatar URL template, default `https://cn.cravatar.com/avatar/{hash}?d=identicon&f=y`. Supports two placeholders: `{hash}` (`md5(username)` lowercase hex) and `{username}` (URL-encoded username). Since this site's users have no email, `md5(username)` is used as the hash; `d=identicon` makes Gravatar-style services generate a deterministic geometric avatar per hash. You can also swap in other username-seeded services (e.g. DiceBear: `https://api.dicebear.com/9.x/identicon/svg?seed={username}`).
+    - `size`: default size in the template (currently only a fallback value; templates use fixed sizes per location).
 - `password_policy`: password policy, defining the complexity requirements for guest passwords.  
    - `min_length`: minimum password length, default `8`;  
    - `max_length`: maximum password length, default `128` (hard cap `128`, preventing oversized passwords from entering the PBKDF2 slow hash and consuming CPU);  

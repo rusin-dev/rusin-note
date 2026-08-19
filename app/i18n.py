@@ -150,6 +150,11 @@ STRINGS = {
         "preview_render_failed": "预览渲染失败",
         "note_live_preview": "实时渲染",
         "note_live_preview_hint": "实时渲染已关闭，点击此处开启",
+        "md_manual": "Markdown 使用手册",
+        "note_editor_label": "编辑器",
+        "note_preview_label": "预览",
+        "preview_show": "预览",
+        "preview_edit": "编辑",
     },
     "en": {
         # Navbar
@@ -289,6 +294,11 @@ STRINGS = {
         "preview_render_failed": "Preview rendering failed",
         "note_live_preview": "Live Render",
         "note_live_preview_hint": "Live preview is off · click to enable",
+        "md_manual": "Markdown Guide",
+        "note_editor_label": "Editor",
+        "note_preview_label": "Preview",
+        "preview_show": "Preview",
+        "preview_edit": "Edit",
     },
 }
 
@@ -333,7 +343,7 @@ def register_i18n(app: Flask) -> None:
     """注册 Jinja2 全局上下文，使模板可直接用 {{ t('key') }} / {{ lang }} / {{ theme }} / {{ theme_script }} / {{ theme_vars }} / {{ current_user }} / {{ site_name }}"""
     from . import config as _cfg
     from .theme import THEME_VARS, get_theme_script
-    from .utils import render_code_highlight_head
+    from .utils import get_avatar_url, render_code_highlight_head, render_pygments_head
 
     @app.context_processor
     def inject_globals():
@@ -349,6 +359,7 @@ def register_i18n(app: Flask) -> None:
             "current_user": getattr(g, "current_user", None),
             "site_name": _cfg.SITE_NAME,
             "code_highlight_head": render_code_highlight_head(),
+            "get_avatar": get_avatar_url,
         }
 
 

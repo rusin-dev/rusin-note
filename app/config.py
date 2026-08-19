@@ -91,7 +91,13 @@ DEFAULT_CONFIG = {
         "max_height_px": 1000
     },
     "note_editor": {
-        "live_preview_default": False
+        "live_preview_default": False,
+        "markdown_manual_url": "https://markdown.com.cn"
+    },
+    "avatar": {
+        "enabled": True,
+        "url_template": "https://cn.cravatar.com/avatar/{hash}?d=identicon&f=y",
+        "size": 24
     },
     "max_note_id_length": 250,
     "logger": {
@@ -288,6 +294,19 @@ except (TypeError, ValueError):
 # 默认 False：关闭实时渲染，访客需点击开关开启。
 NOTE_EDITOR_CFG = config.get("note_editor", DEFAULT_CONFIG["note_editor"])
 LIVE_PREVIEW_DEFAULT = bool(NOTE_EDITOR_CFG.get("live_preview_default", False))
+# Markdown 使用手册链接（预览栏头部显示，可在 config.json 中改为其他文档地址）
+MARKDOWN_MANUAL_URL = NOTE_EDITOR_CFG.get(
+    "markdown_manual_url", "https://markdown.com.cn")
+
+# ---------- 用户头像配置 ----------
+# 头像通过第三方服务生成。由于本站用户没有邮箱，默认用 md5(用户名) 作为哈希（
+# Gravatar 系 API 的默认参数 d=identicon 会为每个哈希生成确定性的几何头像）。
+# url_template 支持占位符：{hash}（md5(用户名)）、{username}（URL 编码的用户名）。
+AVATAR_CFG = config.get("avatar", DEFAULT_CONFIG["avatar"])
+AVATAR_ENABLED = bool(AVATAR_CFG.get("enabled", True))
+AVATAR_URL_TEMPLATE = AVATAR_CFG.get(
+    "url_template", "https://cn.cravatar.com/avatar/{hash}?d=identicon&f=y")
+AVATAR_SIZE = int(AVATAR_CFG.get("size", 24))
 
 # ---------- 日志功能 ----------
 LOGGER_CFG = config.get("logger", DEFAULT_CONFIG["logger"])

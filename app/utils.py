@@ -1,6 +1,8 @@
 """Markdown 安全渲染（Pygments 高亮 + 行号）+ 文件大小/时间格式化（替代原 templates.py 的工具函数）"""
+import hashlib
 import html
 import time
+import urllib.parse
 
 
 def format_size(size) -> str:
@@ -24,6 +26,19 @@ def format_note_time(mtime) -> str:
         return time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(mtime))
     except (ValueError, OverflowError, OSError):
         return ""
+
+
+def get_avatar_url(username: str) -> str:
+    """按配置生成用户头像 URL；头像未启用或用户名为空时返回空串。
+
+    url_template 支持 {hash}（md5(用户名)）与 {username}（URL 编码）占位符。
+    """
+    from . import config
+    if not config.AVATAR_ENABLED or not username:
+        return ""
+    h = hashlib.md5(username.encode("utf-8")).hexdigest()
+    name = urllib.parse.quote(username, safe="")
+    return config.AVATAR_URL_TEMPLATE.format(hash=h, username=name)
 
 
 def render_markdown_html(content: str) -> str:
@@ -205,7 +220,35 @@ def render_code_highlight_head() -> str:
         "            if (/(?:^|\\s)language-[\\w-]+/.test(block.className)) {\n"
         "                try { hljs.highlightElement(block); } catch (e) {}\n"
         "            }\n"
-        "            var lines = block.innerHTML.split('\\n');\n"
+        "            function normalizeNewlines(html) {\n"
+        "                var out = '';\n"
+        "                var stack = [];\n"
+        "                var i = 0;\n"
+        "                while (i < html.length) {\n"
+        "                    if (html.slice(i, i + 7) === '</span>') {\n"
+        "                        if (stack.length) stack.pop();\n"
+        "                        out += '</span>';\n"
+        "                        i += 7;\n"
+        "                    } else if (html.slice(i, i + 5) === '<span') {\n"
+        "                        var end = html.indexOf('>', i);\n"
+        "                        if (end === -1) { out += html.charAt(i); i++; continue; }\n"
+        "                        var tag = html.slice(i, end + 1);\n"
+        "                        stack.push(tag);\n"
+        "                        out += tag;\n"
+        "                        i = end + 1;\n"
+        "                    } else if (html.charAt(i) === '\\n') {\n"
+        "                        for (var k = 0; k < stack.length; k++) out += '</span>';\n"
+        "                        out += '\\n';\n"
+        "                        for (var k = 0; k < stack.length; k++) out += stack[k];\n"
+        "                        i++;\n"
+        "                    } else {\n"
+        "                        out += html.charAt(i);\n"
+        "                        i++;\n"
+        "                    }\n"
+        "                }\n"
+        "                return out;\n"
+        "            }\n"
+        "            var lines = normalizeNewlines(block.innerHTML).split('\\n');\n"
         "            if (lines.length < 2) continue;\n"
         "            if (lines[lines.length - 1].trim() === '') lines.pop();\n"
         "            var out = '';\n"

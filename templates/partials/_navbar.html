@@ -4,7 +4,11 @@
         <span class="navbar-brand-name">{{ (site_name or 'rusin-note')|e }}</span>
     </a>
     {% if current_user %}
-        <span class="user-info">{{ t('nav_user_prefix')|e }}{{ current_user|e }}</span>
+        <span class="user-info">
+            {% set av = get_avatar(current_user) %}
+            {% if av %}<img class="avatar" src="{{ av|e }}" alt="" width="20" height="20" loading="lazy" referrerpolicy="no-referrer">{% endif %}
+            {{ t('nav_user_prefix')|e }}{{ current_user|e }}
+        </span>
         <span class="nav-links">
             <a href="https://github.com/rusin-dev/rusin-note">Github</a>
             <a href="/user/{{ current_user|e }}/"><i class="fa-solid fa-file-lines" aria-hidden="true"></i>{{ t('nav_my_notes') }}</a>
