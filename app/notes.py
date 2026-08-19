@@ -1,13 +1,13 @@
-"""笔记文件操作、校验、统计、随机 ID 与过期笔记清理"""
-import os
+"""笔记操作、校验、统计、随机 ID 与过期笔记清理（存储后端无关）"""
 import re
 import time
 import random
 from threading import Lock
 
 from . import config
-from .store import NOTES_BASE, count_benben_posts, users
 from .logger import create_logger
+from .storage import StorageError, storage
+from .store import count_benben_posts, get_user_count
 
 logger = create_logger("notes")
 
@@ -15,7 +15,7 @@ logger = create_logger("notes")
 FORBIDDEN_NOTE_IDS = {"user", "world", "shares", "login", "register"}
 
 # 保留用户名（与固定路由或 notes/ 目录冲突，禁止注册）
-# 注意：public 与公开笔记存储目录 notes/public/ 冲突，必须保留
+# 注意：public 与公开笔记存储命名空间冲突，必须保留
 RESERVED_USERNAMES = {"register", "login", "logout", "count", "disclaimer",
                       "favicon", "share", "shares", "world", "user", "new", "md",
                       "public", "benben"}
@@ -36,139 +36,89 @@ def validate_note_id(note_id: str) -> bool:
     return bool(re.match(r'^[a-zA-Z0-9_\-]+$', note_id))
 
 
-# ---------- 笔记文件操作 ----------
-def get_user_note_dir(username: str) -> str | None:
-    # "public" 是内部公开笔记存储命名空间，不是用户账号，需放行（validate_username 会拒绝它）
-    if username != "public" and not validate_username(username):
-        return None
-    path = os.path.join(NOTES_BASE, username)
-    os.makedirs(path, exist_ok=True)
-    return path
-
-
-def get_note_path(username: str, note_id: str) -> str | None:
-    # "public" 是内部公开笔记存储命名空间，不是用户账号，需放行（validate_username 会拒绝它）
-    if username != "public" and not validate_username(username):
-        return None
-    if not validate_note_id(note_id):
-        return None
-
-    notes_root = os.path.realpath(NOTES_BASE)
-    user_dir = get_user_note_dir(username)
-    user_dir_real = os.path.realpath(user_dir)
-    if os.path.commonpath([notes_root, user_dir_real]) != notes_root:
-        return None
-
-    safe_id = os.path.basename(note_id)
-    note_path = os.path.join(user_dir_real, f"{safe_id}.txt")
-    note_path_real = os.path.realpath(note_path)
-    if os.path.commonpath([notes_root, note_path_real]) != notes_root:
-        return None
-    return note_path_real
+# ---------- 笔记读写 ----------
+# "public" 是内部公开笔记存储命名空间，不是用户账号，需放行（validate_username 会拒绝它）
+def _namespace_ok(username: str) -> bool:
+    return username == "public" or validate_username(username)
 
 
 def read_note(username: str, note_id: str) -> str:
-    path = get_note_path(username, note_id)
-    if path is None:
+    if not _namespace_ok(username) or not validate_note_id(note_id):
         return ""
     try:
-        with open(path, "r", encoding="utf-8") as f:
-            return f.read()
-    except FileNotFoundError:
+        content = storage.read_note(username, note_id)
+    except StorageError:
         return ""
-    except (IOError, OSError):
-        return ""
+    return content or ""
 
 
-def get_note_mtime(username: str, note_id: str):
-    """返回笔记文件最后修改时间（epoch 秒），文件不存在或读取失败时返回 None"""
-    path = get_note_path(username, note_id)
-    if path is None:
-        return None
+def note_exists(username: str, note_id: str) -> bool:
+    """笔记是否存在（空内容等价于不存在：写入空串即删除）"""
+    if not _namespace_ok(username) or not validate_note_id(note_id):
+        return False
     try:
-        return os.path.getmtime(path)
-    except (IOError, OSError):
-        return None
+        return storage.read_note(username, note_id) is not None
+    except StorageError:
+        return False
 
 
-def get_note_size(username: str, note_id: str) -> int | None:
-    """返回笔记文件大小（字节），文件不存在或读取失败时返回 None"""
-    path = get_note_path(username, note_id)
-    if path is None:
-        return None
-    try:
-        return os.path.getsize(path)
-    except (IOError, OSError):
-        return None
-
-
-# 按笔记路径隔离的写入锁（线程内互斥，保证同一笔记的保存顺序，避免慢写入覆盖新写入）
+# 按笔记隔离的写入锁（进程内互斥，保证同一笔记的保存顺序，避免慢写入覆盖新写入）
 _note_locks_guard = Lock()
 _note_locks: dict[str, Lock] = {}
 
 
-def _get_note_lock(path: str) -> Lock:
+def _get_note_lock(username: str, note_id: str) -> Lock:
+    key = f"{username}:{note_id}"
     with _note_locks_guard:
-        lock = _note_locks.get(path)
+        lock = _note_locks.get(key)
         if lock is None:
             lock = Lock()
-            _note_locks[path] = lock
+            _note_locks[key] = lock
         return lock
 
 
 def write_note(username: str, note_id: str, content: str) -> bool:
-    path = get_note_path(username, note_id)
-    if path is None:
+    if not _namespace_ok(username) or not validate_note_id(note_id):
         return False
-    with _get_note_lock(path):
-        return _write_note_locked(path, content)
-
-
-def _write_note_locked(path: str, content: str) -> bool:
-    if content == "":
+    with _get_note_lock(username, note_id):
         try:
-            if os.path.exists(path):
-                os.remove(path)
-            return True
-        except FileNotFoundError:
-            # 并发保存时另一请求已删除该文件，视为删除成功
-            return True
-        except OSError:
+            return storage.write_note(username, note_id, content)
+        except StorageError as e:
+            logger.error(f"[错误] 保存笔记 {username}/{note_id} 失败: {e}")
             return False
-    # 唯一临时文件（进程 PID + 随机数）：避免并发保存同一笔记时共享 .tmp，
-    # 一方 os.replace 后另一方再 replace 抛 FileNotFoundError，导致偶发 500
-    temp_path = f"{path}.{os.getpid()}.{random.randrange(1 << 32):08x}.tmp"
+
+
+def get_note_mtime(username: str, note_id: str):
+    """返回笔记最后修改时间（epoch 秒），笔记不存在或读取失败时返回 None"""
+    if not _namespace_ok(username) or not validate_note_id(note_id):
+        return None
     try:
-        with open(temp_path, "w", encoding="utf-8") as f:
-            f.write(content)
-            f.flush()
-            os.fsync(f.fileno())
-        os.replace(temp_path, path)
-        return True
-    except (IOError, OSError):
-        try:
-            if os.path.exists(temp_path):
-                os.remove(temp_path)
-        except OSError:
-            pass
-        return False
+        return storage.note_mtime(username, note_id)
+    except StorageError:
+        return None
+
+
+def get_note_size(username: str, note_id: str) -> int | None:
+    """返回笔记大小（字节），笔记不存在或读取失败时返回 None"""
+    if not _namespace_ok(username) or not validate_note_id(note_id):
+        return None
+    try:
+        return storage.note_size(username, note_id)
+    except StorageError:
+        return None
 
 
 def list_user_notes(username: str) -> list[str]:
-    user_dir = get_user_note_dir(username)
-    if user_dir is None:
+    if not _namespace_ok(username):
         return []
-    notes = []
-    for fname in os.listdir(user_dir):
-        if fname.endswith(".txt"):
-            note_id = fname[:-4]
-            if validate_note_id(note_id):
-                notes.append(note_id)
-    return notes
+    try:
+        return [nid for nid in storage.list_notes(username) if validate_note_id(nid)]
+    except StorageError:
+        return []
 
 
 # ---------- 统计函数 ----------
-# BUG-16: 统计结果缓存（TTL 30 秒），避免每次 /count 请求全目录遍历
+# BUG-16: 统计结果缓存（TTL 30 秒），避免每次 /count 请求全量遍历
 STATS_CACHE_TTL = 30
 _stats_cache = None
 _stats_cache_time = 0.0
@@ -185,32 +135,21 @@ def get_stats():
     public_size = 0
     private_count = 0
     private_size = 0
-    user_count = len(users)
 
-    if os.path.exists(NOTES_BASE):
-        for item in os.listdir(NOTES_BASE):
-            item_path = os.path.join(NOTES_BASE, item)
-            if not os.path.isdir(item_path):
-                continue
-            if item == "public":
-                for fname in os.listdir(item_path):
-                    if fname.endswith(".txt"):
-                        public_count += 1
-                        try:
-                            public_size += os.path.getsize(os.path.join(item_path, fname))
-                        except:
-                            pass
+    try:
+        for username, note_id in storage.iter_all_notes():
+            size = get_note_size(username, note_id) or 0
+            if username == "public":
+                public_count += 1
+                public_size += size
             else:
-                for fname in os.listdir(item_path):
-                    if fname.endswith(".txt"):
-                        private_count += 1
-                        try:
-                            private_size += os.path.getsize(os.path.join(item_path, fname))
-                        except:
-                            pass
+                private_count += 1
+                private_size += size
+    except StorageError:
+        pass
 
-    result = (public_count, public_size, private_count, private_size, user_count,
-              count_benben_posts())
+    result = (public_count, public_size, private_count, private_size,
+              get_user_count(), count_benben_posts())
     _stats_cache = result
     _stats_cache_time = now
     return result
@@ -226,22 +165,19 @@ def generate_random_id() -> str:
 
 # ---------- 过期笔记清除（超出保存时间的剪贴板自动删除） ----------
 def purge_expired_notes() -> int:
-    """删除最后修改时间超过 NOTE_EXPIRATION_SECONDS 的笔记文件，返回删除数量（仅在启用时生效）"""
+    """删除最后修改时间超过 NOTE_EXPIRATION_SECONDS 的笔记，返回删除数量（仅在启用时生效）"""
     if not config.NOTE_EXPIRATION_ENABLED:
         return 0
     cutoff = time.time() - config.NOTE_EXPIRATION_SECONDS
     removed = 0
-    for dirpath, _dirs, filenames in os.walk(NOTES_BASE):
-        for fname in filenames:
-            if not fname.endswith(".txt"):
-                continue
-            fpath = os.path.join(dirpath, fname)
-            try:
-                if os.path.getmtime(fpath) < cutoff:
-                    os.remove(fpath)
+    try:
+        for username, note_id in storage.iter_all_notes():
+            mtime = get_note_mtime(username, note_id)
+            if mtime is not None and mtime < cutoff:
+                if write_note(username, note_id, ""):
                     removed += 1
-            except (IOError, OSError):
-                pass
+    except StorageError:
+        pass
     if removed:
         logger.info(f"[清理] 已清除 {removed} 个过期笔记（保存超过 {config.NOTE_EXPIRATION_HOURS} 小时）")
     return removed

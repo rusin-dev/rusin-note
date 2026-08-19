@@ -1,5 +1,4 @@
 """私有笔记与分享管理：/user/<u>、/user/<u>/<id>、/user/<u>/shares/*"""
-import os
 import re
 from flask import Blueprint, abort, g, redirect, render_template, request, url_for
 
@@ -10,9 +9,9 @@ from ..middleware import get_current_user
 from ..notes import (
     generate_random_id,
     get_note_mtime,
-    get_note_path,
     get_note_size,
     list_user_notes,
+    note_exists,
     read_note,
     validate_note_id,
     validate_username,
@@ -145,8 +144,7 @@ def shares_post(username):
         return _render_shares(username, error=t(getattr(g, "lang", "zh"), "err_url_invalid")), 400
     if not validate_note_id(note_id):
         return _render_shares(username, error=t(getattr(g, "lang", "zh"), "err_share_invalid_note")), 400
-    note_path = get_note_path(username, note_id)
-    if note_path is None or not os.path.exists(note_path):
+    if not note_exists(username, note_id):
         return _render_shares(username, error=t(getattr(g, "lang", "zh"), "err_share_note_missing")), 400
     create_share(username, note_id, editable)
     return redirect(url_for("user.shares_get", username=username))

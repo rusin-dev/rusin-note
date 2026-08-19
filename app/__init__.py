@@ -3,6 +3,8 @@
 用法：
     from app import create_app
     app = create_app()
+
+无服务器部署（Vercel 等）入口：api/index.py（见 vercel.json）。
 """
 import os
 import secrets
@@ -15,42 +17,31 @@ from .background import start_background_threads
 from .extensions import csrf, limiter
 from .i18n import register_i18n
 from .middleware import register_request_hooks
+from .storage import StorageError, storage
 from .views import register_blueprints
 
 
 def _load_or_create_secret_key() -> str:
-    """持久化 SECRET_KEY：多 worker/多次重启共用同一密钥（否则 CSRF 签名跨进程随机失效）。
+    """获取 SECRET_KEY：多实例/多次重启共用同一密钥（否则 CSRF 签名跨实例随机失效）。
 
-    优先级：环境变量 RUSIN_SECRET_KEY > DATA_DIR/.secret_key 文件（原子独占创建）。
+    优先级：环境变量 RUSIN_SECRET_KEY > 存储后端 secret_key（file 后端即
+    旧的 .secret_key 文件，upstash 后端存于外部 KV，多实例共享）> 随机兜底。
     """
-    key_file = config.data_path(".secret_key")
-    key = None
-    try:
-        fd = os.open(key_file, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+    key = os.environ.get("RUSIN_SECRET_KEY", "").strip()
+    if key:
+        return key
+    if storage.persistent:
         try:
-            key = secrets.token_hex(32)
-            os.write(fd, key.encode("utf-8"))
-            os.fsync(fd)
-        finally:
-            os.close(fd)
-        try:
-            os.chmod(key_file, 0o600)
-        except OSError:
+            key = storage.get("secret_key")
+            if isinstance(key, str) and key.strip():
+                return key.strip()
+            new_key = secrets.token_hex(32)
+            if storage.set("secret_key", new_key):
+                return new_key
+        except StorageError:
             pass
-    except FileExistsError:
-        pass
-    except OSError:
-        pass
-    if key is None:
-        try:
-            with open(key_file, "r", encoding="utf-8") as f:
-                key = f.read().strip()
-        except (IOError, OSError):
-            key = None
-    if not key:
-        # 兜底：无法持久化时退回随机密钥（仅影响重启/多 worker 一致性）
-        key = secrets.token_hex(32)
-    return key
+    # 兜底：无法持久化时退回随机密钥（仅影响重启/多实例一致性）
+    return secrets.token_hex(32)
 
 
 def create_app() -> Flask:
@@ -71,7 +62,7 @@ def create_app() -> Flask:
         SESSION_COOKIE_HTTPONLY=True,
         SESSION_COOKIE_SAMESITE="Lax",
         WTF_CSRF_TIME_LIMIT=None,
-        RATELIMIT_STORAGE_URI="memory://",
+        RATELIMIT_STORAGE_URI=os.environ.get("REDIS_URL") or "memory://",
     )
 
     if config.TRUST_PROXY_HEADERS:
@@ -84,7 +75,7 @@ def create_app() -> Flask:
     register_blueprints(app)
     register_error_handlers(app)
 
-    if not app.config.get("TESTING"):
+    if not app.config.get("TESTING") and not config.SERVERLESS:
         start_background_threads()
 
     return app

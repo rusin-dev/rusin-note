@@ -5,7 +5,7 @@
 <div align="center">
     <a href="https://github.com/rusin-dev/rusin-note"><img width="15%" alt="logo" src="./image/logo.png" /></a>
     <h1><b>Rusin-Note</b></h1>
-    <p><em>🖊︎ A lightweight cloud clipboard project inspired by note.ms, designed for VPS deployment, ready to use out of the box.</em></p>
+    <p><em>🖊︎ A lightweight cloud clipboard project inspired by note.ms, deployable on VPS and serverless platforms (Vercel / AWS Lambda), ready to use out of the box.</em></p>
     <p>
         <a href="https://github.com/rusin-dev/rusin-note/blob/main/README.md">简体中文</a> | English | <a href="https://note.rusin7.com">Demo</a>
     </p>
@@ -28,13 +28,13 @@
 
 ## Features
 
-- **Cloud clipboard that works out of the box**: A lightweight Flask implementation for VPS or personal-server deployment, letting you save and access text quickly from any browser.
+- **Cloud clipboard that works out of the box**: A lightweight Flask implementation for VPS or serverless (Vercel / AWS Lambda) deployment, letting you save and access text quickly from any browser.
 - **Public and private notes**: Use random short paths for public notes, or keep private note lists under guest accounts for both temporary sharing and personal storage.
 - **Secure share links**: Generate random-token share links for user notes, with optional write-back support for simple cross-device collaboration.
 - **Markdown and LaTeX rendering**: Read-only pages and the benben feed support Markdown and KaTeX math, making the app useful for code snippets, notes, documentation, and formulas.
 - **Benben feed**: A built-in lightweight feed where logged-in users can post and anonymous users can read, with live preview, paginated loading, and post cooldowns.
 - **Multi-language UI**: Simplified Chinese and English are built in, with manual switching and browser-language fallback.
-- **Deployment-friendly configuration**: Common options live in `config.json`, including note expiration, session timeout, password policy, trusted proxy IP handling, and HTTPS cookies.
+- **Deployment-friendly configuration**: Common options live in `config.json`, including note expiration, session timeout, password policy, trusted proxy IP handling, and HTTPS cookies. For serverless deployment, data can go to external storage (Upstash Redis / Neon PostgreSQL), surviving cold starts.
 - **Practical baseline protection**: Includes CSRF protection, request rate limits, save limits, registration limits, content sanitization, and a proxy-header trust switch for safer public deployments.
 
 ## Quick Start
@@ -67,6 +67,32 @@ Python version $\geq$ 3.10.
     Then open <https://localhost:8080> to view the result.
 
 ### Production Deployment
+
+#### Option 1: Vercel (Serverless, Recommended)
+
+The repository ships with Vercel configuration (`vercel.json` + `api/index.py`):
+
+1. Import this repository on [Vercel](https://vercel.com) (the Python runtime is auto-detected).
+2. Pick a storage backend:
+   - **Neon (PostgreSQL)**: install [Neon](https://vercel.com/marketplace/neon) from the Vercel Storage / Marketplace — Vercel injects `DATABASE_URL` automatically (Vercel KV has been sunset; Neon is the recommended persistent option).
+   - **Upstash Redis**: install Upstash Redis from the Vercel Marketplace and set `KV_REST_API_URL` / `KV_REST_API_TOKEN` manually. Upstash wins if both are set.
+3. Add the environment variable `RUSIN_SECRET_KEY` (any long random string, used for session/CSRF signing — **required**; without it login state is lost on each cold start).
+4. Deploy. Notes, users, sessions, shares and benben posts are all stored in Neon/Upstash — shared across instances, survives cold starts.
+
+Optional: set `REDIS_URL` so rate-limit counters are shared across instances (defaults to per-instance memory).
+
+> Note: `config.json` defaults to `trust_proxy_headers: true` and `secure_cookies: true` for serverless platforms. Change them back for local/VPS use if needed.
+
+#### Option 2: AWS Lambda (Serverless)
+
+`lambda_handler.py` (Mangum WSGI adapter) is included:
+
+1. Package the repository (including `templates/`, `config.json`, etc.);
+2. Handler: `lambda_handler.handler`, with API Gateway proxy integration;
+3. Env vars as on Vercel (`KV_REST_API_URL` / `KV_REST_API_TOKEN` / `RUSIN_SECRET_KEY`);
+4. Memory ≥ 512MB recommended (Markdown rendering).
+
+#### Option 3: VPS / Traditional Server
 
 Connect to your server, then:
 
@@ -145,7 +171,24 @@ Do not mount the Volume to the project root, or it may hide the deployed applica
 /data/log/
 ```
 
-Benben posts are stored purely in memory and cleared on restart, so they do not need persistence.
+Benben posts are now persisted to the storage backend (up to `benben.max_posts`, default 200) instead of pure memory.
+
+### Storage Backends (Key for Serverless)
+
+The storage layer (`app/storage.py`) provides four backends, selected explicitly via the `RUSIN_STORAGE` env var or auto-detected:
+
+| Backend | How to enable | Notes |
+|---|---|---|
+| `file` | default (local/VPS) | Data under `RUSIN_DATA_DIR` (default: current dir), layout as above |
+| `upstash` | set `KV_REST_API_URL` + `KV_REST_API_TOKEN` (Upstash Redis REST API) | Data in external KV — shared across instances, survives cold starts; plain HTTPS requests, works on any Python serverless platform |
+| `postgres` | set `DATABASE_URL` (Neon or any PostgreSQL; injected automatically when Neon is attached on Vercel) | Data in PostgreSQL tables (`storage_kv` / `storage_notes`); cross-instance mutual exclusion via PG advisory locks |
+| `memory` | `RUSIN_STORAGE=memory` (auto-enabled on serverless platforms without the above) | In-memory only, cleared on restart |
+
+Auto-detect priority: explicit `RUSIN_STORAGE` > `KV_REST_API_URL`+`KV_REST_API_TOKEN` (upstash) > `DATABASE_URL` (postgres) > serverless platform (memory) > local (file).
+
+- Serverless environments (detected via `VERCEL` / `NETLIFY` / `AWS_LAMBDA_FUNCTION_NAME`) do not start background threads — cleanup runs opportunistically inside requests; logs fall back to stderr (platform log streams).
+- Set `RUSIN_SECRET_KEY` on serverless platforms; if unset and the backend is persistent (file/upstash/postgres) a key is generated and stored automatically, otherwise a random per-instance key is used.
+- See `.env.example` for the full env var list.
 
 ## Project Structure
 
@@ -293,14 +336,16 @@ rusin-note:.
    - `require_lowercase`: whether lowercase letters are required, default `true`;  
    - `require_digits`: whether digits are required, default `true`;  
    - `require_special`: whether special characters (excluding `/ \ ( ) " '`) are required, default `true`;
-- `RUSIN_DATA_DIR`: optional environment variable for the runtime data directory, defaulting to the current project directory.
+- `RUSIN_DATA_DIR`: optional environment variable for the runtime data directory, defaulting to the current project directory (`file` backend only).
 
-   Notes, users, sessions, shares, and logs are written under this directory as `notes/`, `users.json`, `sessions.json`, `shares.json`, and `log/` (benben posts are stored purely in memory and cleared on restart). On auto-deploy platforms such as Zeabur, mount a persistent volume at `/data` and set `RUSIN_DATA_DIR=/data` to prevent clipboard data from being cleared on each deployment.
+   Notes, users, sessions, shares, and logs are written under this directory as `notes/`, `users.json`, `sessions.json`, `shares.json`, `benben.json`, and `log/`. On auto-deploy platforms such as Zeabur, mount a persistent volume at `/data` and set `RUSIN_DATA_DIR=/data` to prevent clipboard data from being cleared on each deployment.
+- `RUSIN_STORAGE`: optional env var to force the storage backend: `file` (default, local/VPS), `memory` (in-memory), `upstash` (external KV for serverless), `postgres` (Neon/PostgreSQL). When unset: `KV_REST_API_URL`/`KV_REST_API_TOKEN` set → `upstash`; `DATABASE_URL` set → `postgres`; serverless platform env detected → `memory`; otherwise `file`. See "Storage Backends" above.
 - **Multi-language**: The interface supports Simplified Chinese and English. Language switch links (`/lang/zh` / `/lang/en`) are provided on the right side of the navbar; the preference is remembered via a cookie (`rusin-lang`); when unset, it falls back to the browser's `Accept-Language`, defaulting to Chinese. After switching, all site text (navbar, buttons, hints, error messages, benben previews, etc.) switches language instantly.
 - `benben` (feed at `/benben`, logged-in users can post, anonymous read-only).
    - `max_length`: max length of a single feed post (in **characters**), default `1024` (~1KB);
    - `page_size`: posts loaded per batch, default `50`;
    - `cooldown_seconds`: minimum interval between two posts by the same user (in **seconds**), default `3`;
    - `max_height_px`: maximum display height of rendered feed content (in **px**), default `1000`, overflow scrolls within the content area;
+   - `max_posts`: maximum number of posts persisted, default `200` (keeps external KV value size bounded; oldest posts are dropped);
 
    Content supports Markdown and LaTeX math (`$...$` / `$$...$$`, controlled by the `latex_render` switch); the post form has a live preview (client-side marked.js rendering, which filters dangerous tags and links too); rendering is sanitized with bleach to prevent XSS; each page shows `page_size` posts, loaded in batches via "Load more"; loading and posting are both subject to request rate limits (GET/POST), and posting is also subject to a per-user cooldown (`cooldown_seconds`); each post's header shows the poster's IP (whether proxy headers are trusted follows `trust_proxy_headers`; not shown for old data without an IP field).

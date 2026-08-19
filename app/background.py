@@ -1,6 +1,8 @@
 """后台守护线程：会话清理、分享视图刷盘、过期笔记清理
 
 启动入口：start_background_threads() 在 create_app() 末尾调用。
+无服务器环境（SERVERLESS）不启动线程——冷实例闲置时线程不会执行，
+清理改由 middleware._opportunistic_cleanup() 在请求内机会式完成。
 """
 import time
 from threading import Thread
@@ -26,7 +28,9 @@ def share_views_flush_loop() -> None:
 
 
 def start_background_threads() -> None:
-    """启动所有后台守护线程（一次性，不可重复调用）"""
+    """启动所有后台守护线程（一次性，不可重复调用）。SERVERLESS 环境为无操作。"""
+    if config.SERVERLESS:
+        return
     purge_expired_sessions()
     Thread(target=session_cleanup_loop, daemon=True).start()
     Thread(target=share_views_flush_loop, daemon=True).start()

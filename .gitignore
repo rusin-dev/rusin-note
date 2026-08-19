@@ -22,8 +22,10 @@ env/
 *.log
 log/
 *.tmp
+*.lock
 
-# 本地 json
+# 本地运行时数据
+notes/
 sessions.json
 users.json
 shares.json

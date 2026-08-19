@@ -5,40 +5,50 @@ description: Use when working in this project (Rusin-Note, a Flask 云端剪贴�
 
 # Rusin-Note 项目结构与文件作用
 
-Rusin-Note 是一个受 note.ms 启发的轻量级云端剪贴板 / 在线记事本，基于 Flask 3，专为 VPS 部署设计。核心是"随机短链公开笔记 + 用户私有笔记 + 分享链接 + 犇犇动态"，所有数据存内存并以 JSON 文件落盘，无数据库。
+Rusin-Note 是一个受 note.ms 启发的轻量级云端剪贴板 / 在线记事本，基于 Flask 3，支持 VPS 与无服务器（Vercel / AWS Lambda）部署。核心是"随机短链公开笔记 + 用户私有笔记 + 分享链接 + 犇犇动态"，数据存储通过可插拔存储层（`app/storage.py`）统一：file（JSON 落盘）/ upstash（外部 KV）/ postgres（Neon/PostgreSQL）/ memory（纯内存）。
 
 ## 运行方式
 
 - 本地/生产：`python3 -m app`（入口 `app/__main__.py`，用 waitress 监听 `$PORT` 默认 8080）
 - 生产建议（Linux）：`gunicorn 'app.wsgi:app' -b 0.0.0.0:$PORT --workers 2 --threads 4`
-- 数据目录：`RUSIN_DATA_DIR` 环境变量（默认 `.`），Zeabur 等平台挂卷到 `/data` 并设 `RUSIN_DATA_DIR=/data`
-- 依赖：见 `requirements.txt`（Flask、Flask-WTF、Flask-Limiter、waitress、markdown、bleach）
+- 无服务器（Vercel）：`api/index.py`（WSGI app 由 @vercel/python 构建器识别）+ `vercel.json`（routes 全量转发 + includeFiles 打包模板/配置）；存储推荐绑定 **Neon**（自动注入 `DATABASE_URL` → postgres 后端）或 Upstash Redis（手动填 `KV_REST_API_URL`/`KV_REST_API_TOKEN`），并设置 `RUSIN_SECRET_KEY`（Vercel KV 已停服）
+- 无服务器（AWS Lambda）：`lambda_handler.py` 的 `handler`（Mangum 适配 WSGI，API Gateway 代理集成）
+- 数据目录：`RUSIN_DATA_DIR` 环境变量（默认 `.`），仅 file 后端使用；Zeabur 等平台挂卷到 `/data` 并设 `RUSIN_DATA_DIR=/data`
+- 存储后端：`RUSIN_STORAGE`（file/memory/upstash/postgres）显式指定，未指定时自动识别：KV 环境变量 → upstash；`DATABASE_URL` → postgres；检测到 `VERCEL`/`NETLIFY`/`AWS_LAMBDA_FUNCTION_NAME` → memory；否则 file
+- 依赖：见 `requirements.txt`（Flask、Flask-WTF、Flask-Limiter、waitress、markdown、bleach、redis、mangum、psycopg）
 - 要求 Python >= 3.10
 
-## 数据模型（全部内存态 + JSON 落盘）
+## 数据模型（存储层可插拔）
 
-运行数据落在 `RUSIN_DATA_DIR` 下：
+存储后端统一键布局（`app/storage.py` 内 `KV_FILE_MAP` / `_note_key`）：
 
-| 文件/目录 | 内容 | 关键结构 |
-|---|---|---|
-| `notes/` | 笔记文件（.txt） | `notes/<username>/<id>.txt`；`notes/public/` 是公开笔记命名空间 |
-| `users.json` | 用户 | `{username: {salt, hash}}`，hash 为 PBKDF2 格式 |
-| `sessions.json` | 会话 | `{sha256(token): {username, created_at}}` |
-| `shares.json` | 分享链接 | `{token: {owner, note_id, created_at, editable, views}}` |
-| `log/` | 日志 | `log/{timestamp}.log`，RotatingFileHandler |
+| 键 | file 后端落盘 | 内容 | 关键结构 |
+|---|---|---|---|
+| `users.json` | `users.json` | 用户 | `{username: {salt, hash}}`，hash 为 PBKDF2 格式 |
+| `sessions.json` | `sessions.json` | 会话 | `{sha256(token): {username, created_at}}` |
+| `shares.json` | `shares.json` | 分享链接 | `{token: {owner, note_id, created_at, editable, views}}` |
+| `benben:posts` | `benben.json` | 犇犇（已持久化） | `[{username, content, time, ip}]`，最多 `benben.max_posts` 条（默认 200） |
+| `note:<u>:<id>` | `notes/<u>/<id>.txt` | 笔记 | file 后端存纯文本（mtime 取文件 stat）；memory/upstash 存 `{"content", "mtime"}` |
+| `secret_key` | `.secret_key` | SECRET_KEY | 纯文本 |
 
-犇犇动态为**纯内存存储**（`store.benben_posts`，重启清空，不再落盘，也没有 `benben.json`）。
+upstash 后端所有键统一加 `rusin:` 前缀；memory 后端 get/set 带 deepcopy（防外部原地修改破坏内部数据）。
 
-所有 JSON 写入走 `store._atomic_json_dump`（临时文件 + flush + fsync + `os.replace`）。并发用 `threading.Lock`（`users_lock`/`sessions_lock`/`shares_lock`/`benben_lock`）。注意：`threading.Lock` 不可重入——持锁块内绝不能调用 `save_sessions()` 等会再次加锁的函数（见 `auth.get_session_user` 的 BUG-01 注释）。
+并发写路径统一锁序：**`threading.Lock`（进程内）→ `storage.lock`（跨进程/跨实例）**，顺序颠倒会死锁（见 `store.flush_share_views` 注释）。读多写少用内存缓存 + 周期重载（`reload_users`/`reload_sessions`/`_resync_benben_locked`），单值写（`write_note`）直接整值覆盖无需锁。注意：`threading.Lock` 不可重入——持锁块内绝不能调用会再次加锁的函数（见 `auth.get_session_user` 的 BUG-01 注释）。
+
+无服务器环境（`config.SERVERLESS` 为真）不启动后台线程，清理由 `middleware._opportunistic_cleanup()` 在请求内按 `SESSION_CLEANUP_INTERVAL` 节流执行；日志回退 stderr。
 
 ## 根目录文件
 
 | 文件 | 作用 |
 |---|---|
-| `config.json` | 运行配置（详见下方"配置项"） |
+| `config.json` | 运行配置（默认已开 `trust_proxy_headers`/`secure_cookies`，详见下方"配置项"） |
 | `requirements.txt` | Python 依赖 |
 | `zbpack.json` | Zeabur 打包配置 |
-| `README.md` / `README_en.md` | 中英文文档（含完整配置解析与部署说明） |
+| `vercel.json` | Vercel 无服务器构建/路由配置（`@vercel/python` + includeFiles） |
+| `api/index.py` | Vercel Python 入口（`from app import create_app; app = create_app()`） |
+| `lambda_handler.py` | AWS Lambda 入口（Mangum 适配） |
+| `.env.example` | 环境变量示例（KV_REST_API_URL / KV_REST_API_TOKEN / RUSIN_SECRET_KEY / REDIS_URL / RUSIN_STORAGE / RUSIN_DATA_DIR） |
+| `README.md` / `README_en.md` | 中英文文档（含 Vercel / Lambda / VPS 部署步骤与存储后端说明） |
 | `Disclaimer.md` / `Disclaimer-en.md` | 中英文免责声明（`/disclaimer` 页面读取） |
 | `contributing.md` | 协作指南 |
 | `favicon.ico` / `image/logo.png` | 站点图标与 logo |
@@ -49,20 +59,21 @@ Rusin-Note 是一个受 note.ms 启发的轻量级云端剪贴板 / 在线记事
 
 | 模块 | 作用 |
 |---|---|
-| `__init__.py` | Flask app 工厂 `create_app()`：组装 SECRET_KEY（读 `RUSIN_SECRET_KEY`，缺省随机）、CSRF、限流、请求钩子、i18n、蓝图、错误页；测试模式（`TESTING`）不启动后台线程 |
+| `__init__.py` | Flask app 工厂 `create_app()`：组装 SECRET_KEY（`RUSIN_SECRET_KEY` > 存储后端 `secret_key`（file 即 `.secret_key` 文件、upstash 存 KV 多实例共享）> 随机兜底）、CSRF、限流（`REDIS_URL` 可切共享存储）、请求钩子、i18n、蓝图、错误页；`SERVERLESS` 或 `TESTING` 时不启动后台线程 |
 | `__main__.py` | 入口 `python -m app`，waitress 启动 |
 | `wsgi.py` | WSGI 入口 `app.wsgi:app`（gunicorn 用） |
-| `config.py` | 加载 `config.json` 并导出全部全局常量（`MAX_CONTENT_BYTES`、各类限流参数、`ID_CHARSET`、`SHARE_TOKEN_CHARSET`/`SHARE_TOKEN_PATTERN`、密码策略 `PW_*`、`BENBEN_*`、会话/笔记过期、LaTeX、代理信任、Cookie 安全、`data_path()` 等）。标记为 ADDED/BUG-x 的注释说明某常量的引入原因 |
-| `store.py` | 用户/会话/分享/犇犇的字典存储、原子持久化、分享业务（`create_share`/`get_share`/`delete_share`/`increment_share_views` 延迟批量写盘）、犇犇发布冷却（内存态）、分页读取 |
+| `storage.py` | **存储层抽象**：`StorageBackend` 基类 + `FileBackend`/`MemoryBackend`/`UpstashBackend`（纯 urllib REST）/`PostgresBackend`（psycopg，表 `storage_kv`+`storage_notes`），接口为 `get/set/delete/list_keys` + 笔记专用方法 + `lock(name)` 跨实例互斥（file 用 fcntl 文件锁、upstash 用 SET NX EX 自动过期、postgres 用 `pg_try_advisory_xact_lock`、memory 用线程锁）；`select_backend()` 自动识别（KV 环境变量 > DATABASE_URL > SERVERLESS memory > file）；`StorageError` 统一异常 |
+| `config.py` | 加载 `config.json` 并导出全部全局常量（`MAX_CONTENT_BYTES`、各类限流参数、`ID_CHARSET`、`SHARE_TOKEN_CHARSET`/`SHARE_TOKEN_PATTERN`、密码策略 `PW_*`、`BENBEN_*`（含 `BENBEN_MAX_POSTS`）、会话/笔记过期、LaTeX、代理信任、Cookie 安全、`SERVERLESS` 平台检测、`data_path()` 等）。标记为 ADDED/BUG-x 的注释说明某常量的引入原因 |
+| `store.py` | 用户/会话/分享/犇犇的内存缓存 + 存储层持久化：`register_user`/`store_session`/`remove_session`/`delete_sessions_if`/`create_share`/`delete_share`/`add_benben_post` 均走「线程锁 + storage.lock + 重读合并 + 整值写入」；分享视图计数延迟批量持久化（`increment_share_views`/`flush_share_views`）；犇犇发布冷却（内存态）、分页读取（带周期重载） |
 | `auth.py` | PBKDF2-HMAC-SHA256 密码哈希（兼容旧单轮 SHA-256 可验证、登录后自然升级）、会话 token 生成/校验（存哈希）、过期会话清理、密码复杂度检查 |
-| `notes.py` | 笔记文件读写（`.txt`）、ID/用户名校验（含保留名单）、路径穿越防护（realpath + commonpath 校验）、统计（30s TTL 缓存）、随机 ID 生成、过期笔记清理 |
-| `middleware.py` | `before_request` 钩子：向 `flask.g` 写入 `client_ip`/`lang`/`theme`/`current_user`；`get_client_ip()` 按可信度取 `CF-Connecting-IP` > `X-Real-IP` > XFF 最右非空 > remote_addr（仅 `trust_proxy_headers` 开启时） |
-| `extensions.py` | CSRF（Flask-WTF）与 Limiter（Flask-Limiter）单例；限流 key 优先用 `g.client_ip` |
+| `notes.py` | 笔记读写走 `storage` 后端（无路径穿越代码——校验交给 `validate_username`/`validate_note_id` 正则）、ID/用户名校验（含保留名单）、`note_exists`、统计（30s TTL 缓存）、随机 ID 生成、过期笔记清理 |
+| `middleware.py` | `before_request` 钩子：向 `flask.g` 写入 `client_ip`/`lang`/`theme`/`current_user`；`SERVERLESS` 时调用 `_opportunistic_cleanup()`（节流执行过期会话/笔记清理 + 视图刷盘）；`get_client_ip()` 按可信度取 `CF-Connecting-IP` > `X-Real-IP` > XFF 最右非空 > remote_addr（仅 `trust_proxy_headers` 开启时） |
+| `extensions.py` | CSRF（Flask-WTF）与 Limiter（Flask-Limiter）单例；限流 key 优先用 `g.client_ip`；`REDIS_URL` 环境变量切换限流共享存储 |
 | `i18n.py` | 中英双语：`STRINGS` 字典（zh/en 成对），`t(lang, key)` 取翻译（缺 key 返回 key 本身）；语言检测 Cookie `rusin-lang` > Accept-Language > zh；`register_i18n` 注入模板全局 `t`/`lang`/`theme`/`current_user`/`site_name` 等 |
 | `theme.py` | 暗色主题 CSS 变量（`THEME_VARS`）与切换脚本（Cookie + localStorage + 系统偏好）、favicon 内存缓存 |
-| `logger.py` | `create_logger(name)` 返回写入 `log/{timestamp}.log` 的 RotatingFileHandler 日志器 |
+| `logger.py` | `create_logger(name)` 返回写入 `log/{timestamp}.log` 的 RotatingFileHandler 日志器；文件不可写（无服务器只读 FS）时回退 stderr |
 | `utils.py` | `format_size`/`format_note_time` 格式化、`render_markdown_html`（markdown + codehilite/Pygments 高亮+行号 + bleach 清洗防 XSS）、`render_pygments_head`（亮/暗两套高亮 CSS，注入 base）、`render_latex_head`（KaTeX CDN 引入）、`read_disclaimer` |
-| `background.py` | 后台守护线程：会话清理、分享视图定期刷盘、过期笔记清理（`start_background_threads()` 一次性启动） |
+| `background.py` | 后台守护线程：会话清理、分享视图定期刷盘、过期笔记清理（`start_background_threads()` 一次性启动；`SERVERLESS` 时为无操作） |
 
 ## app/views/ 蓝图与路由
 
@@ -108,7 +119,7 @@ Rusin-Note 是一个受 note.ms 启发的轻量级云端剪贴板 / 在线记事
 - `session_timeout`（会话超时，默认关）、`note_expiration`（笔记过期清理，默认关，每 30 分钟扫描）
 - `latex_render`（KaTeX CDN，默认 jsdelivr，可换 BootCDN）
 - `password_policy`（密码复杂度）
-- `benben`（犇犇最大长度 1024 / 每页 50 / 冷却 3s / 最大高度 1000px）
+- `benben`（犇犇最大长度 1024 / 每页 50 / 冷却 3s / 最大高度 1000px / 持久化上限 `max_posts` 200）
 - `note_editor`（`live_preview_default` 编辑页实时渲染默认值，默认 false，访客可手动开、以 localStorage 记住）
 - `avatar`（用户头像：`enabled` 默认 true；`url_template` 默认 cn.cravatar.com，占位符 `{hash}`=md5(用户名)、`{username}`=URL 编码用户名；`size` 备用值）
 - `max_note_id_length`（250）、`logger`（日志大小/路径）、`debug`
@@ -120,3 +131,5 @@ Rusin-Note 是一个受 note.ms 启发的轻量级云端剪贴板 / 在线记事
 - **新增头像显示位**：模板直接用 `{{ get_avatar(username) }}`（已由 i18n 注入全局），空串时用 `{% if av %}` 隐藏 `<img>`；生成逻辑见 `utils.get_avatar_url`，配置在 `config.json` 的 `avatar`
 - **改限流**：`config.json` 对应键 + 视图函数 `@limiter.limit` 字符串
 - **改数据格式**：留意 `store.py`/`auth.py` 中的旧数据兼容注释（BUG-7 损坏数据跳过等）；加字段时给 `get_*` 用 `.get()` 兜底
+- **新增存储键/后端**：键布局在 `storage.py`（`KV_FILE_MAP`/`_note_key`），file 后端新键需在 `KV_FILE_MAP` 登记路径；新增后端需实现 `StorageBackend` 全部方法并在 `select_backend()` 注册（postgres 后端新表需在 `_ensure_schema` 增加 DDL）
+- **写路径并发**：读改写必须「线程锁 → `storage.lock(键)`」再重读合并，顺序不可颠倒；纯整值覆盖（`write_note`）无需跨实例锁

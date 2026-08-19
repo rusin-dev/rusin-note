@@ -17,8 +17,8 @@
     "window_seconds": 120,
     "max_requests": 1
   },
-  "trust_proxy_headers": false,
-  "secure_cookies": false,
+  "trust_proxy_headers": true,
+  "secure_cookies": true,
   "id_generation": {
     "length": 4,
     "use_uppercase": false,
@@ -59,7 +59,8 @@
     "max_length": 1024,
     "page_size": 50,
     "cooldown_seconds": 3,
-    "max_height_px": 1000
+    "max_height_px": 1000,
+    "max_posts": 200
   },
   "note_editor": {
     "live_preview_default": false,
@@ -75,5 +76,5 @@
     "max_size": 4294967296,
     "path_pattern": "log/{timestamp}.log"
   },
-  "debug": true
+  "debug": false
 }
