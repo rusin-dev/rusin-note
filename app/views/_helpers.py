@@ -61,6 +61,8 @@ def build_note_context(
         "savedHint": t(lang, "save_hint_saved"),
         "retryHint": t(lang, "save_hint_retry"),
         "failedMsg": t(lang, "save_failed_msg"),
+        "livePreview": t(lang, "note_live_preview"),
+        "previewOffHint": t(lang, "note_live_preview_hint"),
     }
 
     return {
@@ -73,4 +75,5 @@ def build_note_context(
         "last_edited": last_edited,
         "l10n": l10n,
         "latex_head": render_latex_head(),
+        "live_preview_default": config.LIVE_PREVIEW_DEFAULT,
     }

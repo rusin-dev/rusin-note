@@ -148,6 +148,8 @@ STRINGS = {
         "err_benben_cooldown": "发布过于频繁，请 {sec} 秒后再试",
         "preview_load_failed": "预览库加载失败",
         "preview_render_failed": "预览渲染失败",
+        "note_live_preview": "实时渲染",
+        "note_live_preview_hint": "实时渲染已关闭，点击此处开启",
     },
     "en": {
         # Navbar
@@ -285,6 +287,8 @@ STRINGS = {
         "err_benben_cooldown": "Posting too frequently, try again in {sec} seconds",
         "preview_load_failed": "Preview library failed to load",
         "preview_render_failed": "Preview rendering failed",
+        "note_live_preview": "Live Render",
+        "note_live_preview_hint": "Live preview is off · click to enable",
     },
 }
 
@@ -341,6 +345,7 @@ def register_i18n(app: Flask) -> None:
             "theme": getattr(g, "theme", None),
             "theme_script": get_theme_script(lang),
             "theme_vars": THEME_VARS,
+            "pygments_head": render_pygments_head(),
             "current_user": getattr(g, "current_user", None),
             "site_name": _cfg.SITE_NAME,
             "code_highlight_head": render_code_highlight_head(),

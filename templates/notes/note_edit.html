@@ -43,6 +43,14 @@
         .save-btn:hover { background: var(--btn-hover); transform: scale(1.02); }
         .save-btn:active { background: var(--border); transform: scale(0.98); }
         .preview-toggle { position: fixed; bottom: 24px; left: 24px; background: var(--btn-bg); border: 1px solid var(--navbar-border); padding: 6px 16px; border-radius: 16px; font-size: 13px; color: var(--text); cursor: pointer; z-index: 10; }
+        .pane-header.preview-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+        .switch { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; text-transform: none; letter-spacing: 0; font-size: 13px; font-weight: 400; color: var(--text); user-select: none; }
+        .switch input { display: none; }
+        .switch .track { position: relative; width: 36px; height: 20px; background: var(--border); border-radius: 999px; flex-shrink: 0; transition: background 0.2s ease; }
+        .switch .track::after { content: ''; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.3); transition: transform 0.2s ease; }
+        .switch input:checked + .track { background: var(--link); }
+        .switch input:checked + .track::after { transform: translateX(16px); }
+        .preview-off { height: 100%; display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: 14px; cursor: pointer; text-align: center; font-style: italic; padding: 0 16px; }
         .save-hint { position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%); background: rgba(0, 0, 0, 0.75); color: #fff; padding: 10px 24px; border-radius: 24px; font-size: 14px; letter-spacing: 0.5px; backdrop-filter: blur(8px); opacity: 0; transition: opacity 0.4s ease, transform 0.4s ease; pointer-events: none; z-index: 20; font-weight: 400; box-shadow: 0 4px 20px rgba(0,0,0,0.2); }
         .save-hint.show { opacity: 1; transform: translateX(-50%) translateY(0); }
         .save-hint kbd { background: rgba(255, 255, 255, 0.2); padding: 2px 12px; border-radius: 6px; margin: 0 4px; font-size: 13px; border: 1px solid rgba(255, 255, 255, 0.15); font-family: inherit; }
@@ -104,7 +112,14 @@
             </form>
         </div>
         <div class="pane preview-pane">
-            <div class="pane-header">{{ t('note_preview_label') if false else 'Preview' }}</div>
+            <div class="pane-header preview-header">
+                <span>Preview</span>
+                <label class="switch">
+                    <input type="checkbox" id="previewSwitch">
+                    <span class="track"></span>
+                    <span class="switch-label">{{ t('note_live_preview') }}</span>
+                </label>
+            </div>
             <div class="preview-body markdown-body" id="previewBody"></div>
         </div>
     </div>
@@ -127,6 +142,7 @@
             const editorShell = document.getElementById('editorShell');
             const previewToggle = document.getElementById('previewToggle');
             const previewToggleLabel = document.getElementById('previewToggleLabel');
+            const previewSwitch = document.getElementById('previewSwitch');
             let saveTimeout = null;
             let statusTimeout = null;
             let hintTimeout = null;
@@ -134,6 +150,14 @@
             const DEFAULT_HINT = {{ hint_text|tojson }};
             const L10N = {{ l10n|tojson }};
             const CSRF_FIELD = "csrf_token";
+
+            // 实时渲染开关：默认取配置，访客可手动切换并以 localStorage 记住
+            const PREVIEW_KEY = 'rusin-live-preview';
+            let previewOn;
+            try {
+                const saved = localStorage.getItem(PREVIEW_KEY);
+                previewOn = saved === null ? {{ live_preview_default|tojson }} : saved === '1';
+            } catch (e) { previewOn = {{ live_preview_default|tojson }}; }
 
             textarea.addEventListener('keydown', function(e) {
                 if (e.key === 'Tab') {
@@ -216,6 +240,7 @@
             }
 
             function updatePreview() {
+                if (!previewOn) return;
                 if (!window.marked) return;
                 const raw = textarea.value;
                 if (!raw.trim()) {
@@ -246,6 +271,29 @@
                 }
             }
 
+            function applyPreviewState() {
+                previewSwitch.checked = previewOn;
+                if (previewOn) {
+                    updatePreview();
+                } else {
+                    previewBody.innerHTML = '<div class="preview-off">' + L10N.previewOffHint + '</div>';
+                }
+            }
+
+            previewSwitch.addEventListener('change', function() {
+                previewOn = previewSwitch.checked;
+                try { localStorage.setItem(PREVIEW_KEY, previewOn ? '1' : '0'); } catch (e) {}
+                applyPreviewState();
+            });
+
+            previewBody.addEventListener('click', function() {
+                if (!previewOn) {
+                    previewOn = true;
+                    try { localStorage.setItem(PREVIEW_KEY, '1'); } catch (e) {}
+                    applyPreviewState();
+                }
+            });
+
             // Debounced preview on input
             let previewDebounce = null;
             textarea.addEventListener('input', function() {
@@ -266,7 +314,7 @@
                 if (window.marked && window.DOMPurify) return cb();
                 setTimeout(function() { whenReady(cb); }, 50);
             }
-            whenReady(updatePreview);
+            whenReady(applyPreviewState);
 
             function autoResize() {
                 textarea.style.height = 'auto';

@@ -1,0 +1,4 @@
+```python
+def hi():
+    pass
+```

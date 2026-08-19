@@ -89,18 +89,15 @@ logger = create_logger("store")
 USER_FILE = data_path("users.json")
 SESSION_FILE = data_path("sessions.json")
 SHARE_FILE = data_path("shares.json")
-BENBEN_FILE = data_path("benben.json")
 NOTES_BASE = data_path("notes")
 os.makedirs(NOTES_BASE, exist_ok=True)
 
 users = {}
 sessions = {}  # 格式: {sha256(token): {"username": str, "created_at": float}}
 shares = {}  # 格式: {token: {"owner": str, "note_id": str, "created_at": float, "editable": bool, "views": int}}
-benben_posts = []  # 格式: [{"username": str, "content": str, "time": float}]，旧→新
 users_lock = Lock()
 sessions_lock = Lock()
 shares_lock = Lock()
-benben_lock = Lock()
 
 
 def _atomic_json_dump(path: str, data: dict) -> bool:
@@ -360,30 +357,13 @@ def list_user_shares(username: str) -> list:
                 if isinstance(s, dict) and s.get("owner") == username]
 
 
-# ---------- 犇犇（用户动态）存储 ----------
-def load_benben():
-    global benben_posts
-    if os.path.exists(BENBEN_FILE):
-        try:
-            with open(BENBEN_FILE, "r", encoding="utf-8") as f:
-                data = json.load(f)
-            if isinstance(data, list):
-                benben_posts = data
-            else:
-                benben_posts = []
-        except Exception:
-            benben_posts = []
-    else:
-        benben_posts = []
-
-
-def save_benben():
-    with benben_lock:
-        _atomic_json_dump(BENBEN_FILE, benben_posts)
+# ---------- 犇犇（用户动态）存储（内存态，重启清空，无需落盘） ----------
+benben_posts = []  # 格式: [{"username": str, "content": str, "time": float, "ip": str}]，旧→新
+benben_lock = Lock()
 
 
 def add_benben_post(username: str, content: str, ip: str = "") -> bool:
-    """新增一条犇犇（追加存储，不提供删除/清除）。ip 为发布者 IP（get_client_ip() 结果）。"""
+    """新增一条犇犇（内存追加，不提供删除/清除，重启清空）。ip 为发布者 IP（get_client_ip() 结果）。"""
     with benben_lock:
         benben_posts.append({
             "username": username,
@@ -391,7 +371,6 @@ def add_benben_post(username: str, content: str, ip: str = "") -> bool:
             "time": time.time(),
             "ip": ip,
         })
-    save_benben()
     return True
 
 
@@ -441,4 +420,3 @@ def get_benben_posts(page: int, page_size: int):
 load_users()
 load_sessions()
 load_shares()
-load_benben()
