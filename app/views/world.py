@@ -5,7 +5,7 @@ GET 与 POST 拆分为不同函数以分别配置限流（GET 走 GET 限流，P
 from flask import Blueprint, abort, g, redirect, render_template, request, url_for
 
 from .. import config
-from ..extensions import limiter
+from ..extensions import cache, limiter
 from ..i18n import t
 from ..notes import (
     generate_random_id,
@@ -51,12 +51,16 @@ def world_note_post(note_id):
     content = request.form.get("content", "")
     if not write_note("public", note_id, content):
         abort(500)
+    cache.delete(f"/world/{note_id}")
+    cache.delete(f"/world/{note_id}.md")
+    cache.delete(f"/world/{note_id}/md")
     return redirect(url_for("world.world_note_get", note_id=note_id))
 
 
 @bp.route("/world/<note_id>/md", methods=["GET"])
 @bp.route("/world/<note_id>.md", methods=["GET"])
 @limiter.limit(lambda: f"{config.GET_RATE_MAX} per {config.GET_RATE_WINDOW} second")
+@cache.cached(timeout=config.CACHE_TIMEOUT_NOTES)
 def world_md(note_id):
     check_note_id(note_id)
     content = read_note("public", note_id)
