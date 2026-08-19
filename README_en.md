@@ -315,9 +315,13 @@ rusin-note:.
     - `hours`：Save duration (in **hours**), default $24$.
 
     When enabled, notes (public + private) not modified within the configured hours are deleted by a background thread, which scans every 30 minutes.
-- `latex_render`：LaTeX formula rendering.
-    - `enabled`：Enable rendering, default `true`.
-    - `cdn`：Base directory of KaTeX static files, default jsdelivr (e.g. BootCDN mirror for China: `https://cdn.bootcdn.net/ajax/libs/katex/0.16.11`).
+- `global_cdn`: Base URL of the global CDN for front-end static assets.
+    - Default `https://cdn.jsdmirror.cn`.
+
+    Front-end assets are loaded by concatenating this base URL: FontAwesome icons, the marked editor script, DOMPurify, and KaTeX (all use `npm/`-style paths, so `https://cdn.jsdelivr.net` and other npm CDNs also work). You can replace the whole CDN in `config.json` to match your network environment without touching code.
+- `latex_render`: LaTeX formula rendering.
+    - `enabled`: Enable rendering, default `true`.
+    - KaTeX static assets are loaded from the `global_cdn` base URL (default jsdmirror; jsdelivr, etc. also work).
 
     When enabled, Markdown read-only pages support `$...$` inline and `$$...$$` display math (KaTeX, client-side rendering, no server dependency).
 - `code_highlight`: code highlighting (highlight.js, client-side rendering).
