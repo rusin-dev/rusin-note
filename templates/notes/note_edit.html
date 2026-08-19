@@ -5,13 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ full_title|e }}</title>
     <link rel="icon" href="/favicon.ico" type="image/x-icon">
-    <link rel="preload" href="https://cdn.jsdmirror.cn/npm/@fortawesome/fontawesome-free@6.5.2/webfonts/fa-solid-900.woff2" as="font" type="font/woff2" crossorigin>
-    <link rel="preload" href="https://cdn.jsdmirror.cn/npm/@fortawesome/fontawesome-free@6.5.2/webfonts/fa-brands-400.woff2" as="font" type="font/woff2" crossorigin>
-    <link rel="stylesheet" href="https://cdn.jsdmirror.cn/npm/@fortawesome/fontawesome-free@6.5.2/css/all.min.css" media="print" onload="this.media='all'">
-    <noscript><link rel="stylesheet" href="https://cdn.jsdmirror.cn/npm/@fortawesome/fontawesome-free@6.5.2/css/all.min.css"></noscript>
+    <link rel="preload" href="{{ config.GLOBAL_CDN }}/npm/@fortawesome/fontawesome-free@6.5.2/webfonts/fa-solid-900.woff2" as="font" type="font/woff2" crossorigin>
+    <link rel="preload" href="{{ config.GLOBAL_CDN }}/npm/@fortawesome/fontawesome-free@6.5.2/webfonts/fa-brands-400.woff2" as="font" type="font/woff2" crossorigin>
+    <link rel="stylesheet" href="{{ config.GLOBAL_CDN }}/npm/@fortawesome/fontawesome-free@6.5.2/css/all.min.css" media="print" onload="this.media='all'">
+    <noscript><link rel="stylesheet" href="{{ config.GLOBAL_CDN }}/npm/@fortawesome/fontawesome-free@6.5.2/css/all.min.css"></noscript>
     {{ theme_script|safe }}
-    <script defer src="https://cdn.jsdmirror.cn/npm/marked@12.0.2/marked.min.js"></script>
-    <script defer src="https://cdn.jsdmirror.cn/npm/dompurify@3.1.7/dist/purify.min.js"></script>
+    <script defer src="{{ config.GLOBAL_CDN }}/npm/marked@12.0.2/marked.min.js"></script>
+    <script defer src="{{ config.GLOBAL_CDN }}/npm/dompurify@3.1.7/dist/purify.min.js"></script>
     {{ latex_head|safe }}
     {{ code_highlight_head|safe }}
     <style>

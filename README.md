@@ -325,9 +325,13 @@ rusin-note:.
    - `hours` ：保存时长（单位：**小时**）默认 $24$；
 
     开启后，超过设定小时数未被修改的剪贴板（公开+私有）将被后台线程自动删除，每 30 分钟扫描一次。
+- `global_cdn` 全局前端静态资源 CDN 基础地址。
+   - 默认 `https://cdn.jsdmirror.cn`；
+
+   前端资源统一从该地址拼接加载：FontAwesome 图标、marked 编辑器脚本、DOMPurify 清洗库与 KaTeX 公式（路径均为 `npm/` 形式，因此也兼容 `https://cdn.jsdelivr.net` 等 npm CDN）。可按网络环境在 config.json 中整体替换，无需改代码。
 - `latex_render` LaTeX 公式渲染。
    - `enabled` ：是否开启，默认 `true`；
-   - `cdn` ：KaTeX 静态文件基础目录，默认 jsdelivr；
+   - KaTeX 静态资源从 `global_cdn` 基础地址拼接（默认 jsdmirror，可换 jsdelivr 等）；
 
     开启后，Markdown 只读页面支持 `$...$` 行内公式与 `$$...$$` 块级公式（KaTeX 洛谷同款，客户端渲染，无需服务端依赖）。
 - `code_highlight` 代码高亮（highlight.js，客户端渲染）。

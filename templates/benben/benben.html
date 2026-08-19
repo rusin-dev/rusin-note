@@ -12,7 +12,7 @@
 </style>
 {{ latex_head|safe }}
 {{ code_highlight_head|safe }}
-<script defer src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
+<script defer src="{{ config.GLOBAL_CDN }}/npm/marked@12.0.2/marked.min.js"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     var L10N = {{ preview_l10n|tojson }};
@@ -61,7 +61,9 @@ document.addEventListener('DOMContentLoaded', function() {
 {% endblock %}
 {% block content %}
 <h1>{{ t('benben_title') }}</h1>
-<p style="color: var(--muted); margin: 12px 0 16px;">{{ t('benben_page_info', page=page, size=page_size) }}</p>
+{% if items %}
+<center><p style="color: var(--muted); margin: 12px 0 16px;">{{ t('benben_page_info', page=page, size=page_size) }}</p></center>
+{% endif %}
 {% if error %}<p class="error">{{ error }}</p>{% endif %}
 {% if current_user %}
 <form method="POST" action="/benben" class="benben-form">
@@ -74,7 +76,7 @@ document.addEventListener('DOMContentLoaded', function() {
     <button type="submit" style="width:auto;">{{ t('benben_submit') }}</button>
 </form>
 {% else %}
-<p style="color: var(--muted);">{{ t('benben_readonly') }}</p>
+<center><b><p style="color: var(--muted);">{{ t('benben_readonly') }}</p></b></center></b>
 {% endif %}
 <div class="benben-list">
     {% for item in items %}
@@ -87,12 +89,12 @@ document.addEventListener('DOMContentLoaded', function() {
         <div class="benben-body markdown-body">{{ item.content_html|safe }}</div>
     </div>
     {% else %}
-    <p class="empty">{{ t('benben_empty') }}</p>
+    <center><p class="empty">{{ t('benben_empty') }}</p></center>
     {% endfor %}
 </div>
 {% if has_more %}
 <p class="benben-more"><a href="/benben?page={{ page + 1 }}">{{ t('benben_more') }}</a></p>
 {% else %}
-<p class="benben-more empty">{{ t('benben_no_more') }}</p>
+<center><p class="benben-more empty">{{ t('benben_no_more') }}</p></center>
 {% endif %}
 {% endblock %}

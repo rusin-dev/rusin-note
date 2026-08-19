@@ -7,5 +7,5 @@
 <img src="https://vjudge.net/static/bundle/b919d41b16809efb2d09.gif"></center>
 <center><p><img src="https://vjudge.net/static/bundle/b3bb0b0cf13cd630088c.jpg" alt="悲剧" width="500"></p></center>
 <center><h1><span style="color: rgb(204, 85, 16); ">401 {{ t('auth_required_title') }}</span></h1></center>
-<center><p>{% if shares %}{{ t('auth_required_body_shares') }}{% else %}{{ t('auth_required_body') }}{% endif %}</p></center>
+<center><p>{% if shares %}{{ t('auth_required_body_shares')|safe }}{% else %}{{ t('auth_required_body')|safe }}{% endif %}</p></center>
 {% endblock %}
