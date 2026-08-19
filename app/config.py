@@ -88,7 +88,8 @@ DEFAULT_CONFIG = {
         "max_length": 1024,
         "page_size": 50,
         "cooldown_seconds": 3,
-        "max_height_px": 1000
+        "max_height_px": 1000,
+        "max_posts": 200
     },
     "note_editor": {
         "live_preview_default": False,
@@ -121,6 +122,15 @@ def load_config():
 config = load_config()
 DATA_DIR = os.environ.get("RUSIN_DATA_DIR", ".")
 os.makedirs(DATA_DIR, exist_ok=True)
+
+# ---------- 无服务器平台检测 ----------
+# 无服务器环境没有可写的持久磁盘：数据必须走外部存储（upstash 后端），
+# 且不能启动后台守护线程（冷实例闲置时不会执行，日志需回退到 stderr）。
+SERVERLESS = bool(
+    os.environ.get("VERCEL")
+    or os.environ.get("NETLIFY")
+    or os.environ.get("AWS_LAMBDA_FUNCTION_NAME")
+)
 
 
 def data_path(*parts: str) -> str:
@@ -282,6 +292,8 @@ BENBEN_PAGE_SIZE = BENBEN_CFG.get("page_size", 50)
 BENBEN_COOLDOWN_SECONDS = BENBEN_CFG.get("cooldown_seconds", 3)
 # 犇犇内容渲染后的最大显示高度（px）：超出部分在内容区内滚动，默认 1000px
 BENBEN_MAX_HEIGHT_PX = BENBEN_CFG.get("max_height_px", 1000)
+# 犇犇持久化条数上限（外部存储单键体积控制，超出丢弃最旧）
+BENBEN_MAX_POSTS = BENBEN_CFG.get("max_posts", 200)
 try:
     BENBEN_MAX_HEIGHT_PX = int(BENBEN_MAX_HEIGHT_PX)
     if BENBEN_MAX_HEIGHT_PX <= 0:

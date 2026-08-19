@@ -1,161 +1,95 @@
-"""用户/会话/分享的字典存储与原子持久化，以及笔记文件路径与分享业务
+"""用户/会话/分享/犇犇存储：内存缓存 + 统一存储层（file / memory / upstash）
 
-多进程部署（gunicorn 多 worker）说明：
-- 各进程内的字典（users/sessions）只是磁盘 JSON 的缓存副本。
-- 写入走「进程内 Lock + 跨进程文件锁 + 原子写」保证不丢更新；
-  读取在未命中/周期性从磁盘重载，保证其它 worker 的变更可见。
+存储后端由 app.storage 的 select_backend() 决定：
+- file 后端：保持原有「进程内字典缓存 + JSON 文件原子落盘」行为（本地/VPS）；
+- upstash 后端：跨实例共享同一份数据（无服务器部署），写操作通过
+  storage.lock 做跨实例互斥（SET NX EX），避免多实例并发读改写丢更新；
+- memory 后端：纯内存，重启清空。
+
+写路径约定：持 threading.Lock（进程内）+ storage.lock（跨进程/跨实例）
+的块内**只更新内存缓存**，持久化在锁外执行（避免与 reload 死锁）。
 """
-import os
-import json
-import time
 import secrets
-from threading import Lock
-from .logger import create_logger
+import threading
+import time
 
-try:
-    import fcntl  # POSIX 跨进程文件锁
-    _HAS_FCNTL = True
-except ImportError:
-    _HAS_FCNTL = False
-    try:
-        import msvcrt  # Windows 跨进程文件锁
-    except ImportError:
-        msvcrt = None
-
-
-class _ProcessFileLock:
-    """跨进程文件锁（POSIX fcntl.flock / Windows msvcrt.locking）。
-
-    同一进程内的并发由各 store 的 threading.Lock 串行化，因此这里只会被
-    单个线程持有，锁只用于仲裁不同 worker 进程之间的读改写。
-    """
-
-    def __init__(self, path: str):
-        self._lock_path = path + ".lock"
-        self._fh = None
-
-    def acquire(self):
-        fh = open(self._lock_path, "a+b")
-        try:
-            if _HAS_FCNTL:
-                fcntl.flock(fh.fileno(), fcntl.LOCK_EX)
-            elif msvcrt is not None:
-                fh.seek(0)
-                if fh.read(1) == b"":
-                    fh.write(b"\0")
-                    fh.flush()
-                fh.seek(0)
-                msvcrt.locking(fh.fileno(), msvcrt.LK_LOCK, 1)
-        except Exception:
-            fh.close()
-            raise
-        self._fh = fh
-        return self
-
-    def release(self):
-        fh = self._fh
-        if fh is None:
-            return
-        try:
-            if _HAS_FCNTL:
-                fcntl.flock(fh.fileno(), fcntl.LOCK_UN)
-            elif msvcrt is not None:
-                fh.seek(0)
-                msvcrt.locking(fh.fileno(), msvcrt.LK_UNLCK, 1)
-        finally:
-            fh.close()
-            self._fh = None
-
-    def __enter__(self):
-        return self.acquire()
-
-    def __exit__(self, *exc):
-        self.release()
-
+from . import config
 from .config import (
     BENBEN_COOLDOWN_SECONDS,
-    config,
-    data_path,
-    DEFAULT_CONFIG,
+    BENBEN_MAX_POSTS,
     SHARE_TOKEN_CHARSET,
     SHARE_TOKEN_LENGTH,
     SHARE_VIEWS_FLUSH_INTERVAL,
     SHARE_VIEWS_FLUSH_THRESHOLD,
 )
+from .logger import create_logger
+from .storage import StorageError, storage
 
 logger = create_logger("store")
 
-# ---------- 数据文件路径 ----------
-USER_FILE = data_path("users.json")
-SESSION_FILE = data_path("sessions.json")
-SHARE_FILE = data_path("shares.json")
-NOTES_BASE = data_path("notes")
-os.makedirs(NOTES_BASE, exist_ok=True)
+# 键名（与存储后端的 KV 布局一一对应）
+K_USERS = "users.json"
+K_SESSIONS = "sessions.json"
+K_SHARES = "shares.json"
+K_BENBEN = "benben:posts"
 
+# ---------- 内存缓存 ----------
 users = {}
 sessions = {}  # 格式: {sha256(token): {"username": str, "created_at": float}}
 shares = {}  # 格式: {token: {"owner": str, "note_id": str, "created_at": float, "editable": bool, "views": int}}
-users_lock = Lock()
-sessions_lock = Lock()
-shares_lock = Lock()
+users_lock = threading.Lock()
+sessions_lock = threading.Lock()
+shares_lock = threading.Lock()
 
 
-def _atomic_json_dump(path: str, data: dict) -> bool:
-    """原子写入 JSON 文件：临时文件 + flush + fsync + os.replace（BUG-6）
-    防止写入中途崩溃/断电导致整个文件损坏、数据全部丢失"""
+def _persist(key: str, data: dict | list) -> bool:
+    """将整个数据写回存储后端（锁外调用）"""
     try:
-        temp_path = path + ".tmp"
-        with open(temp_path, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2, ensure_ascii=False)
-            f.flush()
-            os.fsync(f.fileno())
-        os.replace(temp_path, path)
-        return True
-    except Exception as e:
-        logger.error(f"[错误] 原子写入 {path} 失败: {e}")
-        try:
-            if os.path.exists(temp_path):
-                os.remove(temp_path)
-        except OSError:
-            pass
+        return storage.set(key, data)
+    except StorageError as e:
+        logger.error(f"[错误] 存储写入 {key} 失败: {e}")
         return False
+
+
+def _read(key: str):
+    """从存储后端读取整个数据；缺失返回空容器，失败返回 None"""
+    try:
+        value = storage.get(key)
+        if value is None:
+            return None
+        if isinstance(value, (dict, list)):
+            return value
+        return None
+    except StorageError as e:
+        logger.error(f"[错误] 存储读取 {key} 失败: {e}")
+        return None
+
+
+def _read_merge(key: str, target: dict):
+    """存储锁保护下重读并合并进内存缓存（多实例同步最新数据）"""
+    data = _read(key)
+    if isinstance(data, dict):
+        target.clear()
+        target.update(data)
 
 
 # ---------- 用户存储 ----------
 def load_users():
-    global users
-    if os.path.exists(USER_FILE):
-        try:
-            with open(USER_FILE, "r", encoding="utf-8") as f:
-                users = json.load(f)
-        except Exception:
-            users = {}
-    else:
-        users = {}
-
-
-def _read_json_safely(path: str):
-    """读取 JSON 文件内容；文件缺失返回 {}，文件损坏返回 None（由调用方决定是否回退）"""
-    if not os.path.exists(path):
-        return {}
-    try:
-        with open(path, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except Exception:
-        return None
-
-
-def reload_users() -> None:
-    """从磁盘重新加载用户表（多进程下同步其它 worker 的注册）。原地更新以保持引用有效。"""
     with users_lock:
-        data = _read_json_safely(USER_FILE)
+        data = _read(K_USERS)
         if isinstance(data, dict):
             users.clear()
             users.update(data)
 
 
+def reload_users() -> None:
+    """从存储后端重新加载用户表（多实例下同步其它实例的注册）。原地更新以保持引用有效。"""
+    with users_lock:
+        _read_merge(K_USERS, users)
+
+
 def get_user(username: str) -> dict | None:
-    """跨进程读取用户记录：内存未命中时先从磁盘重载再查"""
+    """读取用户记录：内存未命中时先从存储重载再查"""
     with users_lock:
         user = users.get(username)
     if user is not None:
@@ -166,111 +100,120 @@ def get_user(username: str) -> dict | None:
 
 
 def register_user(username: str, data: dict) -> bool:
-    """跨进程安全注册：文件锁下重读最新用户表后检查并写入。
+    """跨实例安全注册：存储锁下重读最新用户表后检查并写入。
     返回 True 表示注册成功，False 表示用户名已存在或写入失败。"""
-    with users_lock:
-        with _ProcessFileLock(USER_FILE):
-            disk = _read_json_safely(USER_FILE)
-            if isinstance(disk, dict):
-                users.clear()
-                users.update(disk)
-            if username in users:
-                return False
-            users[username] = data
-            return _atomic_json_dump(USER_FILE, users)
+    try:
+        with users_lock:
+            with storage.lock(K_USERS):
+                _read_merge(K_USERS, users)
+                if username in users:
+                    return False
+                users[username] = data
+                return _persist(K_USERS, users)
+    except StorageError as e:
+        logger.error(f"[错误] 注册用户失败: {e}")
+        return False
 
 
 def save_users():
     with users_lock:
-        _atomic_json_dump(USER_FILE, users)
+        _persist(K_USERS, users)
+
+
+# 用户总数统计：周期重载以同步多实例注册（避免每次 /count 都触发存储读取）
+_last_users_reload = 0.0
+_USERS_RELOAD_INTERVAL = 5.0
+
+
+def get_user_count() -> int:
+    """返回当前用户总数（带周期重载的缓存值）"""
+    global _last_users_reload
+    now = time.time()
+    if now - _last_users_reload >= _USERS_RELOAD_INTERVAL:
+        _last_users_reload = now
+        reload_users()
+    with users_lock:
+        return len(users)
 
 
 # ---------- 会话存储 ----------
 def load_sessions():
-    global sessions
-    if os.path.exists(SESSION_FILE):
-        try:
-            with open(SESSION_FILE, "r", encoding="utf-8") as f:
-                sessions = json.load(f)
-        except Exception:
-            sessions = {}
-    else:
-        sessions = {}
-
-
-def reload_sessions() -> None:
-    """从磁盘重新加载会话（多进程下同步其它 worker 的登录/登出）。原地更新以保持引用有效。"""
     with sessions_lock:
-        data = _read_json_safely(SESSION_FILE)
+        data = _read(K_SESSIONS)
         if isinstance(data, dict):
             sessions.clear()
             sessions.update(data)
 
 
-def store_session(token_hash: str, data: dict) -> bool:
-    """跨进程安全写入会话：文件锁下重读最新数据，避免多 worker 并发登录丢失更新"""
+def reload_sessions() -> None:
+    """从存储后端重新加载会话（多实例下同步登录/登出）。原地更新以保持引用有效。"""
     with sessions_lock:
-        with _ProcessFileLock(SESSION_FILE):
-            disk = _read_json_safely(SESSION_FILE)
-            if isinstance(disk, dict):
-                sessions.clear()
-                sessions.update(disk)
-            sessions[token_hash] = data
-            return _atomic_json_dump(SESSION_FILE, sessions)
+        _read_merge(K_SESSIONS, sessions)
+
+
+def store_session(token_hash: str, data: dict) -> bool:
+    """跨实例安全写入会话：存储锁下重读最新数据，避免多实例并发登录丢失更新"""
+    try:
+        with sessions_lock:
+            with storage.lock(K_SESSIONS):
+                _read_merge(K_SESSIONS, sessions)
+                sessions[token_hash] = data
+                return _persist(K_SESSIONS, sessions)
+    except StorageError as e:
+        logger.error(f"[错误] 写入会话失败: {e}")
+        return False
 
 
 def remove_session(token_hash: str) -> bool:
-    """跨进程安全删除会话，返回是否存在并删除成功"""
-    with sessions_lock:
-        with _ProcessFileLock(SESSION_FILE):
-            disk = _read_json_safely(SESSION_FILE)
-            if isinstance(disk, dict):
-                sessions.clear()
-                sessions.update(disk)
-            if token_hash not in sessions:
-                return False
-            del sessions[token_hash]
-            return _atomic_json_dump(SESSION_FILE, sessions)
+    """跨实例安全删除会话，返回是否存在并删除成功"""
+    try:
+        with sessions_lock:
+            with storage.lock(K_SESSIONS):
+                _read_merge(K_SESSIONS, sessions)
+                if token_hash not in sessions:
+                    return False
+                del sessions[token_hash]
+                return _persist(K_SESSIONS, sessions)
+    except StorageError as e:
+        logger.error(f"[错误] 删除会话失败: {e}")
+        return False
 
 
 def delete_sessions_if(pred) -> int:
-    """跨进程安全删除满足 pred(token_hash, session) 的会话并落盘，返回删除数量。
+    """跨实例安全删除满足 pred(token_hash, session) 的会话并落盘，返回删除数量。
     pred 需容忍 session 非 dict 的脏数据。"""
-    with sessions_lock:
-        with _ProcessFileLock(SESSION_FILE):
-            disk = _read_json_safely(SESSION_FILE)
-            if isinstance(disk, dict):
-                sessions.clear()
-                sessions.update(disk)
-            doomed = [h for h, s in sessions.items() if pred(h, s)]
-            for h in doomed:
-                del sessions[h]
-            if doomed:
-                _atomic_json_dump(SESSION_FILE, sessions)
-            return len(doomed)
+    try:
+        with sessions_lock:
+            with storage.lock(K_SESSIONS):
+                _read_merge(K_SESSIONS, sessions)
+                doomed = [h for h, s in sessions.items() if pred(h, s)]
+                for h in doomed:
+                    del sessions[h]
+                if doomed:
+                    _persist(K_SESSIONS, sessions)
+                return len(doomed)
+    except StorageError as e:
+        logger.error(f"[错误] 清理会话失败: {e}")
+        return 0
 
 
 def save_sessions():
     with sessions_lock:
-        _atomic_json_dump(SESSION_FILE, sessions)
+        _persist(K_SESSIONS, sessions)
 
 
 # ---------- 分享存储 ----------
 def load_shares():
-    global shares
-    if os.path.exists(SHARE_FILE):
-        try:
-            with open(SHARE_FILE, "r", encoding="utf-8") as f:
-                shares = json.load(f)
-        except Exception:
-            shares = {}
-    else:
-        shares = {}
+    with shares_lock:
+        data = _read(K_SHARES)
+        if isinstance(data, dict):
+            shares.clear()
+            shares.update(data)
 
 
 def save_shares():
     with shares_lock:
-        _atomic_json_dump(SHARE_FILE, shares)
+        _persist(K_SHARES, shares)
 
 
 def generate_share_token() -> str:
@@ -280,15 +223,20 @@ def generate_share_token() -> str:
 def create_share(username: str, note_id: str, editable: bool) -> str:
     """创建分享，返回分享 token（长度与字符集由配置决定）"""
     token = generate_share_token()
-    with shares_lock:
-        shares[token] = {
-            "owner": username,
-            "note_id": note_id,
-            "created_at": time.time(),
-            "editable": bool(editable),
-            "views": 0,
-        }
-    save_shares()
+    try:
+        with shares_lock:
+            with storage.lock(K_SHARES):
+                _read_merge(K_SHARES, shares)
+                shares[token] = {
+                    "owner": username,
+                    "note_id": note_id,
+                    "created_at": time.time(),
+                    "editable": bool(editable),
+                    "views": 0,
+                }
+                _persist(K_SHARES, shares)
+    except StorageError as e:
+        logger.error(f"[错误] 创建分享失败: {e}")
     return token
 
 
@@ -305,25 +253,29 @@ def get_share(token: str) -> dict | None:
 
 def delete_share(username: str, token: str) -> bool:
     """仅分享者本人可删除，返回是否删除成功"""
-    with shares_lock:
-        share = shares.get(token)
-        if share is None or share.get("owner") != username:
-            return False
-        del shares[token]
-    save_shares()
-    return True
+    try:
+        with shares_lock:
+            with storage.lock(K_SHARES):
+                _read_merge(K_SHARES, shares)
+                share = shares.get(token)
+                if share is None or share.get("owner") != username:
+                    return False
+                del shares[token]
+                return _persist(K_SHARES, shares)
+    except StorageError as e:
+        logger.error(f"[错误] 删除分享失败: {e}")
+        return False
 
 
 # 分享视图计数延迟批量持久化（BUG-06）：视图数非关键数据，允许延迟写盘。
-# 内存累计达到阈值或距上次写盘超时后，才全量写一次 shares.json，
-# 避免高并发下每次访问分享链接都触发原子写盘（全量 JSON + fsync）。
+# 内存累计达到阈值或距上次写盘超时后，才全量写一次，避免高并发下每次都触发写盘。
 _VIEWS_DIRTY = False
 _VIEWS_PENDING = 0
 _last_views_flush = time.time()
 
 
 def increment_share_views(token: str):
-    """每次访问分享链接时计数（内存累加，延迟批量写盘，BUG-06）"""
+    """每次访问分享链接时计数（内存累加，延迟批量持久化，BUG-06）"""
     global _VIEWS_DIRTY, _VIEWS_PENDING, _last_views_flush
     with shares_lock:
         share = shares.get(token)
@@ -338,16 +290,22 @@ def increment_share_views(token: str):
 
 
 def flush_share_views():
-    """将内存中的分享视图计数写盘（阈值/超时触发，后台线程定期调用）"""
+    """将内存中的分享视图计数持久化（阈值/超时触发，后台线程定期调用）"""
     global _VIEWS_DIRTY, _VIEWS_PENDING, _last_views_flush
-    with shares_lock:
-        if not _VIEWS_DIRTY:
-            return
-    save_shares()  # save_shares 会自行获取 shares_lock，须在持锁块外调用
-    with shares_lock:
-        _VIEWS_PENDING = 0
-        _VIEWS_DIRTY = False
-        _last_views_flush = time.time()
+    # 锁顺序与其它写路径一致（线程锁 → 存储锁），存储锁内重读最新数据
+    # 再合并计数，避免覆盖其它实例的新增分享
+    try:
+        with shares_lock:
+            with storage.lock(K_SHARES):
+                if not _VIEWS_DIRTY:
+                    return
+                _read_merge(K_SHARES, shares)
+                _persist(K_SHARES, shares)
+                _VIEWS_PENDING = 0
+                _VIEWS_DIRTY = False
+                _last_views_flush = time.time()
+    except StorageError as e:
+        logger.error(f"[错误] 分享视图刷新失败: {e}")
 
 
 def list_user_shares(username: str) -> list:
@@ -357,27 +315,57 @@ def list_user_shares(username: str) -> list:
                 if isinstance(s, dict) and s.get("owner") == username]
 
 
-# ---------- 犇犇（用户动态）存储（内存态，重启清空，无需落盘） ----------
+# ---------- 犇犇（用户动态）存储 ----------
+# 内存缓存 + 持久化到存储后端（外部存储可用时重启不丢，最多保留 BENBEN_MAX_POSTS 条）
 benben_posts = []  # 格式: [{"username": str, "content": str, "time": float, "ip": str}]，旧→新
-benben_lock = Lock()
+benben_lock = threading.Lock()
+_benben_last_resync = 0.0
+_BENBEN_RESYNC_INTERVAL = 2.0
+
+
+def _resync_benben_locked():
+    """周期重载犇犇（多实例同步）。须已持有 benben_lock。"""
+    global _benben_last_resync
+    now = time.time()
+    if now - _benben_last_resync < _BENBEN_RESYNC_INTERVAL:
+        return
+    _benben_last_resync = now
+    data = _read(K_BENBEN)
+    if isinstance(data, list):
+        benben_posts.clear()
+        benben_posts.extend(data)
 
 
 def add_benben_post(username: str, content: str, ip: str = "") -> bool:
-    """新增一条犇犇（内存追加，不提供删除/清除，重启清空）。ip 为发布者 IP（get_client_ip() 结果）。"""
-    with benben_lock:
-        benben_posts.append({
-            "username": username,
-            "content": content,
-            "time": time.time(),
-            "ip": ip,
-        })
-    return True
+    """新增一条犇犇并持久化（跨实例互斥，超出上限丢弃最旧）。ip 为发布者 IP。"""
+    try:
+        with benben_lock:
+            with storage.lock(K_BENBEN):
+                data = _read(K_BENBEN)
+                if isinstance(data, list):
+                    benben_posts.clear()
+                    benben_posts.extend(data)
+                benben_posts.append({
+                    "username": username,
+                    "content": content,
+                    "time": time.time(),
+                    "ip": ip,
+                })
+                trimmed = benben_posts[-BENBEN_MAX_POSTS:] if BENBEN_MAX_POSTS > 0 else benben_posts
+                ok = _persist(K_BENBEN, trimmed)
+                if ok and len(trimmed) != len(benben_posts):
+                    benben_posts.clear()
+                    benben_posts.extend(trimmed)
+                return ok
+    except StorageError as e:
+        logger.error(f"[错误] 发布犇犇失败: {e}")
+        return False
 
 
-# ---------- 犇犇发布冷却（单用户限流，内存态，重启清空） ----------
+# ---------- 犇犇发布冷却（单用户限流，内存态） ----------
 # 格式: {username: 上次发布时间戳}。冷却时间由 config.BENBEN_COOLDOWN_SECONDS 控制。
 benben_last_post = {}
-benben_cooldown_lock = Lock()
+benben_cooldown_lock = threading.Lock()
 
 
 def get_benben_cooldown(username: str) -> float:
@@ -403,6 +391,7 @@ def count_benben_posts() -> int:
 def get_benben_posts(page: int, page_size: int):
     """按页返回犇犇（新→旧），page 从 1 开始。返回 (posts, has_more)。"""
     with benben_lock:
+        _resync_benben_locked()
         total = len(benben_posts)
     start = total - page * page_size
     if start < 0:

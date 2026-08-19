@@ -1,0 +1,26 @@
+{
+  "builds": [
+    {
+      "src": "api/index.py",
+      "use": "@vercel/python",
+      "config": {
+        "includeFiles": [
+          "app/**",
+          "templates/**",
+          "config.json",
+          "requirements.txt",
+          "Disclaimer.md",
+          "Disclaimer-en.md",
+          "favicon.ico",
+          "image/**"
+        ]
+      }
+    }
+  ],
+  "routes": [
+    {
+      "src": "/(.*)",
+      "dest": "api/index.py"
+    }
+  ]
+}

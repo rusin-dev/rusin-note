@@ -5,7 +5,7 @@
 <div align="center">
     <a href="https://github.com/rusin-dev/rusin-note"><img width="15%" alt="logo" src="./image/logo.png" /></a>
     <h1><b>Rusin-Note</b></h1>
-    <p><em>🖊︎ 一个受 note.ms 启发的轻量级云端剪贴板项目，专为 VPS 部署设计，开箱即用。</em></p>
+    <p><em>🖊︎ 一个受 note.ms 启发的轻量级云端剪贴板项目，支持 VPS 与无服务器（Serverless）部署，开箱即用。</em></p>
     <p>
         简体中文 | <a href="https://github.com/rusin-dev/rusin-note/blob/main/README_en.md">English</a> | <a href="https://note.rusin7.com">Demo</a>
     </p>
@@ -28,13 +28,13 @@
 
 ## 产品特性
 
-- **开箱即用的云端剪贴板**：基于 Flask 的轻量实现，适合部署在 VPS 或个人服务器上，用浏览器即可快速保存和访问文本内容。
+- **开箱即用的云端剪贴板**：基于 Flask 的轻量实现，可部署在 VPS 或 Vercel / AWS Lambda 等无服务器平台，用浏览器即可快速保存和访问文本内容。
 - **公开与私有笔记**：支持随机短路径公开笔记，也支持访客账号下的私有笔记列表，兼顾临时分享和个人留存。
 - **安全分享链接**：可为用户笔记生成带随机 token 的分享链接，并支持分享内容写回，便于跨设备协作。
 - **Markdown 与 LaTeX 渲染**：只读页面和犇犇动态支持 Markdown、KaTeX 公式与 Pygments 代码高亮（代码块自动带行号），适合保存代码片段、说明文档和数学内容。编辑页实时渲染可手动开关。
 - **犇犇动态**：内置轻量动态流，登录用户可发布内容，未登录用户可浏览，支持实时预览、分页加载和发布冷却。
 - **多语言界面**：内置简体中文与 English，可手动切换，也可按浏览器语言自动选择。
-- **部署友好**：配置集中在 `config.json`，支持笔记过期清理、会话超时、密码策略、反向代理真实 IP、HTTPS Cookie 等常见部署选项。
+- **部署友好**：配置集中在 `config.json`，支持笔记过期清理、会话超时、密码策略、反向代理真实 IP、HTTPS Cookie 等常见部署选项。无服务器部署时数据可接入外部 KV 存储（Vercel KV / Upstash），冷启动不丢数据。
 - **基础防护完善**：包含 CSRF 防护、请求限流、保存限流、注册限流、内容安全清洗和代理头信任开关，降低公开部署风险。
 
 ## 快速开始
@@ -67,6 +67,33 @@ python 版本 $\geq$ 3.10。
     然后打开 <https://localhost:8080> 查看效果。
 
 ### 线上部署
+
+#### 方式一：Vercel（无服务器，推荐）
+
+项目已内置 Vercel 配置（`vercel.json` + `api/index.py`），零配置即可部署：
+
+1. 在 [Vercel](https://vercel.com) 导入本仓库（Framework Preset 选择 **Other** 即可，Python 运行时自动识别）。
+2. 存储后端二选一：
+   - **Neon（PostgreSQL）**：在 Vercel 的 Storage / Marketplace 绑定 [Neon](https://vercel.com/marketplace/neon)，Vercel 会自动注入 `DATABASE_URL` 环境变量（Vercel KV 已停服，这是目前 Vercel 官方推荐的持久化方案）；
+   - **Upstash Redis**：在 Vercel Marketplace 安装 Upstash Redis，手动把 `KV_REST_API_URL` 与 `KV_REST_API_TOKEN` 填入项目环境变量。
+   - 两者都设置时优先用 Upstash。
+3. 在项目设置中新增环境变量 `RUSIN_SECRET_KEY`（任意随机长字符串，用于会话/CSRF 签名，**必填**；不设置则每次冷启动随机，登录态会失效）。
+4. 部署完成后，数据（笔记、用户、会话、分享、犇犇）全部存于 Neon/Upstash，多实例共享、冷启动不丢。
+
+可选：设置 `REDIS_URL`（Redis 连接串）让限流计数在多实例间共享（默认按实例内存计数）。
+
+> 提示：无服务器平台默认 `trust_proxy_headers: true`、`secure_cookies: true`（已写入 `config.json`）。本地开发如需关闭请自行修改。
+
+#### 方式二：AWS Lambda（无服务器）
+
+项目根目录提供 `lambda_handler.py`（基于 Mangum 适配 WSGI）：
+
+1. 打包仓库上传（包含 `templates/`、`config.json` 等）；
+2. 处理程序设为 `lambda_handler.handler`，配 API Gateway 代理集成；
+3. 环境变量与 Vercel 相同（`KV_REST_API_URL` / `KV_REST_API_TOKEN` / `RUSIN_SECRET_KEY`）；
+4. 内存建议 ≥ 512MB（Markdown 渲染需要）。
+
+#### 方式三：VPS / 传统服务器
 
 连接你的服务器，然后
 
@@ -119,6 +146,9 @@ python 版本 $\geq$ 3.10。
     > 服务端才会信任代理头按真实客户端 IP 限流（默认关闭以杜绝伪造头绕过限流）。
     > 代理头可信度从高到低：`CF-Connecting-IP`（Cloudflare 直连）→ `X-Real-IP`（Nginx）→ `X-Forwarded-For` 最右一项（Nginx 追加的真客户端），客户端伪造的 XFF 左侧项不会被采信。
 
+    > 注意：仓库内 `config.json` 默认已为无服务器平台开启 `trust_proxy_headers` 与
+    > `secure_cookies`，VPS 部署请按需改回 `false`（HTTP 环境下 Secure Cookie 会被浏览器拒绝）。
+
     ```bash
     # 启用并重载
     sudo ln -s /etc/nginx/sites-available/rusin-note /etc/nginx/sites-enabled
@@ -126,7 +156,7 @@ python 版本 $\geq$ 3.10。
     sudo ufw allow 'Nginx Full'
     ```
 
-### Zeabur 自动部署
+#### Zeabur VPS 自动部署
 
 使用 Zeabur 从 GitHub 自动部署时，应用目录会在每次部署时重新构建。为了避免剪贴板、用户、分享链接和犇犇动态被清空，请把运行数据写入持久化卷：
 
@@ -136,17 +166,34 @@ python 版本 $\geq$ 3.10。
 4. 进入 `Environment Variables`，新增环境变量 `RUSIN_DATA_DIR=/data`。
 5. 重新部署服务。
 
-不要把 Volume 挂载到项目根目录，否则可能覆盖部署出来的应用代码。设置完成后，运行数据会保存在 `/data` 下：
+不要将 Volume 挂载到项目根目录，否则可能覆盖部署出来的应用代码。设置完成后，运行数据会保存在 `/data` 下：
 
 ```plaintext
 /data/notes/
 /data/users.json
 /data/sessions.json
 /data/shares.json
+/data/benben.json
 /data/log/
 ```
 
-犇犇动态为纯内存临时存储，重启服务即清空，无需持久化。
+### 存储后端说明（无服务器关键）
+
+存储层（`app/storage.py`）提供四种后端，由 `RUSIN_STORAGE` 环境变量显式指定，未指定时自动识别：
+
+| 后端 | 启用方式 | 说明 |
+|---|---|---|
+| `file` | 默认（本地/VPS） | 数据写入 `RUSIN_DATA_DIR`（默认当前目录），布局与上表一致 |
+| `upstash` | 设置 `KV_REST_API_URL` + `KV_REST_API_TOKEN`（Upstash Redis 的 REST 接口） | 数据存于外部 KV，多实例共享、冷启动不丢；纯 HTTPS 请求，任意支持 Python 的无服务器平台可用 |
+| `postgres` | 设置 `DATABASE_URL`（Neon / 任意 PostgreSQL，Vercel 绑定 Neon 后自动注入） | 数据存于 PostgreSQL 表（`storage_kv` / `storage_notes`），多实例共享、冷启动不丢；跨实例互斥用 PG advisory lock |
+| `memory` | `RUSIN_STORAGE=memory`（无服务器平台未配置上述存储时自动启用） | 纯内存，重启/冷启动清空，适合体验或临时部署 |
+
+自动识别优先级：显式 `RUSIN_STORAGE` > `KV_REST_API_URL`+`KV_REST_API_TOKEN`（upstash）> `DATABASE_URL`（postgres）> 无服务器平台（memory）> 本地（file）。
+
+- 犇犇动态已从纯内存改为持久化（外部存储可用时重启不丢，最多保留 `benben.max_posts` 条，默认 200）。
+- 无服务器环境（检测到 `VERCEL` / `NETLIFY` / `AWS_LAMBDA_FUNCTION_NAME` 环境变量）不启动后台守护线程，清理任务改为请求内机会式执行；日志回退到 stderr（进入平台日志流）。
+- `RUSIN_SECRET_KEY` 在无服务器平台必须设置；未设置时若后端可持久化（file/upstash/postgres）会自动生成并存储，否则退回随机密钥（重启后登录态失效）。
+- 环境变量清单见 `.env.example`。
 
 ## 项目结构
 
@@ -161,6 +208,12 @@ rusin-note:.
 │  README_en.md
 │  requirements.txt（Python 依赖）
 │  zbpack.json（打包配置）
+│  vercel.json（Vercel 无服务器部署配置）
+│  lambda_handler.py（AWS Lambda 入口）
+│  .env.example（环境变量示例）
+│
+├─api（无服务器入口）
+│      index.py（Vercel Python 入口）
 │
 ├─app（核心代码）
 │  │  __init__.py
@@ -172,7 +225,8 @@ rusin-note:.
 │  │  i18n.py（多语言支持）
 │  │  logger.py（日志记录）
 │  │  middleware.py（请求钩子与限流辅助）
-│  │  notes.py（笔记文件操作与统计）
+│  │  notes.py（笔记操作与统计）
+│  │  storage.py（存储层：file / memory / upstash / postgres 后端）
 │  │  store.py（用户/会话/分享/犇犇数据存储）
 │  │  theme.py（主题与静态资源辅助）
 │  │  utils.py（通用工具函数）
@@ -292,14 +346,16 @@ rusin-note:.
    - `require_lowercase`：是否必须包含小写字母，默认 `true`；  
    - `require_digits`：是否必须包含数字，默认 `true`；  
    - `require_special`：是否必须包含特殊符号（不含 `/ \ ( ) " '`），默认 `true`； 
-- `RUSIN_DATA_DIR`：可选环境变量，用于指定运行数据目录，默认当前项目目录。
+- `RUSIN_DATA_DIR`：可选环境变量，用于指定运行数据目录，默认当前项目目录（仅 `file` 后端使用）。
 
-   笔记、用户、会话、分享和日志会写入该目录下的 `notes/`、`users.json`、`sessions.json`、`shares.json`、`log/`（犇犇动态为纯内存临时存储，重启清空）。在 Zeabur 等自动部署平台上建议挂载持久化卷到 `/data`，并设置 `RUSIN_DATA_DIR=/data`，避免每次部署清空剪贴板数据。
+    笔记、用户、会话、分享和日志会写入该目录下的 `notes/`、`users.json`、`sessions.json`、`shares.json`、`benben.json`、`log/`。在 Zeabur 等自动部署平台上建议挂载持久化卷到 `/data`，并设置 `RUSIN_DATA_DIR=/data`，避免每次部署清空剪贴板数据。
+- `RUSIN_STORAGE`：可选环境变量，显式指定存储后端：`file`（本地/VPS，默认）、`memory`（纯内存）、`upstash`（外部 KV）、`postgres`（Neon/PostgreSQL）。未指定时自动识别：设置了 `KV_REST_API_URL` / `KV_REST_API_TOKEN` 用 `upstash`，设置了 `DATABASE_URL` 用 `postgres`，检测到无服务器平台环境变量用 `memory`，否则 `file`。详见上方「存储后端说明」。
 - **多语言**：界面支持简体中文与 English。导航栏右侧提供语言切换链接（`/lang/zh` / `/lang/en`），选择后通过 Cookie（`rusin-lang`）记住偏好；未设置时自动按浏览器 `Accept-Language` 判断，默认中文。切换后全站文本（导航、按钮、提示、错误信息、犇犇预览等）即时切换语言。 
 - `benben` 犇犇动态（`/benben`，登录可发布、未登录只读）。
    - `max_length`：单条犇犇最大长度（单位：**字符**），默认 `1024`（约 1KB）；
    - `page_size`：每批加载条数，默认 `50`；
    - `cooldown_seconds`：单个用户两次发布犇犇的最小间隔（单位：**秒**），默认 `3`；
    - `max_height_px`：犇犇内容渲染后的最大显示高度（单位：**px**），默认 `1000`，超出部分在内容区内滚动；
+   - `max_posts`：犇犇持久化条数上限，默认 `200`（外部存储单键体积控制，超出丢弃最旧）；
 
    内容支持 Markdown 与 LaTeX 公式（`$...$` / `$$...$$`，依赖 `latex_render` 开关），发布表单带实时预览（客户端 marked.js 渲染，预览同样过滤危险标签与链接）；渲染时经 bleach 安全清洗防止 XSS；每页显示 `page_size` 条，通过「加载更多」分批加载，加载与发布均受请求速率限制（GET/POST 限流），发布还受单用户冷却限制（`cooldown_seconds`）；每条犇犇头部展示发布者 IP（按 `trust_proxy_headers` 决定是否信任代理头，旧数据无 IP 字段时不显示）。
