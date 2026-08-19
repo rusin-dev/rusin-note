@@ -62,7 +62,8 @@ def create_app() -> Flask:
         SESSION_COOKIE_HTTPONLY=True,
         SESSION_COOKIE_SAMESITE="Lax",
         WTF_CSRF_TIME_LIMIT=None,
-        RATELIMIT_STORAGE_URI=os.environ.get("REDIS_URL") or "memory://",
+RATELIMIT_STORAGE_URI=os.environ.get("REDIS_URL") or "memory://",
+        GLOBAL_CDN=config.GLOBAL_CDN,
     )
 
     if config.TRUST_PROXY_HEADERS:

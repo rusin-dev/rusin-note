@@ -19,6 +19,7 @@
   },
   "trust_proxy_headers": true,
   "secure_cookies": true,
+  "global_cdn": "https://cdn.jsdmirror.cn",
   "id_generation": {
     "length": 4,
     "use_uppercase": false,
@@ -40,8 +41,7 @@
     "hours": 24
   },
   "latex_render": {
-    "enabled": true,
-    "cdn": "https://cdn.jsdmirror.cn/npm/katex@0.18.4/dist"
+    "enabled": true
   },
   "code_highlight": {
     "enabled": true,

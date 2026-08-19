@@ -5,10 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% if full_title or title %}{{ full_title|default(title)|e }} | {% endif %}{{ site_name|e }}</title>
     <link rel="icon" href="/favicon.ico" type="image/x-icon">
-    <link rel="preload" href="https://cdn.jsdmirror.cn/npm/@fortawesome/fontawesome-free@6.5.2/webfonts/fa-solid-900.woff2" as="font" type="font/woff2" crossorigin>
-    <link rel="preload" href="https://cdn.jsdmirror.cn/npm/@fortawesome/fontawesome-free@6.5.2/webfonts/fa-brands-400.woff2" as="font" type="font/woff2" crossorigin>
-    <link rel="stylesheet" href="https://cdn.jsdmirror.cn/npm/@fortawesome/fontawesome-free@6.5.2/css/all.min.css" media="print" onload="this.media='all'">
-    <noscript><link rel="stylesheet" href="https://cdn.jsdmirror.cn/npm/@fortawesome/fontawesome-free@6.5.2/css/all.min.css"></noscript>
+    <link rel="preload" href="{{ config.GLOBAL_CDN }}/npm/@fortawesome/fontawesome-free@6.5.2/webfonts/fa-solid-900.woff2" as="font" type="font/woff2" crossorigin>
+    <link rel="preload" href="{{ config.GLOBAL_CDN }}/npm/@fortawesome/fontawesome-free@6.5.2/webfonts/fa-brands-400.woff2" as="font" type="font/woff2" crossorigin>
+    <link rel="stylesheet" href="{{ config.GLOBAL_CDN }}/npm/@fortawesome/fontawesome-free@6.5.2/css/all.min.css" media="print" onload="this.media='all'">
+    <noscript><link rel="stylesheet" href="{{ config.GLOBAL_CDN }}/npm/@fortawesome/fontawesome-free@6.5.2/css/all.min.css"></noscript>
     {{ theme_script|safe }}
     {{ pygments_head|safe }}
     <style>
@@ -31,10 +31,18 @@
         .navbar-brand:hover { color: var(--link); }
         .navbar-brand-icon { width: 22px; height: 22px; border-radius: 4px; flex-shrink: 0; }
         .navbar .user-info { font-weight: 500; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; }
-        .navbar .nav-links { display: flex; justify-content: flex-end; align-items: center; flex-shrink: 0; white-space: nowrap; }
-        .navbar .nav-links a { margin-left: 16px; color: var(--link); text-decoration: none; }
-        .navbar .nav-links a:hover { text-decoration: underline; }
-        .navbar .nav-links i { margin-right: 5px; }
+.navbar .nav-links { display: flex; justify-content: flex-end; align-items: center; flex-shrink: 0; white-space: nowrap; gap: 2px; }
+        .navbar .nav-links a {
+            display: inline-flex; align-items: center; gap: 6px;
+            padding: 6px 12px;
+            border-radius: 999px;
+            color: var(--link);
+            text-decoration: none;
+            transition: background 0.2s ease, color 0.2s ease, transform 0.1s ease;
+        }
+        .navbar .nav-links a:hover { background: var(--card-bg); color: var(--text); text-decoration: none; }
+        .navbar .nav-links a:active { transform: scale(0.96); }
+        .navbar .nav-links i { font-size: 13px; }
         .avatar { width: 20px; height: 20px; border-radius: 50%; object-fit: cover; vertical-align: middle; flex-shrink: 0; }
         .navbar .user-info .avatar { margin-right: 6px; }
         .theme-toggle, .nav-menu-btn {
@@ -50,6 +58,21 @@
             transition: background 0.2s ease, border-color 0.2s ease;
         }
         .theme-toggle:hover, .nav-menu-btn:hover { background: var(--card-bg); }
+        .lang-toggle {
+            display: inline-flex; align-items: center; gap: 6px;
+            height: 36px; padding: 0 10px;
+            border-radius: 8px;
+            background: var(--bg);
+            border: 1px solid var(--navbar-border);
+            color: var(--text);
+            text-decoration: none;
+            cursor: pointer;
+            flex-shrink: 0;
+            font-size: 15px;
+            transition: background 0.2s ease, border-color 0.2s ease;
+        }
+        .lang-toggle:hover { background: var(--card-bg); }
+        .lang-toggle .fa-globe { font-size: 15px; }
         .nav-menu-btn { display: none; }
         .navbar.menu-collapsed { flex-wrap: wrap; }
         .navbar.menu-collapsed .nav-menu-btn { display: inline-flex; }
@@ -147,7 +170,7 @@
         .home-card:hover .home-card-arrow { transform: translateX(4px); color: var(--hover); }
         {{ extra_css|safe }}
     </style>
-    {% block extra_head %}{{ extra_head|safe }}{% endblock %}
+{% block extra_head %}{{ extra_head|safe }}{% endblock %}
 </head>
 <body>
     {% include "partials/_navbar.html" %}

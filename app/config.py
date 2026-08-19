@@ -48,6 +48,7 @@ DEFAULT_CONFIG = {
     },
     "trust_proxy_headers": False,           # 仅当部署在可信反向代理之后才置 True，否则一律用直连 IP
     "secure_cookies": False,                # HTTPS 部署时置 True，为会话 Cookie 添加 Secure 标志
+    "global_cdn": "https://cdn.jsdmirror.cn",  # 全局 CDN 基础地址，KaTeX / FontAwesome / marked 等前端资源均从该地址拼接
     "id_generation": {
         "length": 6,
         "use_uppercase": True,
@@ -69,8 +70,7 @@ DEFAULT_CONFIG = {
         "hours": 24
     },
     "latex_render": {
-        "enabled": True,
-        "cdn": "https://cdn.jsdelivr.net/npm/katex@0.16.11/dist"
+        "enabled": True
     },
     "code_highlight": {
         "enabled": True,
@@ -184,10 +184,12 @@ NOTE_CLEANUP_INTERVAL = 1800
 MAX_NOTE_ID_LENGTH = config.get("max_note_id_length", 250)
 
 # LaTeX 公式渲染配置（客户端 KaTeX 渲染，洛谷同款，仅影响 Markdown 只读页面）
-# cdn 为 KaTeX 静态文件基础目录，自动拼接 katex.min.css / katex.min.js / contrib/auto-render.min.js
+# 全局 CDN：KaTeX / FontAwesome / marked 等前端静态资源统一从该地址拼接加载，
+# 默认使用国内可达的 jsdmirror 镜像，可在 config.json 的 global_cdn 字段替换
 LATEX_RENDER_ENABLED = config.get("latex_render", {}).get("enabled", True)
-LATEX_CDN = config.get("latex_render", {}).get(
-    "cdn", "https://cdn.jsdelivr.net/npm/katex@0.16.11/dist")
+GLOBAL_CDN = config.get("global_cdn", "https://cdn.jsdmirror.cn").rstrip("/")
+KATEX_VERSION = "0.18.4"
+LATEX_CDN = f"{GLOBAL_CDN}/npm/katex@{KATEX_VERSION}/dist"
 
 # 代码高亮配置（客户端 highlight.js 渲染，仿 latex_render 开关）
 # cdn 为 highlight.js 静态文件基础目录，自动拼接 styles/github.min.css、
