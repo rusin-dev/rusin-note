@@ -2,7 +2,7 @@
 from flask import Blueprint, abort, g, redirect, render_template, request, url_for
 
 from .. import config
-from ..extensions import limiter
+from ..extensions import cache, limiter
 from ..i18n import t
 from ..notes import read_note, write_note
 from ..store import get_share, increment_share_views
@@ -65,12 +65,16 @@ def share_view_post(token):
     content = request.form.get("content", "")
     if not write_note(share.get("owner", ""), share.get("note_id", ""), content):
         abort(500)
+    cache.delete(f"/share/{token}")
+    cache.delete(f"/share/{token}/md")
+    cache.delete(f"/share/{token}.md")
     return redirect(url_for("share.share_view_get", token=token))
 
 
 @bp.route("/share/<token>/md", methods=["GET"])
 @bp.route("/share/<token>.md", methods=["GET"])
 @limiter.limit(lambda: f"{config.GET_RATE_MAX} per {config.GET_RATE_WINDOW} second")
+@cache.cached(timeout=config.CACHE_TIMEOUT_NOTES)
 def share_md(token):
     share = _resolve_share(token)
     increment_share_views(token)

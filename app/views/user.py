@@ -3,7 +3,7 @@ import re
 from flask import Blueprint, abort, g, redirect, render_template, request, url_for
 
 from .. import config
-from ..extensions import limiter
+from ..extensions import cache, limiter
 from ..i18n import t
 from ..middleware import get_current_user
 from ..notes import (
@@ -37,6 +37,7 @@ def _require_auth(username: str):
 @bp.route("/user/<username>", methods=["GET"])
 @bp.route("/user/<username>/", methods=["GET"])
 @limiter.limit(lambda: f"{config.GET_RATE_MAX} per {config.GET_RATE_WINDOW} second")
+@cache.cached(timeout=config.CACHE_TIMEOUT_NOTES)
 def user_root(username):
     if not validate_username(username):
         abort(400)
@@ -96,12 +97,16 @@ def user_note_post(username, note_id):
     content = request.form.get("content", "")
     if not write_note(username, note_id, content):
         abort(500)
+    cache.delete(f"/user/{username}/{note_id}")
+    cache.delete(f"/user/{username}/{note_id}/md")
+    cache.delete(f"/user/{username}/{note_id}.md")
     return redirect(url_for("user.user_note_get", username=username, note_id=note_id))
 
 
 @bp.route("/user/<username>/<note_id>/md", methods=["GET"])
 @bp.route("/user/<username>/<note_id>.md", methods=["GET"])
 @limiter.limit(lambda: f"{config.GET_RATE_MAX} per {config.GET_RATE_WINDOW} second")
+@cache.cached(timeout=config.CACHE_TIMEOUT_NOTES)
 def user_md(username, note_id):
     if not validate_username(username):
         abort(400)
@@ -147,6 +152,7 @@ def shares_post(username):
     if not note_exists(username, note_id):
         return _render_shares(username, error=t(getattr(g, "lang", "zh"), "err_share_note_missing")), 400
     create_share(username, note_id, editable)
+    cache.delete(f"/user/{username}/shares")
     return redirect(url_for("user.shares_get", username=username))
 
 
@@ -161,6 +167,7 @@ def shares_delete(username):
         abort(400)
     if not delete_share(username, token):
         return _render_shares(username, error=t(getattr(g, "lang", "zh"), "err_share_delete")), 400
+    cache.delete(f"/user/{username}/shares")
     return redirect(url_for("user.shares_get", username=username))
 
 
