@@ -355,7 +355,6 @@ rusin-note:.
     开启后，Markdown 只读页面支持 `$...$` 行内公式与 `$$...$$` 块级公式（KaTeX 洛谷同款，客户端渲染，无需服务端依赖）。
 - `code_highlight` 代码高亮（highlight.js，客户端渲染）。
    - `enabled` ：是否开启，默认 `true`；
-   - `cdn` ：highlight.js 静态文件基础目录，默认 jsdelivr 的 `@highlightjs/cdn-assets` 包；国内可换 jsdmirror 镜像（如 `https://cdn.jsdmirror.cn/gh/highlightjs/cdn-release@11.9.0/build`）；
 
     开启后，所有 Markdown 渲染处（笔记只读页、编辑页实时预览、犇犇动态、免责声明）的代码块自动语法高亮并显示行号，跟随站点浅色/暗色主题切换，无需服务端依赖。
 - `avatar` 用户头像（通过第三方服务生成，显示在导航栏当前用户、犇犇动态发布者与用户笔记列表标题处）。
