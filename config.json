@@ -44,8 +44,7 @@
     "enabled": true
   },
   "code_highlight": {
-    "enabled": true,
-    "cdn": "https://cdn.jsdmirror.cn/gh/highlightjs/cdn-release@11.9.0/build"
+    "enabled": true
   },
   "cache": {
     "enabled": true,

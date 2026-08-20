@@ -73,8 +73,7 @@ DEFAULT_CONFIG = {
         "enabled": True
     },
     "code_highlight": {
-        "enabled": True,
-        "cdn": "https://cdn.jsdelivr.net/npm/@highlightjs/cdn-assets@11.9.0"
+        "enabled": True
     },
     "cache": {
         "enabled": True,
@@ -201,8 +200,7 @@ LATEX_CDN = f"{GLOBAL_CDN}/npm/katex@{KATEX_VERSION}/dist"
 # cdn 为 highlight.js 静态文件基础目录，自动拼接 styles/github.min.css、
 # styles/github-dark.min.css 与 highlight.min.js（浏览器 UMD 构建）
 CODE_HIGHLIGHT_ENABLED = config.get("code_highlight", {}).get("enabled", True)
-CODE_HIGHLIGHT_CDN = config.get("code_highlight", {}).get(
-    "cdn", "https://cdn.jsdelivr.net/npm/@highlightjs/cdn-assets@11.9.0")
+CODE_HIGHLIGHT_CDN = f"{GLOBAL_CDN}/npm/@highlightjs/cdn-assets@11.9.0/highlight.min.js"
 
 # socket 超时（秒）：防止慢速连接长期占用线程（BUG-008）
 SOCKET_TIMEOUT = 60
