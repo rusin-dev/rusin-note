@@ -80,7 +80,7 @@ python 版本 $\geq$ 3.10。
 3. 在项目设置中新增环境变量 `RUSIN_SECRET_KEY`（任意随机长字符串，用于会话/CSRF 签名，**必填**；不设置则每次冷启动随机，登录态会失效）。
 4. 部署完成后，数据（笔记、用户、会话、分享、犇犇）全部存于 Neon/Upstash，多实例共享、冷启动不丢。
 
-可选：设置 `REDIS_URL`（Redis 连接串）让限流计数在多实例间共享（默认按实例内存计数）。
+可选：设置 `REDIS_URL`（Redis 连接串，如 Upstash 或自建 Redis）后，页面缓存切换为共享 Redis、限流计数也在多实例间共享；不设置时页面缓存用进程内 SimpleCache、限流按实例内存计数（Zeabur 上的用法见下方章节）。
 
 > 提示：无服务器平台默认 `trust_proxy_headers: true`、`secure_cookies: true`（已写入 `config.json`）。本地开发如需关闭请自行修改。
 
@@ -176,6 +176,23 @@ python 版本 $\geq$ 3.10。
 /data/benben.json
 /data/log/
 ```
+
+#### Zeabur 启用 Redis（页面缓存 + 共享限流）
+
+Zeabur 是 PaaS 平台，不需要也不建议在容器里 `apt install redis`（构建产物每次重新部署会重建，装了也存不住）；标准做法是添加一个托管 Redis 服务，Zeabur 会自动把连接信息注入到其他服务：
+
+1. 在 Zeabur 项目中打开 **Market** / **Marketplace**，搜索并添加 **Redis** 服务（内置 `redis/redis-stack-server` 镜像，Zeabur 会为它生成随机密码）。
+2. 添加完成后，Zeabur 会自动向项目内其他服务注入 `REDIS_CONNECTION_STRING`、`REDIS_HOST`、`REDIS_PORT`、`REDIS_PASSWORD` 等变量（也可在 Redis 服务的「操作指南/Instructions」里查看连接信息）。
+3. 回到本服务，进入 **Variables / 环境变量**，新增变量（跨服务引用，自动拼出带密码的连接串）：
+
+   ```plaintext
+   REDIS_URL = ${REDIS_CONNECTION_STRING}
+   ```
+
+   等价于 `redis://:密码@服务名:6379`。
+4. 重新部署服务。启动时应用会主动 `PING` Redis：连通则页面缓存（首页/笔记/犇犇等）切换为 Redis 共享后端、限流计数也存入 Redis（多实例共享）；未连通则日志输出 `Redis 缓存不可达，已降级到 SimpleCache` 并退回进程内缓存，不影响功能。
+
+> 说明：Redis 只负责缓存与限流；剪贴板、用户、分享、犇犇等业务数据仍由上面挂载的 `/data` 卷（`file` 后端）保存，两者互不影响。若追求数据多实例共享 / 不丢，可改用 `postgres` 或 `upstash` 后端（见下节）。
 
 ### 存储后端说明（无服务器关键）
 

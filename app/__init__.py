@@ -6,6 +6,7 @@
 
 无服务器部署（Vercel 等）入口：api/index.py（见 vercel.json）。
 """
+import logging
 import os
 import secrets
 
@@ -44,6 +45,28 @@ def _load_or_create_secret_key() -> str:
     return secrets.token_hex(32)
 
 
+def _redis_available(url: str) -> bool:
+    """探测 Redis 是否可连通。
+
+    Flask-Caching 的 RedisCache.init_app 不会真正建连，连接失败要等到首个
+    请求才暴露（导致请求内反复刷错误日志）。这里主动 ping 一次，不可达时
+    让缓存降级到 SimpleCache。
+    """
+    try:
+        import redis
+        client = redis.from_url(
+            url, socket_connect_timeout=2, socket_timeout=2, retry_on_timeout=False)
+        try:
+            return bool(client.ping())
+        finally:
+            try:
+                client.close()
+            except Exception:
+                pass
+    except Exception:
+        return False
+
+
 def _init_cache_backend(app: Flask) -> None:
     """根据 config.json 的 cache.backend 配置初始化缓存后端，自动降级到 SimpleCache"""
     if not config.CACHE_ENABLED:
@@ -51,15 +74,15 @@ def _init_cache_backend(app: Flask) -> None:
         return
     backend = config.CACHE_BACKEND
     if backend == "redis":
-        try:
+        if _redis_available(config.CACHE_REDIS_URL):
             cache.init_app(app, config={
                 "CACHE_TYPE": "RedisCache",
                 "CACHE_DEFAULT_TIMEOUT": config.CACHE_DEFAULT_TIMEOUT,
-                "CACHE_REDIS_HOST": config.CACHE_REDIS_URL,
+                "CACHE_REDIS_URL": config.CACHE_REDIS_URL,
             })
             return
-        except Exception:
-            pass
+        logging.getLogger("rusin-note").warning(
+            "Redis 缓存不可达（%s），已降级到 SimpleCache", config.CACHE_REDIS_URL)
     cache.init_app(app, config={
         "CACHE_TYPE": "SimpleCache",
         "CACHE_DEFAULT_TIMEOUT": config.CACHE_DEFAULT_TIMEOUT,
