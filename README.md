@@ -70,11 +70,13 @@ python 版本 $\geq$ 3.10。
 
 #### 方式一：Vercel（无服务器，推荐）
 
+[![Deploy to Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Frusin-dev%2Frusin-note&&env=RUSIN_SECRET_KEY)
+
 项目已内置 Vercel 配置（`vercel.json` + `api/index.py`），零配置即可部署：
 
 1. 在 [Vercel](https://vercel.com) 导入本仓库（Framework Preset 选择 **Other** 即可，Python 运行时自动识别）。
 2. 存储后端二选一：
-   - **Neon（PostgreSQL）**：在 Vercel 的 Storage / Marketplace 绑定 [Neon](https://vercel.com/marketplace/neon)，Vercel 会自动注入 `DATABASE_URL` 环境变量（Vercel KV 已停服，这是目前 Vercel 官方推荐的持久化方案）；
+   - **Neon（PostgreSQL）（推荐）**：在 Vercel 的 Storage / Marketplace 绑定 [Neon](https://vercel.com/marketplace/neon)，Vercel 会自动注入 `DATABASE_URL` 环境变量（Vercel KV 已停服，这是目前 Vercel 官方推荐的持久化方案）；
    - **Upstash Redis**：在 Vercel Marketplace 安装 Upstash Redis，手动把 `KV_REST_API_URL` 与 `KV_REST_API_TOKEN` 填入项目环境变量。
    - 两者都设置时优先用 Upstash。
 3. 在项目设置中新增环境变量 `RUSIN_SECRET_KEY`（任意随机长字符串，用于会话/CSRF 签名，**必填**；不设置则每次冷启动随机，登录态会失效）。

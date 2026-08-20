@@ -1,6 +1,7 @@
 """Markdown 安全渲染（Pygments 高亮 + 行号）+ 文件大小/时间格式化（替代原 templates.py 的工具函数）"""
 import hashlib
 import html
+import re
 import time
 import urllib.parse
 
@@ -44,8 +45,10 @@ def get_avatar_url(username: str) -> str:
 def render_markdown_html(content: str) -> str:
     """将 Markdown 安全渲染为 HTML（依赖 bleach 清洗防 XSS）
 
-    使用 extra 扩展（含 fenced_code）：无 Pygments 时输出标准的
-    <pre><code class="language-xxx"> 结构，供客户端 highlight.js 代码高亮识别。
+    使用 extra 扩展（含 fenced_code）：代码块经 Pygments 分词后输出带
+    ``<span class="nc">`` / ``<span class="nf">`` / ``<span class="nv">`` 等
+    token 类的 HTML，使标识符着色规则（类名、函数名、变量名、装饰器、常量）生效。
+    无法识别语言时回退到客户端 highlight.js。
     """
     from . import config
     if config.MARKDOWN_AVAILABLE and config.BLEACH_AVAILABLE:
@@ -53,6 +56,7 @@ def render_markdown_html(content: str) -> str:
             raw_html = config.markdown.markdown(
                 content, extensions=['extra']
             )
+            raw_html = _highlight_code_blocks(raw_html)
             allowed_tags = [
                 'p', 'br', 'strong', 'em', 'u', 'strike', 'a',
                 'ul', 'ol', 'li', 'blockquote', 'pre', 'code',
@@ -72,9 +76,87 @@ def render_markdown_html(content: str) -> str:
     return f"<pre>{html.escape(content)}</pre>"
 
 
+# ---------- Pygments 代码块高亮 ----------
+# 匹配 markdown-extra 输出的 <pre><code class="language-xxx">...code...</code></pre>
+_code_block_re = re.compile(
+    r'<pre><code\s+class="language-([^"]+)"[^>]*>(.*?)</code></pre>',
+    re.DOTALL,
+)
+
+
+def _highlight_code_blocks(html: str) -> str:
+    """将 HTML 中的 fenced code block 用 Pygments 重新着色。
+
+    无法识别语言时保留原样（交由客户端 highlight.js 处理）。
+    """
+    from pygments.lexers import get_lexer_by_name
+    from pygments.formatters import HtmlFormatter
+
+    def _replace(match: re.Match) -> str:
+        lang = match.group(1).lower()
+        code = match.group(2)
+        # 转义 HTML 实体（markdown 输出中 &lt; 等已由 markdown 处理，此处取原始字符）
+        try:
+            lexer = get_lexer_by_name(lang)
+        except Exception:
+            return match.group(0)  # 无法识别语言，原样保留
+        formatter = HtmlFormatter(style='default', nowrap=True)
+        try:
+            import io
+            buf = io.StringIO()
+            formatter.format(lexer.get_tokens(code), buf)
+            highlighted = buf.getvalue()
+        except Exception:
+            return match.group(0)
+        return f'<pre><code class="language-{lang}">{highlighted}</code></pre>'
+
+    return _code_block_re.sub(_replace, html)
+
+
 # Pygments 高亮样式缓存（亮/暗两套 CSS，生成后不再计算）
 _LIGHT_RULES = None
 _DARK_RULES = None
+
+# Pygments Name 子类型（类、函数、变量、装饰器、常量等）的标识符着色规则。
+# 亮/暗主题各有专属配色，通过 CSS 变量实现与站点主题联动。
+# 规则覆盖在 Pygments 默认样式之上（优先级更高）。
+_IDENT_RULES_LIGHT = """
+/* 标识符着色（亮色主题）：类、函数、变量、装饰器、常量各有专属色 */
+.codehilite .nc,
+.codehilite .nn,
+.codehilite .nd { color: #8250df; font-weight: 600; }   /* Name.Class / Namespace / Decorator */
+.codehilite .nf,
+.codehilite .fm { color: #0550ae; font-weight: 600; }   /* Name.Function / Magic */
+.codehilite .nv,
+.codehilite .vc,
+.codehilite .vg,
+.codehilite .vi,
+.codehilite .vm { color: #0a3069; }                      /* Name.Variable (all variants) */
+.codehilite .nb,
+.codehilite .bp { color: #6e39e0; }                      /* Name.Builtin / Builtin.Pseudo */
+.codehilite .no { color: #7c3aed; }                      /* Name.Constant */
+.codehilite .na  { color: #0f6251; }                     /* Name.Attribute */
+.codehilite .ne  { color: #c53033; font-weight: 600; }  /* Name.Exception */
+"""
+
+_IDENT_RULES_DARK = """
+/* 标识符着色（暗色主题） */
+.codehilite .nc,
+.codehilite .nn,
+.codehilite .nd { color: #d4b7ff; font-weight: 600; }
+.codehilite .nf,
+.codehilite .fm { color: #91bbfd; font-weight: 600; }
+.codehilite .nv,
+.codehilite .vc,
+.codehilite .vg,
+.codehilite .vi,
+.codehilite .vm { color: #e2e8f0; }
+.codehilite .nb,
+.codehilite .bp { color: #c4b5fd; }
+.codehilite .no { color: #a78bfa; }
+.codehilite .na  { color: #38bdf8; }
+.codehilite .ne  { color: #f87171; font-weight: 600; }
+"""
 
 
 def _pygments_rules(style: str) -> str:
@@ -86,7 +168,8 @@ def _pygments_rules(style: str) -> str:
 
 
 def render_pygments_head() -> str:
-    """返回启用 Pygments 代码高亮所需的 <head> 内容（含亮/暗两套配色与行号容器样式）。
+    """返回启用 Pygments 代码高亮所需的 <head> 内容（含亮/暗两套配色、行号容器样式，以及标识符着色规则）。
+    标识符着色规则覆盖在 Pygments 默认样式之上，使类名、函数名、变量名等各有专属颜色。
     Pygments 不可用时返回空字符串。"""
     global _LIGHT_RULES, _DARK_RULES
     from . import config
@@ -98,9 +181,11 @@ def render_pygments_head() -> str:
     return f"""<style>
 :root {{
 {_LIGHT_RULES}
+{_IDENT_RULES_LIGHT}
 }}
 [data-theme="dark"] {{
 {_DARK_RULES}
+{_IDENT_RULES_DARK}
 }}
 .codehilite {{
     background: var(--code-bg);
