@@ -24,7 +24,7 @@ log/
 *.lock
 
 # 本地运行时数据
-notes/
+./notes/
 sessions.json
 users.json
 shares.json
@@ -33,3 +33,4 @@ benben.json
 # 其他
 note/
 .secret_key
+.aider*

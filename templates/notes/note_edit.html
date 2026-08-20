@@ -288,6 +288,10 @@
                     e.preventDefault();
                     saveNote();
                 }
+                if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'p') {
+                    e.preventDefault();
+                    togglePreview();
+                }
                 if (e.key === 'Escape') {
                     saveHint.classList.remove('show');
                     saveStatus.classList.remove('show');
@@ -370,14 +374,21 @@
                 }
             }
 
-            previewSwitch.addEventListener('change', function() {
+            function syncPreviewToggle() {
                 previewOn = previewSwitch.checked;
                 try { localStorage.setItem(PREVIEW_KEY, previewOn ? '1' : '0'); } catch (e) {}
                 if (window.matchMedia('(max-width: 768px)').matches) {
                     editorShell.classList.toggle('show-preview', previewOn);
                 }
                 applyPreviewState();
-            });
+            }
+
+            function togglePreview() {
+                previewSwitch.checked = !previewSwitch.checked;
+                syncPreviewToggle();
+            }
+
+            previewSwitch.addEventListener('change', syncPreviewToggle);
 
             previewBody.addEventListener('click', function() {
                 if (!previewOn) {
