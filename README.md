@@ -26,6 +26,8 @@
     </p>
 </div>
 
+![屏幕截图](https://github.com/rusin-dev/rusin-note/blob/main/image/screenshots1.png)
+
 ## 产品特性
 
 - **开箱即用的云端剪贴板**：基于 Flask 的轻量实现，可部署在 VPS 或 Vercel / AWS Lambda 等无服务器平台，用浏览器即可快速保存和访问文本内容。
