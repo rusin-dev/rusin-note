@@ -1,6 +1,6 @@
 """私有笔记与分享管理：/user/<u>、/user/<u>/<id>、/user/<u>/shares/*"""
 import re
-from flask import Blueprint, abort, g, redirect, render_template, request, url_for
+from flask import Blueprint, abort, g, jsonify, redirect, render_template, request, url_for
 
 from .. import config
 from ..extensions import cache, limiter
@@ -13,6 +13,7 @@ from ..notes import (
     list_user_notes,
     note_exists,
     read_note,
+    search_user_notes,
     validate_note_id,
     validate_username,
     write_note,
@@ -65,6 +66,23 @@ def user_new(username):
     return redirect(url_for("user.user_note_get", username=username, note_id=new_id))
 
 
+@bp.route("/user/<username>/refs", methods=["GET"])
+@limiter.limit(lambda: f"{config.GET_RATE_MAX} per {config.GET_RATE_WINDOW} second")
+def user_refs_search(username):
+    """快捷引用搜索 API（#87）：返回当前用户笔记中 ID / 首行标题匹配 q 的笔记。
+
+    必须注册在 /user/<username>/<note_id> 之前，否则 refs 会被当作笔记 ID。
+    结果含笔记标题，不缓存（按查询词与登录用户隔离）。
+    """
+    if not validate_username(username):
+        abort(400)
+    _require_auth(username)
+    if not config.NOTE_REFS_ENABLED:
+        abort(404)
+    q = (request.args.get("q") or "").strip()[:64]
+    return jsonify({"items": search_user_notes(username, q)})
+
+
 @bp.route("/user/<username>/<note_id>", methods=["GET"])
 @bp.route("/user/<username>/<note_id>/", methods=["GET"])
 @limiter.limit(lambda: f"{config.GET_RATE_MAX} per {config.GET_RATE_WINDOW} second")
@@ -75,6 +93,14 @@ def user_note_get(username, note_id):
     _require_auth(username)
     content = read_note(username, note_id)
     ctx = build_note_context(note_id, username=username, mtime=get_note_mtime(username, note_id))
+    # 快捷引用（#87）：仅在自己的笔记编辑页启用 # 自动补全与预览链接化
+    note_refs = None
+    if config.NOTE_REFS_ENABLED:
+        note_refs = {
+            "api": url_for("user.user_refs_search", username=username),
+            "ids": list_user_notes(username),
+            "prefix": f"/user/{username}",
+        }
     return render_template(
         "notes/note_edit.html",
         note_id=note_id,
@@ -82,6 +108,7 @@ def user_note_get(username, note_id):
         content=content,
         is_world=False,
         action_url=url_for("user.user_note_post", username=username, note_id=note_id),
+        note_refs=note_refs,
         **ctx,
     )
 
@@ -117,7 +144,8 @@ def user_md(username, note_id):
     return render_template(
         "notes/note_md.html",
         note_id=note_id,
-        html_content=render_markdown_html(content),
+        html_content=render_markdown_html(
+            content, ref_namespace=username, ref_url_prefix=f"/user/{username}"),
         title_label=t(lang, "note_private_prefix"),
         back_url=url_for("user.user_note_get", username=username, note_id=note_id),
         back_label=t(lang, "md_back_edit"),

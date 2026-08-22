@@ -68,7 +68,9 @@ def world_md(note_id):
     return render_template(
         "notes/note_md.html",
         note_id=note_id,
-        html_content=render_markdown_html(content),
+        # 公开笔记里的 #id 快捷引用解析到其它公开笔记（#87）
+        html_content=render_markdown_html(
+            content, ref_namespace="public", ref_url_prefix="/world"),
         title_label=t(lang, "note_public_prefix"),
         back_url=url_for("world.world_note_get", note_id=note_id),
         back_label=t(lang, "md_back_edit"),

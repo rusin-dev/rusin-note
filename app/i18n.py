@@ -155,6 +155,9 @@ STRINGS = {
         "note_preview_label": "预览",
         "preview_show": "预览",
         "preview_edit": "编辑",
+        "note_refs_label": "引用笔记",
+        "note_refs_recent": "最近编辑",
+        "note_refs_no_match": "没有匹配的笔记",
     },
     "en": {
         # Navbar
@@ -299,6 +302,9 @@ STRINGS = {
         "note_preview_label": "Preview",
         "preview_show": "Preview",
         "preview_edit": "Edit",
+        "note_refs_label": "Reference a note",
+        "note_refs_recent": "Recently edited",
+        "note_refs_no_match": "No matching notes",
     },
 }
 

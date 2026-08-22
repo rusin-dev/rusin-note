@@ -42,17 +42,126 @@ def get_avatar_url(username: str) -> str:
     return config.AVATAR_URL_TEMPLATE.format(hash=h, username=name)
 
 
-def render_markdown_html(content: str) -> str:
+# ---------- 笔记快捷引用（#87：GitHub Issues 风格的 # 引用） ----------
+# 匹配 #<笔记ID> 形式的快捷引用。# 前面出现以下字符时不算引用：
+#   ASCII 字母数字下划线 —— abc#def 中间的井号（普通文本 / hashtag 的一部分）；
+#   注意用显式 [0-9A-Za-z_] 而非 \w：Python 的 \w 含中文，会把「参见#笔记」
+#   误判为排除（JS 端 \w 本就只匹配 ASCII，改后两端行为一致）
+#   #  —— ##Heading、##id（多级标题或转义后的井号）
+#   "' —— HTML 属性 href="#x"、'#x' 中的锚点
+#   ([ —— Markdown 链接 [text](#a) / 引用式链接 [text][#b] 的目标
+#   /  —— URL 路径片段 /path#frag
+#   \  —— 被反斜杠转义的 \#foo
+_NOTE_REF_RE = re.compile(r'(?<![0-9A-Za-z_#"\'\(\[/\\])#([A-Za-z0-9][A-Za-z0-9_\-]*)')
+# Markdown 链接定义行（[label]: url），井号是 URL 一部分，整行跳过
+_NOTE_REF_LINK_DEF_RE = re.compile(r'^\s{0,3}\[[^\]]*\]:')
+# 围栏代码块的开头（``` 或 ~~~，允许最多 3 个前导空格）
+_FENCE_RE = re.compile(r'^\s{0,3}(`{3,}|~{3,})')
+# 行内代码 span（`code` / ``code``），替换时跳过
+_BACKTICK_SPAN_RE = re.compile(r'`+[^`]+?`+')
+
+
+def expand_note_refs(content: str, namespace: str, url_prefix: str,
+                     resolver) -> str:
+    """把 Markdown 原文中代码区域之外的 ``#<笔记ID>`` 展开为 Markdown 链接。
+
+    在 markdown 解析前对原文逐行扫描：跳过围栏代码块（``` / ~~~）、缩进
+    代码块（空行后 4 空格缩进）、链接定义行，行内再跳过反引号代码 span，
+    其余位置的 ``#id`` 若 resolver(id) 返回非 None（笔记存在）则替换为
+    ``[#id](<url_prefix>/<id> "标题")``。这样行首的 ``#id`` 也不会被
+    Python-Markdown 误判为 ATX 标题，且与编辑器实时预览行为一致。
+    """
+    if "#" not in content:
+        return content
+
+    def repl(m: re.Match) -> str:
+        note_id = m.group(1)
+        from . import config
+        if len(note_id) > config.MAX_NOTE_ID_LENGTH:
+            return m.group(0)
+        title = resolver(note_id)
+        if title is None:
+            return m.group(0)
+        # 标题进入 Markdown 链接的 title 部分，去掉会破坏语法的字符
+        title = title.replace('"', "'").replace("(", "（").replace(")", "）").strip()
+        suffix = f' "{title}"' if title else ""
+        return f"[{m.group(0)}]({url_prefix}/{note_id}{suffix})"
+
+    fence = ""          # 当前所处围栏代码块的围栏串（空 = 不在代码块内）
+    prev_blank = True   # 上一行是否为空行（判断缩进代码块起始）
+    out_lines: list[str] = []
+    for line in content.split("\n"):
+        m = _FENCE_RE.match(line)
+        if fence:
+            out_lines.append(line)
+            # 同字符且长度不少于开栏围栏的行视为闭栏
+            if m and m.group(1)[0] == fence[0] and len(m.group(1)) >= len(fence):
+                fence = ""
+            continue
+        if m:
+            fence = m.group(1)
+            out_lines.append(line)
+            continue
+        if not line.strip():
+            prev_blank = True
+            out_lines.append(line)
+            continue
+        is_indented_code = prev_blank and (line.startswith("    ") or line.startswith("\t"))
+        prev_blank = False
+        if is_indented_code or _NOTE_REF_LINK_DEF_RE.match(line):
+            out_lines.append(line)
+            continue
+        if "#" in line:
+            parts: list[str] = []
+            last = 0
+            for span in _BACKTICK_SPAN_RE.finditer(line):
+                parts.append(_NOTE_REF_RE.sub(repl, line[last:span.start()]))
+                parts.append(span.group(0))  # 行内代码保持原样
+                last = span.end()
+            parts.append(_NOTE_REF_RE.sub(repl, line[last:]))
+            line = "".join(parts)
+        out_lines.append(line)
+    return "\n".join(out_lines)
+
+
+def _note_ref_resolver(namespace: str):
+    """构造引用解析函数：返回目标笔记的标题（存在）或 None（不存在），
+    同一次渲染内对相同 ID 只读一次存储。"""
+    from .notes import read_note, title_from_content
+    cache: dict[str, str | None] = {}
+
+    def resolve(note_id: str) -> str | None:
+        if note_id in cache:
+            return cache[note_id]
+        content = read_note(namespace, note_id)  # 空内容等价于不存在
+        title = title_from_content(content) if content else None
+        cache[note_id] = title
+        return title
+
+    return resolve
+
+
+def render_markdown_html(content: str, ref_namespace: str | None = None,
+                         ref_url_prefix: str | None = None) -> str:
     """将 Markdown 安全渲染为 HTML（依赖 bleach 清洗防 XSS）
 
     使用 extra 扩展（含 fenced_code）：代码块经 Pygments 分词后输出带
     ``<span class="nc">`` / ``<span class="nf">`` / ``<span class="nv">`` 等
     token 类的 HTML，使标识符着色规则（类名、函数名、变量名、装饰器、常量）生效。
     无法识别语言时回退到客户端 highlight.js。
+
+    传入 ref_namespace（笔记所属命名空间：用户名或 "public"）与
+    ref_url_prefix（引用链接前缀，如 "/user/alice" 或 "/world"）时，
+    原文中的 ``#<笔记ID>`` 快捷引用会被展开为指向该笔记的链接（#87）。
     """
     from . import config
     if config.MARKDOWN_AVAILABLE and config.BLEACH_AVAILABLE:
         try:
+            if ref_namespace and ref_url_prefix and config.NOTE_REFS_ENABLED:
+                content = expand_note_refs(
+                    content, ref_namespace, ref_url_prefix,
+                    _note_ref_resolver(ref_namespace),
+                )
             raw_html = config.markdown.markdown(
                 content, extensions=['extra']
             )
