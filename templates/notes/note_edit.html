@@ -112,6 +112,27 @@
         .ref-empty { padding: 10px 12px; font-size: 13px; color: var(--muted); }
         .ref-caret-mirror { position: absolute; top: 0; left: -9999px; visibility: hidden; white-space: pre-wrap; word-wrap: break-word; overflow-wrap: break-word; z-index: -1; }
 
+        /* 大纲预览（实时预览栏目录）：按钮 + 下拉浮层 */
+        .pane-header.preview-header { position: relative; }
+        .outline-btn { background: none; border: none; padding: 2px 8px; font-size: 12px; color: var(--link); cursor: pointer; border-radius: 6px; display: inline-flex; align-items: center; gap: 5px; text-transform: none; letter-spacing: 0; white-space: nowrap; }
+        .outline-btn:hover { background: var(--btn-hover); }
+        .outline-popover {
+            position: absolute; top: 100%; left: 12px; width: min(360px, 90%);
+            max-height: 50%; overflow-y: auto; padding: 6px;
+            background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px;
+            box-shadow: 0 8px 24px rgba(0,0,0,.18); z-index: 20; display: none;
+        }
+        .outline-popover.show { display: block; }
+        .outline-popover a { display: block; padding: 5px 8px; font-size: 13px; line-height: 1.5; color: var(--text); text-decoration: none; border-radius: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .outline-popover a:hover { background: var(--btn-hover); text-decoration: none; }
+        .outline-popover a.ol-l2 { padding-left: 20px; }
+        .outline-popover a.ol-l3 { padding-left: 32px; }
+        .outline-popover a.ol-l4 { padding-left: 44px; }
+        .outline-popover a.ol-l5 { padding-left: 56px; }
+        .outline-popover a.ol-l6 { padding-left: 68px; }
+        .markdown-body h1, .markdown-body h2, .markdown-body h3,
+        .markdown-body h4, .markdown-body h5, .markdown-body h6 { scroll-margin-top: 8px; }
+
         /* Markdown preview typography (matches server-side bleach output) */
         .markdown-body h1, .markdown-body h2, .markdown-body h3 { border-bottom: 1px solid var(--heading-border); padding-bottom: 6px; margin: 16px 0 12px; }
         .markdown-body h1 { font-size: 1.8em; }
@@ -174,6 +195,10 @@
                     <span>{{ t('note_preview_label') }}</span>
                     {% if md_manual_url %}<a class="md-manual" href="{{ md_manual_url|e }}" target="_blank" rel="noopener noreferrer">{{ t('md_manual') }}</a>{% endif %}
                 </span>
+                <button type="button" class="outline-btn" id="outlineBtn" aria-haspopup="true" aria-expanded="false" style="display:none;">
+                    <i class="fa-solid fa-list-ul" aria-hidden="true"></i>{{ t('outline_label') }}
+                </button>
+                <div class="outline-popover" id="outlinePopover" role="navigation" aria-label="{{ t('outline_label') }}"></div>
             </div>
             <div class="preview-body markdown-body" id="previewBody"></div>
         </div>
@@ -358,6 +383,7 @@
                 const raw = textarea.value;
                 if (!raw.trim()) {
                     previewBody.innerHTML = '';
+                    if (window.NoteOutline) window.NoteOutline.refresh();
                     return;
                 }
                 let html = '';
@@ -383,6 +409,7 @@
                         throwOnError: false
                     });
                 }
+                if (window.NoteOutline) window.NoteOutline.refresh();
             }
 
             function applyPreviewState() {
@@ -674,6 +701,62 @@
             textarea.addEventListener('focus', update);
             textarea.addEventListener('blur', hide);
             textarea.addEventListener('scroll', hide);
+        })();
+    </script>
+    <script>
+        /* 大纲预览：实时预览栏的标题目录。每次预览渲染后由 updatePreview 调用
+           refresh() 重建列表，点击条目滚动预览区定位到对应章节。 */
+        (function() {
+            const btn = document.getElementById('outlineBtn');
+            const pop = document.getElementById('outlinePopover');
+            const previewBody = document.getElementById('previewBody');
+            if (!btn || !pop || !previewBody) return;
+
+            let headings = [];
+
+            function refresh() {
+                headings = [];
+                let minLevel = 7;
+                previewBody.querySelectorAll('h1,h2,h3,h4,h5,h6').forEach(function(h) {
+                    const l = parseInt(h.tagName.charAt(1), 10);
+                    if (l >= 1 && l <= 6) {
+                        minLevel = Math.min(minLevel, l);
+                        headings.push({ el: h, level: l });
+                    }
+                });
+                btn.style.display = headings.length ? '' : 'none';
+                if (!headings.length) { hide(); pop.textContent = ''; return; }
+                pop.textContent = '';
+                headings.forEach(function(h, i) {
+                    if (!h.el.id) h.el.id = 'pv-outline-' + i;
+                    const a = document.createElement('a');
+                    a.href = '#' + h.el.id;
+                    // 缩进相对最浅标题计算，与服务端只读页大纲规则一致
+                    a.className = 'ol-l' + Math.min(h.level - minLevel + 1, 6);
+                    a.textContent = h.el.textContent;
+                    a.addEventListener('click', function(e) {
+                        e.preventDefault();
+                        hide();
+                        h.el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    });
+                    pop.appendChild(a);
+                });
+            }
+
+            function isOpen() { return pop.classList.contains('show'); }
+            function hide() { pop.classList.remove('show'); btn.setAttribute('aria-expanded', 'false'); }
+            btn.addEventListener('click', function() {
+                pop.classList.toggle('show');
+                btn.setAttribute('aria-expanded', isOpen() ? 'true' : 'false');
+            });
+            document.addEventListener('click', function(e) {
+                if (isOpen() && !pop.contains(e.target) && !btn.contains(e.target)) hide();
+            });
+            document.addEventListener('keydown', function(e) {
+                if (e.key === 'Escape' && isOpen()) hide();
+            });
+
+            window.NoteOutline = { refresh: refresh };
         })();
     </script>
 </body>

@@ -6,6 +6,7 @@ from flask import Blueprint, abort, g, redirect, render_template, request
 
 from .. import config
 from ..extensions import cache, limiter
+from ..i18n import LANGS
 from ..middleware import get_client_ip, get_current_user
 from ..store import (
     add_benben_post,
@@ -16,14 +17,17 @@ from ..store import (
 from ..i18n import t
 from ..feature_flags import require_feature
 from ..utils import render_latex_head, render_markdown_html
+from ._helpers import delete_cache_keys
 
 
 bp = Blueprint("benben", __name__)
 
 
 def _benben_cache_key():
-    from flask import request
-    return f"benben:page:{request.args.get('page', '1')}"
+    """分页 + 访问者 + 语言：页面文案依赖语言、导航栏依赖登录用户（见 _helpers.page_cache_key）"""
+    user = getattr(g, "current_user", None) or "anon"
+    lang = getattr(g, "lang", "zh")
+    return f"benben:page:{request.args.get('page', '1')}:{user}:{lang}"
 
 
 @bp.route("/benben", methods=["GET"])
@@ -124,5 +128,11 @@ def benben_post():
 
     add_benben_post(current_user, content, get_client_ip())
     mark_benben_post(current_user)
-    cache.delete("benben:page:1")
+    # 新动态把旧内容顶到第 2 页：清掉匿名与发布者视角的第 1 页，
+    # 其余访问者的键靠 60s TTL 过期
+    delete_cache_keys([
+        f"benben:page:1:{viewer}:{lang}"
+        for viewer in ("anon", current_user)
+        for lang in LANGS
+    ])
     return redirect("/benben")
