@@ -112,6 +112,14 @@
         .ref-empty { padding: 10px 12px; font-size: 13px; color: var(--muted); }
         .ref-caret-mirror { position: absolute; top: 0; left: -9999px; visibility: hidden; white-space: pre-wrap; word-wrap: break-word; overflow-wrap: break-word; z-index: -1; }
 
+        /* 笔记标签 / 文件夹：编辑器底部元信息栏（右侧预留浮动保存按钮的空间） */
+        .tag-bar { flex: 0 0 auto; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 120px 8px 20px; border-top: 1px solid var(--navbar-border); background: var(--navbar-bg); }
+        .tag-bar .tag-icon { color: var(--muted); font-size: 13px; flex-shrink: 0; }
+        .tag-bar .tag-label { font-size: 12px; color: var(--muted); flex-shrink: 0; text-transform: uppercase; letter-spacing: 0.5px; }
+        .tag-bar input { flex: 1; min-width: 120px; border: none; outline: none; background: transparent; color: var(--text); font-size: 14px; font-family: inherit; }
+        .tag-bar input::placeholder { color: var(--muted); opacity: 0.8; }
+        .tag-bar .meta-divider { width: 1px; align-self: stretch; background: var(--navbar-border); flex-shrink: 0; }
+
         /* 大纲预览（实时预览栏目录）：按钮 + 下拉浮层 */
         .pane-header.preview-header { position: relative; }
         .outline-btn { background: none; border: none; padding: 2px 8px; font-size: 12px; color: var(--link); cursor: pointer; border-radius: 6px; display: inline-flex; align-items: center; gap: 5px; text-transform: none; letter-spacing: 0; white-space: nowrap; }
@@ -187,6 +195,30 @@
             <form method="POST" action="{{ action_url }}" id="noteForm" style="display:flex; flex-direction:column; flex:1; min-height:0;">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <textarea name="content" id="noteContent" autofocus spellcheck="true">{{ content|e }}</textarea>
+                {% if note_tags_enabled or note_folders_enabled %}
+                <div class="tag-bar" id="tagBar">
+                    {% if note_tags_enabled %}
+                    <i class="fa-solid fa-tags tag-icon" aria-hidden="true"></i>
+                    <label class="tag-label" for="noteTags">{{ t('note_tags_label') }}</label>
+                    <input type="text" name="tags" id="noteTags" autocomplete="off" spellcheck="false"
+                           placeholder="{{ t('note_tags_placeholder') }}" maxlength="250"
+                           value="{{ note_tags_value|e }}">
+                    {% endif %}
+                    {% if note_tags_enabled and note_folders_enabled %}
+                    <span class="meta-divider" aria-hidden="true"></span>
+                    {% endif %}
+                    {% if note_folders_enabled %}
+                    <i class="fa-solid fa-folder tag-icon" aria-hidden="true"></i>
+                    <label class="tag-label" for="noteFolder">{{ t('note_folders_label') }}</label>
+                    <input type="text" name="folder" id="noteFolder" autocomplete="off" spellcheck="false"
+                           list="folderOptions" placeholder="{{ t('note_folders_placeholder') }}"
+                           maxlength="64" value="{{ note_folder_value|e }}">
+                    <datalist id="folderOptions">
+                        {% for f in folder_options %}<option value="{{ f|e }}"></option>{% endfor %}
+                    </datalist>
+                    {% endif %}
+                </div>
+                {% endif %}
             </form>
         </div>
         <div class="pane preview-pane">
@@ -268,6 +300,8 @@
         (function() {
             const form = document.getElementById('noteForm');
             const textarea = document.getElementById('noteContent');
+            const tagsInput = document.getElementById('noteTags');
+            const folderInput = document.getElementById('noteFolder');
             const saveBtn = document.getElementById('saveBtn');
             const saveHint = document.getElementById('saveHint');
             const saveStatus = document.getElementById('saveStatus');
@@ -355,10 +389,13 @@
                 showStatus(L10N.saving, 'saving');
                 const content = textarea.value;
                 const csrfValue = form.querySelector('input[name="' + CSRF_FIELD + '"]').value;
+                let body = 'content=' + encodeURIComponent(content) + '&' + CSRF_FIELD + '=' + encodeURIComponent(csrfValue);
+                if (tagsInput) body += '&tags=' + encodeURIComponent(tagsInput.value);
+                if (folderInput) body += '&folder=' + encodeURIComponent(folderInput.value);
                 fetch(window.location.href, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                    body: 'content=' + encodeURIComponent(content) + '&' + CSRF_FIELD + '=' + encodeURIComponent(csrfValue)
+                    body: body
                 })
                 .then(response => {
                     isSaving = false;

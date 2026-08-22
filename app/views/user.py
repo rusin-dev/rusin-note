@@ -19,10 +19,24 @@ from ..notes import (
     validate_username,
     write_note,
 )
+from ..folders import (
+    get_note_folder,
+    get_user_note_folders,
+    list_user_folders,
+    parse_folder_input,
+    set_note_folder,
+)
 from ..store import (
     create_share,
     delete_share,
     list_user_shares,
+)
+from ..tags import (
+    count_user_tags,
+    get_note_tags,
+    get_user_note_tags,
+    parse_tag_input,
+    set_note_tags,
 )
 from ..utils import format_note_time, format_size, render_latex_head, render_markdown_html
 from ._helpers import build_note_context, check_note_id, page_cache_key, purge_page_cache
@@ -36,25 +50,63 @@ def _require_auth(username: str):
         abort(401)
 
 
+def _user_list_cache_key(*_args, **_kwargs) -> str:
+    """列表页缓存键：page_cache_key 基础上叠加 ?tag= / ?folder= 筛选参数，
+    否则筛选页会命中未过滤的缓存（page_cache_key 只含路径不含查询串）。
+    筛选变体不随 POST 清理，靠 TTL 过期（与其它访问者的旧键策略一致）。"""
+    key = page_cache_key()
+    extra = []
+    for param in ("tag", "folder"):
+        value = (request.args.get(param) or "").strip()
+        if value:
+            extra.append(f"{param}={value}")
+    return f"{key}:{'+'.join(extra)}" if extra else key
+
+
 @bp.route("/user/<username>", methods=["GET"])
 @bp.route("/user/<username>/", methods=["GET"])
 @limiter.limit(lambda: f"{config.GET_RATE_MAX} per {config.GET_RATE_WINDOW} second")
-@cache.cached(timeout=config.CACHE_TIMEOUT_NOTES, make_cache_key=page_cache_key)
+@cache.cached(timeout=config.CACHE_TIMEOUT_NOTES, make_cache_key=_user_list_cache_key)
 def user_root(username):
     if not validate_username(username):
         abort(400)
     _require_auth(username)
     notes = list_user_notes(username)
+    # 笔记标签 / 文件夹（仅私有笔记）：筛选云 + ?tag= / ?folder= 组合筛选
+    tags_enabled = feature_enabled("note_tags")
+    folders_enabled = feature_enabled("note_folders")
+    user_tags = get_user_note_tags(username) if tags_enabled else {}
+    user_folders = get_user_note_folders(username) if folders_enabled else {}
+    tag_cloud = count_user_tags(username, note_ids=set(notes)) if tags_enabled else []
+    folder_cloud = list_user_folders(username, note_ids=set(notes)) if folders_enabled else []
+    active_tag = (request.args.get("tag") or "").strip()[:config.MAX_TAG_LENGTH] if tags_enabled else ""
+    active_folder = (request.args.get("folder") or "").strip()[:config.MAX_FOLDER_NAME_LENGTH] if folders_enabled else ""
     items = []
     for nid in notes:
+        if active_tag and active_tag not in user_tags.get(nid, []):
+            continue
+        if active_folder and user_folders.get(nid) != active_folder:
+            continue
         mtime = get_note_mtime(username, nid)
         size = get_note_size(username, nid)
         items.append({
             "id": nid,
             "mtime": format_note_time(mtime) if mtime else "",
             "size": format_size(size) if size is not None else "",
+            "tags": user_tags.get(nid, []),
+            "folder": user_folders.get(nid, "") if folders_enabled else "",
         })
-    return render_template("notes/user_list.html", username=username, items=items)
+    return render_template(
+        "notes/user_list.html",
+        username=username,
+        items=items,
+        tags_enabled=tags_enabled,
+        tag_cloud=tag_cloud,
+        active_tag=active_tag,
+        folders_enabled=folders_enabled,
+        folder_cloud=folder_cloud,
+        active_folder=active_folder,
+    )
 
 
 @bp.route("/user/<username>/new", methods=["GET"])
@@ -102,6 +154,13 @@ def user_note_get(username, note_id):
             "ids": list_user_notes(username),
             "prefix": f"/user/{username}",
         }
+    # 笔记标签 / 文件夹（仅私有笔记编辑页；world/share 复用本模板但不启用）
+    note_tags_enabled = feature_enabled("note_tags")
+    note_tags_value = ", ".join(get_note_tags(username, note_id)) if note_tags_enabled else ""
+    note_folders_enabled = feature_enabled("note_folders")
+    note_folder_value = get_note_folder(username, note_id) if note_folders_enabled else ""
+    folder_options = sorted({f for f in get_user_note_folders(username).values() if f}) \
+        if note_folders_enabled else []
     return render_template(
         "notes/note_edit.html",
         note_id=note_id,
@@ -110,6 +169,11 @@ def user_note_get(username, note_id):
         is_world=False,
         action_url=url_for("user.user_note_post", username=username, note_id=note_id),
         note_refs=note_refs,
+        note_tags_enabled=note_tags_enabled,
+        note_tags_value=note_tags_value,
+        note_folders_enabled=note_folders_enabled,
+        note_folder_value=note_folder_value,
+        folder_options=folder_options,
         **ctx,
     )
 
@@ -125,6 +189,13 @@ def user_note_post(username, note_id):
     content = request.form.get("content", "")
     if not write_note(username, note_id, content):
         abort(500)
+    # 标签与文件夹随内容一起保存；内容为空即删除笔记，两者已由 write_note
+    # 的删除钩子清理，这里只更新仍存在笔记的归属
+    if content:
+        if feature_enabled("note_tags"):
+            set_note_tags(username, note_id, parse_tag_input(request.form.get("tags", "")))
+        if feature_enabled("note_folders"):
+            set_note_folder(username, note_id, parse_folder_input(request.form.get("folder", "")))
     # 私有页缓存键按访问者隔离，且只有所有者能写入 200 缓存，清理即精确命中；
     # /user/<username> 笔记列表也依赖笔记内容（mtime/size），一并刷新
     purge_page_cache(

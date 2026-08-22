@@ -114,10 +114,14 @@ DEFAULT_CONFIG = {
         "world_notes": True,
         "benben": True,
         "share_links": True,
-        "open_register": True
+        "open_register": True,
+        "note_tags": True
     },
     "admin_users": [],                        # 功能开关管理员用户名（也可用环境变量 RUSIN_ADMIN 指定，逗号分隔）
     "max_note_id_length": 250,
+    "max_note_tags": 10,                      # 笔记标签：每篇笔记最多标签数
+    "max_tag_length": 24,                     # 笔记标签：单个标签最大长度（字符）
+    "max_folder_name_length": 32,             # 笔记文件夹：文件夹名最大长度（字符）
     "logger": {
         "max_size": 4294967296,
         "path": "log/"
@@ -204,6 +208,13 @@ NOTE_CLEANUP_INTERVAL = 1800
 
 # 剪贴板名称（笔记 ID）最大长度：超过该长度的 URL 视为不合法
 MAX_NOTE_ID_LENGTH = config.get("max_note_id_length", 250)
+
+# 笔记标签限制：每篇笔记最多标签数 / 单个标签最大长度（字符）
+MAX_NOTE_TAGS = config.get("max_note_tags", 10)
+MAX_TAG_LENGTH = config.get("max_tag_length", 24)
+
+# 笔记文件夹限制：文件夹名最大长度（字符），每篇笔记至多归属一个文件夹
+MAX_FOLDER_NAME_LENGTH = config.get("max_folder_name_length", 32)
 
 # LaTeX 公式渲染配置（客户端 KaTeX 渲染，洛谷同款，仅影响 Markdown 只读页面）
 # 全局 CDN：KaTeX / FontAwesome / marked 等前端静态资源统一从该地址拼接加载，

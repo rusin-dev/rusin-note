@@ -35,6 +35,8 @@ FEATURES = [
     {"key": "share_links", "icon": "fa-share-nodes"},   # 分享链接
     {"key": "open_register", "icon": "fa-user-plus"},   # 开放注册
     {"key": "note_refs", "icon": "fa-link"},            # 笔记快捷引用（#87）
+    {"key": "note_tags", "icon": "fa-tags"},            # 笔记标签（编辑页底部标签栏 + 列表页筛选）
+    {"key": "note_folders", "icon": "fa-folder"},       # 笔记文件夹（单归属归类 + 列表页筛选）
     {"key": "latex_render", "icon": "fa-square-root-variable"},
     {"key": "code_highlight", "icon": "fa-code"},
     {"key": "avatar", "icon": "fa-user"},
