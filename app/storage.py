@@ -56,6 +56,7 @@ KV_FILE_MAP = {
     "benben:posts": "benben.json",
     "note_tags": "note_tags.json",
     "note_folders": "note_folders.json",
+    "note_pins": "note_pins.json",
     "feature_flags": "feature_flags.json",
     "secret_key": ".secret_key",
 }

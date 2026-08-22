@@ -7,6 +7,7 @@ from threading import Lock
 from . import config
 from .folders import delete_note_folder
 from .logger import create_logger
+from .pins import delete_note_pins
 from .storage import StorageError, storage
 from .store import count_benben_posts, get_user_count
 from .tags import delete_note_tags
@@ -90,10 +91,11 @@ def write_note(username: str, note_id: str, content: str) -> bool:
         except StorageError as e:
             logger.error(f"[错误] 保存笔记 {username}/{note_id} 失败: {e}")
             return False
-    # 空内容即删除（视图与过期清理都走这里），同步清掉标签与文件夹归属
+    # 空内容即删除（视图与过期清理都走这里），同步清掉标签、文件夹归属与置顶
     if ok and not content:
         delete_note_tags(username, note_id)
         delete_note_folder(username, note_id)
+        delete_note_pins(username, note_id)
     return ok
 
 

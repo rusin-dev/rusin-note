@@ -115,7 +115,9 @@ DEFAULT_CONFIG = {
         "benben": True,
         "share_links": True,
         "open_register": True,
-        "note_tags": True
+        "note_tags": True,
+        "note_folders": True,
+        "note_pins": True
     },
     "admin_users": [],                        # 功能开关管理员用户名（也可用环境变量 RUSIN_ADMIN 指定，逗号分隔）
     "max_note_id_length": 250,

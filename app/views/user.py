@@ -26,6 +26,7 @@ from ..folders import (
     parse_folder_input,
     set_note_folder,
 )
+from ..pins import get_user_pins, toggle_note_pin
 from ..store import (
     create_share,
     delete_share,
@@ -50,51 +51,54 @@ def _require_auth(username: str):
         abort(401)
 
 
-def _user_list_cache_key(*_args, **_kwargs) -> str:
-    """列表页缓存键：page_cache_key 基础上叠加 ?tag= / ?folder= 筛选参数，
-    否则筛选页会命中未过滤的缓存（page_cache_key 只含路径不含查询串）。
-    筛选变体不随 POST 清理，靠 TTL 过期（与其它访问者的旧键策略一致）。"""
-    key = page_cache_key()
-    extra = []
-    for param in ("tag", "folder"):
-        value = (request.args.get(param) or "").strip()
-        if value:
-            extra.append(f"{param}={value}")
-    return f"{key}:{'+'.join(extra)}" if extra else key
+def _list_view_filtered() -> bool:
+    """?tag= / ?folder= 筛选视图不缓存：置顶切换、标签/文件夹保存等写操作
+    只清理未过滤的基础缓存键，筛选变体若参与缓存会向刚操作完的用户展示
+    过期内容（写后立即可见优先于这部分缓存收益；未过滤列表仍正常缓存）。"""
+    return bool((request.args.get("tag") or "").strip()
+                or (request.args.get("folder") or "").strip())
 
 
 @bp.route("/user/<username>", methods=["GET"])
 @bp.route("/user/<username>/", methods=["GET"])
 @limiter.limit(lambda: f"{config.GET_RATE_MAX} per {config.GET_RATE_WINDOW} second")
-@cache.cached(timeout=config.CACHE_TIMEOUT_NOTES, make_cache_key=_user_list_cache_key)
+@cache.cached(timeout=config.CACHE_TIMEOUT_NOTES, make_cache_key=page_cache_key,
+              unless=_list_view_filtered)
 def user_root(username):
     if not validate_username(username):
         abort(400)
     _require_auth(username)
     notes = list_user_notes(username)
-    # 笔记标签 / 文件夹（仅私有笔记）：筛选云 + ?tag= / ?folder= 组合筛选
+    # 笔记标签 / 文件夹 / 置顶（仅私有笔记）：筛选云 + ?tag= / ?folder= 组合筛选
     tags_enabled = feature_enabled("note_tags")
     folders_enabled = feature_enabled("note_folders")
+    pins_enabled = feature_enabled("note_pins")
     user_tags = get_user_note_tags(username) if tags_enabled else {}
     user_folders = get_user_note_folders(username) if folders_enabled else {}
+    user_pins = get_user_pins(username) if pins_enabled else {}
     tag_cloud = count_user_tags(username, note_ids=set(notes)) if tags_enabled else []
     folder_cloud = list_user_folders(username, note_ids=set(notes)) if folders_enabled else []
     active_tag = (request.args.get("tag") or "").strip()[:config.MAX_TAG_LENGTH] if tags_enabled else ""
     active_folder = (request.args.get("folder") or "").strip()[:config.MAX_FOLDER_NAME_LENGTH] if folders_enabled else ""
-    items = []
+    # 排序：置顶笔记在前（组内按置顶时间倒序），其余按修改时间倒序
+    rows = []
     for nid in notes:
         if active_tag and active_tag not in user_tags.get(nid, []):
             continue
         if active_folder and user_folders.get(nid) != active_folder:
             continue
-        mtime = get_note_mtime(username, nid)
-        size = get_note_size(username, nid)
+        rows.append((nid, get_note_mtime(username, nid) or 0, get_note_size(username, nid)))
+    rows.sort(key=lambda r: (1, user_pins.get(r[0], 0)) if r[0] in user_pins else (0, r[1]),
+              reverse=True)
+    items = []
+    for nid, mtime, size in rows:
         items.append({
             "id": nid,
             "mtime": format_note_time(mtime) if mtime else "",
             "size": format_size(size) if size is not None else "",
             "tags": user_tags.get(nid, []),
             "folder": user_folders.get(nid, "") if folders_enabled else "",
+            "pinned": nid in user_pins,
         })
     return render_template(
         "notes/user_list.html",
@@ -106,6 +110,7 @@ def user_root(username):
         folders_enabled=folders_enabled,
         folder_cloud=folder_cloud,
         active_folder=active_folder,
+        pins_enabled=pins_enabled,
     )
 
 
@@ -205,6 +210,27 @@ def user_note_post(username, note_id):
         viewers=(username,),
     )
     return redirect(url_for("user.user_note_get", username=username, note_id=note_id))
+
+
+@bp.route("/user/<username>/<note_id>/pin", methods=["POST"])
+@require_feature("note_pins")
+@limiter.limit(lambda: f"{config.RATE_MAX} per {config.RATE_WINDOW} second")
+def user_note_pin(username, note_id):
+    """列表页图钉开关：切换置顶状态后回到列表页（保留 tag/folder 筛选）。"""
+    if not validate_username(username):
+        abort(400)
+    check_note_id(note_id)
+    _require_auth(username)
+    if not note_exists(username, note_id):
+        abort(404)
+    toggle_note_pin(username, note_id)
+    purge_page_cache([f"/user/{username}", f"/user/{username}/"], viewers=(username,))
+    args = {}
+    for param in ("tag", "folder"):
+        value = (request.form.get(param) or "").strip()
+        if value:
+            args[param] = value
+    return redirect(url_for("user.user_root", username=username, **args))
 
 
 @bp.route("/user/<username>/<note_id>/md", methods=["GET"])
