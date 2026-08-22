@@ -81,6 +81,13 @@
     "url_template": "https://cn.cravatar.com/avatar/{hash}?d=identicon&f=y",
     "size": 24
   },
+  "features": {
+    "world_notes": true,
+    "benben": true,
+    "share_links": true,
+    "open_register": true
+  },
+  "admin_users": [],
   "max_note_id_length": 250,
   "logger": {
     "max_size": 4294967296,

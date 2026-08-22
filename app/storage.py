@@ -54,6 +54,7 @@ KV_FILE_MAP = {
     "sessions.json": "sessions.json",
     "shares.json": "shares.json",
     "benben:posts": "benben.json",
+    "feature_flags": "feature_flags.json",
     "secret_key": ".secret_key",
 }
 # .secret_key 以纯文本（非 JSON）存储，与旧版文件格式兼容

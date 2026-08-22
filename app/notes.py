@@ -13,13 +13,14 @@ logger = create_logger("notes")
 
 # 禁止的笔记ID（与路由冲突）
 FORBIDDEN_NOTE_IDS = {"user", "world", "shares", "login", "register",
-                      "refs"}  # refs：与 /user/<u>/refs 引用搜索路由冲突
+                      "refs",  # refs：与 /user/<u>/refs 引用搜索路由冲突
+                      "admin"}  # admin：与 /admin/features 功能开关管理路由（#90）冲突
 
 # 保留用户名（与固定路由或 notes/ 目录冲突，禁止注册）
 # 注意：public 与公开笔记存储命名空间冲突，必须保留
 RESERVED_USERNAMES = {"register", "login", "logout", "count", "disclaimer",
                       "favicon", "share", "shares", "world", "user", "new", "md",
-                      "public", "benben"}
+                      "public", "benben", "admin"}
 
 
 # ---------- 校验 ----------

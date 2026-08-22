@@ -5,7 +5,7 @@
 """
 from flask import Flask
 
-from . import home, auth, world, user, share, benben, static_routes
+from . import home, auth, world, user, share, benben, static_routes, admin
 
 
 def register_blueprints(app: Flask) -> None:
@@ -16,6 +16,7 @@ def register_blueprints(app: Flask) -> None:
     app.register_blueprint(world.bp)
     app.register_blueprint(user.bp)
     app.register_blueprint(share.bp)
+    app.register_blueprint(admin.bp)
     # 插件蓝图（Phase 1 安装 + 注册）：必须在 world_short 之前，
     # 否则插件的单段路由（如 /myplug）会被 /<id> 短链抢匹配
     from .. import plugins

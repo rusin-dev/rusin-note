@@ -5,6 +5,7 @@ from flask import Blueprint, abort, g, jsonify, redirect, render_template, reque
 from .. import config
 from ..extensions import cache, limiter
 from ..i18n import t
+from ..feature_flags import feature_enabled, require_feature
 from ..middleware import get_current_user
 from ..notes import (
     generate_random_id,
@@ -77,7 +78,7 @@ def user_refs_search(username):
     if not validate_username(username):
         abort(400)
     _require_auth(username)
-    if not config.NOTE_REFS_ENABLED:
+    if not feature_enabled("note_refs"):
         abort(404)
     q = (request.args.get("q") or "").strip()[:64]
     return jsonify({"items": search_user_notes(username, q)})
@@ -95,7 +96,7 @@ def user_note_get(username, note_id):
     ctx = build_note_context(note_id, username=username, mtime=get_note_mtime(username, note_id))
     # 快捷引用（#87）：仅在自己的笔记编辑页启用 # 自动补全与预览链接化
     note_refs = None
-    if config.NOTE_REFS_ENABLED:
+    if feature_enabled("note_refs"):
         note_refs = {
             "api": url_for("user.user_refs_search", username=username),
             "ids": list_user_notes(username),
@@ -156,6 +157,7 @@ def user_md(username, note_id):
 
 @bp.route("/user/<username>/shares", methods=["GET"])
 @bp.route("/user/<username>/shares/", methods=["GET"])
+@require_feature("share_links")
 @limiter.limit(lambda: f"{config.GET_RATE_MAX} per {config.GET_RATE_WINDOW} second")
 def shares_get(username):
     if not validate_username(username):
@@ -166,6 +168,7 @@ def shares_get(username):
 
 @bp.route("/user/<username>/shares", methods=["POST"])
 @bp.route("/user/<username>/shares/", methods=["POST"])
+@require_feature("share_links")
 @limiter.limit(lambda: f"{config.RATE_MAX} per {config.RATE_WINDOW} second")
 def shares_post(username):
     if not validate_username(username):
@@ -185,6 +188,7 @@ def shares_post(username):
 
 
 @bp.route("/user/<username>/shares/delete", methods=["POST"])
+@require_feature("share_links")
 @limiter.limit(lambda: f"{config.RATE_MAX} per {config.RATE_WINDOW} second")
 def shares_delete(username):
     if not validate_username(username):

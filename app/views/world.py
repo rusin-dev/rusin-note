@@ -7,6 +7,7 @@ from flask import Blueprint, abort, g, redirect, render_template, request, url_f
 from .. import config
 from ..extensions import cache, limiter
 from ..i18n import t
+from ..feature_flags import require_feature
 from ..notes import (
     generate_random_id,
     get_note_mtime,
@@ -22,6 +23,7 @@ bp = Blueprint("world", __name__)
 
 @bp.route("/world", methods=["GET"])
 @bp.route("/world/", methods=["GET"])
+@require_feature("world_notes")
 @limiter.limit(lambda: f"{config.GET_RATE_MAX} per {config.GET_RATE_WINDOW} second")
 def world_new():
     new_id = generate_random_id()
@@ -29,6 +31,7 @@ def world_new():
 
 
 @bp.route("/world/<note_id>", methods=["GET"])
+@require_feature("world_notes")
 @limiter.limit(lambda: f"{config.GET_RATE_MAX} per {config.GET_RATE_WINDOW} second")
 def world_note_get(note_id):
     check_note_id(note_id)
@@ -45,6 +48,7 @@ def world_note_get(note_id):
 
 
 @bp.route("/world/<note_id>", methods=["POST"])
+@require_feature("world_notes")
 @limiter.limit(lambda: f"{config.SAVE_RATE_MAX} per {config.SAVE_RATE_WINDOW} second")
 def world_note_post(note_id):
     check_note_id(note_id)
@@ -59,6 +63,7 @@ def world_note_post(note_id):
 
 @bp.route("/world/<note_id>/md", methods=["GET"])
 @bp.route("/world/<note_id>.md", methods=["GET"])
+@require_feature("world_notes")
 @limiter.limit(lambda: f"{config.GET_RATE_MAX} per {config.GET_RATE_WINDOW} second")
 @cache.cached(timeout=config.CACHE_TIMEOUT_NOTES)
 def world_md(note_id):

@@ -4,6 +4,7 @@ from flask import Blueprint, abort, g, redirect, render_template, request, url_f
 from .. import config
 from ..extensions import cache, limiter
 from ..i18n import t
+from ..feature_flags import require_feature
 from ..notes import read_note, write_note
 from ..store import get_share, increment_share_views
 from ..utils import render_latex_head, render_markdown_html
@@ -22,6 +23,7 @@ def _resolve_share(token):
 
 @bp.route("/share/<token>", methods=["GET"])
 @bp.route("/share/<token>/", methods=["GET"])
+@require_feature("share_links")
 @limiter.limit(lambda: f"{config.GET_RATE_MAX} per {config.GET_RATE_WINDOW} second")
 def share_view_get(token):
     share = _resolve_share(token)
@@ -57,6 +59,7 @@ def share_view_get(token):
 
 @bp.route("/share/<token>", methods=["POST"])
 @bp.route("/share/<token>/", methods=["POST"])
+@require_feature("share_links")
 @limiter.limit(lambda: f"{config.SAVE_RATE_MAX} per {config.SAVE_RATE_WINDOW} second")
 def share_view_post(token):
     share = _resolve_share(token)
@@ -73,6 +76,7 @@ def share_view_post(token):
 
 @bp.route("/share/<token>/md", methods=["GET"])
 @bp.route("/share/<token>.md", methods=["GET"])
+@require_feature("share_links")
 @limiter.limit(lambda: f"{config.GET_RATE_MAX} per {config.GET_RATE_WINDOW} second")
 @cache.cached(timeout=config.CACHE_TIMEOUT_NOTES)
 def share_md(token):
