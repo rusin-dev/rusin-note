@@ -100,6 +100,11 @@ DEFAULT_CONFIG = {
         "live_preview_default": False,
         "markdown_manual_url": "https://markdown.com.cn"
     },
+    "note_refs": {
+        "enabled": True,
+        "search_limit": 8,
+        "scan_limit": 100
+    },
     "avatar": {
         "enabled": True,
         "url_template": "https://cn.cravatar.com/avatar/{hash}?d=identicon&f=y",
@@ -320,6 +325,24 @@ LIVE_PREVIEW_DEFAULT = bool(NOTE_EDITOR_CFG.get("live_preview_default", False))
 # Markdown 使用手册链接（预览栏头部显示，可在 config.json 中改为其他文档地址）
 MARKDOWN_MANUAL_URL = NOTE_EDITOR_CFG.get(
     "markdown_manual_url", "https://markdown.com.cn")
+
+# ---------- 笔记快捷引用配置（#87：GitHub Issues 风格的 # 引用） ----------
+# enabled=False 时：编辑器不弹引用补全框，Markdown 渲染不把 #id 转为链接
+NOTE_REFS_CFG = config.get("note_refs", DEFAULT_CONFIG["note_refs"])
+NOTE_REFS_ENABLED = bool(NOTE_REFS_CFG.get("enabled", True))
+# 引用搜索接口单次返回的最多条数
+NOTE_REF_SEARCH_LIMIT = NOTE_REFS_CFG.get("search_limit", 8)
+# 引用搜索最多扫描的笔记数（按修改时间倒序，防止大量笔记时读取过慢；
+# upstash/postgres 等远程后端可调低）
+NOTE_REF_SCAN_LIMIT = NOTE_REFS_CFG.get("scan_limit", 100)
+try:
+    NOTE_REF_SEARCH_LIMIT = max(1, int(NOTE_REF_SEARCH_LIMIT))
+except (TypeError, ValueError):
+    NOTE_REF_SEARCH_LIMIT = 8
+try:
+    NOTE_REF_SCAN_LIMIT = max(1, int(NOTE_REF_SCAN_LIMIT))
+except (TypeError, ValueError):
+    NOTE_REF_SCAN_LIMIT = 100
 
 # ---------- 用户头像配置 ----------
 # 头像通过第三方服务生成。由于本站用户没有邮箱，默认用 md5(用户名) 作为哈希（

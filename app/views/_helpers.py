@@ -65,6 +65,9 @@ def build_note_context(
         "previewOffHint": t(lang, "note_live_preview_hint"),
         "previewShow": t(lang, "preview_show"),
         "previewEdit": t(lang, "preview_edit"),
+        "refLabel": t(lang, "note_refs_label"),
+        "refRecent": t(lang, "note_refs_recent"),
+        "refNoMatch": t(lang, "note_refs_no_match"),
     }
 
     return {

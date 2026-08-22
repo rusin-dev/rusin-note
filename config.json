@@ -71,6 +71,11 @@
     "live_preview_default": false,
     "markdown_manual_url": "https://markdown.com.cn"
   },
+  "note_refs": {
+    "enabled": true,
+    "search_limit": 8,
+    "scan_limit": 100
+  },
   "avatar": {
     "enabled": true,
     "url_template": "https://cn.cravatar.com/avatar/{hash}?d=identicon&f=y",
