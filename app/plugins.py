@@ -41,6 +41,7 @@ import time
 import urllib.request
 import uuid
 from datetime import datetime
+from urllib.parse import urlparse
 
 from flask import Blueprint, Flask, request, send_from_directory
 from werkzeug.utils import safe_join
@@ -516,9 +517,29 @@ def register_plugin_blueprints(app: Flask) -> None:
 
 
 # ---------- Phase 2：上游更新检查 ----------
-def _fetch_url(url: str):
-    """请求 url（3s 超时），返回响应体；异常返回 None"""
+def _is_http_url(url: str) -> bool:
+    """仅放行 http/https 协议（拒绝 file:// 等本地协议读取）"""
     try:
+        return urlparse(url).scheme in ("http", "https")
+    except ValueError:
+        return False
+
+
+def _is_github_repo(url: str) -> bool:
+    """hostname 级精确判断是否指向 github.com（子串匹配会被
+    https://evil.com/github.com 之类伪造，CodeQL: Incomplete URL
+    substring sanitization）"""
+    try:
+        return urlparse(url).hostname == "github.com"   # hostname 已小写
+    except ValueError:
+        return False
+
+
+def _fetch_url(url: str):
+    """请求 url（3s 超时，仅 http/https），返回响应体；异常返回 None"""
+    try:
+        if not _is_http_url(url):
+            return None
         req = urllib.request.Request(url, headers={"User-Agent": "rusin-note-plugin-updater"})
         with urllib.request.urlopen(req, timeout=FETCH_TIMEOUT) as resp:
             return resp.read(MAX_DOWNLOAD_BYTES + 1)
@@ -532,7 +553,7 @@ def _download_plugin_zip(repo: str):
         return None
     urls = [repo.strip()]
     base = repo.strip().rstrip("/")
-    if "github.com" in base:
+    if _is_github_repo(base):
         urls += [f"{base}/archive/refs/heads/main.zip",
                  f"{base}/archive/refs/heads/master.zip"]
     for url in urls:
