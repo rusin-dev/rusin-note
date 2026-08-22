@@ -124,6 +124,9 @@ def create_app() -> Flask:
 
     if not app.config.get("TESTING") and not config.SERVERLESS:
         start_background_threads()
+        # 插件 Phase 2：定期检查上游更新（Phase 1 安装在 register_blueprints 内完成）
+        from . import plugins
+        plugins.start_update_thread(app)
 
     return app
 
