@@ -14,6 +14,7 @@ from ..store import (
     mark_benben_post,
 )
 from ..i18n import t
+from ..feature_flags import require_feature
 from ..utils import render_latex_head, render_markdown_html
 
 
@@ -26,6 +27,7 @@ def _benben_cache_key():
 
 
 @bp.route("/benben", methods=["GET"])
+@require_feature("benben")
 @limiter.limit(lambda: f"{config.GET_RATE_MAX} per {config.GET_RATE_WINDOW} second")
 @cache.cached(timeout=config.CACHE_TIMEOUT_BENBEN, make_cache_key=_benben_cache_key)
 def benben_get():
@@ -66,6 +68,7 @@ def benben_get():
 
 
 @bp.route("/benben", methods=["POST"])
+@require_feature("benben")
 @limiter.limit(lambda: f"{config.RATE_MAX} per {config.RATE_WINDOW} second")
 def benben_post():
     current_user = get_current_user()

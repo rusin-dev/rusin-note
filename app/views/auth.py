@@ -13,6 +13,7 @@ from ..auth import (
     verify_password,
 )
 from ..extensions import limiter
+from ..feature_flags import require_feature
 from ..i18n import LANG_COOKIE
 from ..notes import RESERVED_USERNAMES, validate_username
 from ..store import get_user, register_user
@@ -38,6 +39,7 @@ def _clear_session_cookie(resp):
 # ---------- GET ----------
 
 @bp.route("/register", methods=["GET"])
+@require_feature("open_register")
 @limiter.limit(lambda: f"{config.GET_RATE_MAX} per {config.GET_RATE_WINDOW} second")
 def register_get():
     return render_template("auth/register.html", error="")
@@ -78,6 +80,7 @@ def lang_switch(lang):
 # ---------- POST ----------
 
 @bp.route("/register", methods=["POST"])
+@require_feature("open_register")
 @limiter.limit(lambda: f"{config.REGISTER_RATE_MAX} per {config.REGISTER_RATE_WINDOW} second")
 def register_post():
     username = request.form.get("username", "").strip()

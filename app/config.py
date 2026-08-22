@@ -110,6 +110,13 @@ DEFAULT_CONFIG = {
         "url_template": "https://cn.cravatar.com/avatar/{hash}?d=identicon&f=y",
         "size": 24
     },
+    "features": {                             # 功能开关默认值（#90）：运行时可由管理员在 /admin/features 切换
+        "world_notes": True,
+        "benben": True,
+        "share_links": True,
+        "open_register": True
+    },
+    "admin_users": [],                        # 功能开关管理员用户名（也可用环境变量 RUSIN_ADMIN 指定，逗号分隔）
     "max_note_id_length": 250,
     "logger": {
         "max_size": 4294967296,
@@ -353,6 +360,14 @@ AVATAR_ENABLED = bool(AVATAR_CFG.get("enabled", True))
 AVATAR_URL_TEMPLATE = AVATAR_CFG.get(
     "url_template", "https://cn.cravatar.com/avatar/{hash}?d=identicon&f=y")
 AVATAR_SIZE = int(AVATAR_CFG.get("size", 24))
+
+# ---------- 功能开关管理员（#90：/admin/features 的访问者） ----------
+# config.json 的 admin_users 与环境变量 RUSIN_ADMIN（逗号分隔用户名）取并集
+_admin_cfg = config.get("admin_users", [])
+if not isinstance(_admin_cfg, list):
+    _admin_cfg = []
+_admin_env = [u.strip() for u in os.environ.get("RUSIN_ADMIN", "").split(",") if u.strip()]
+ADMIN_USERS = frozenset(_admin_cfg + _admin_env)
 
 # ---------- 日志功能 ----------
 LOGGER_CFG = config.get("logger", DEFAULT_CONFIG["logger"])

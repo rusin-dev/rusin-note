@@ -35,7 +35,8 @@ def get_avatar_url(username: str) -> str:
     url_template 支持 {hash}（md5(用户名)）与 {username}（URL 编码）占位符。
     """
     from . import config
-    if not config.AVATAR_ENABLED or not username:
+    from .feature_flags import feature_enabled
+    if not feature_enabled("avatar") or not username:
         return ""
     h = hashlib.md5(username.encode("utf-8")).hexdigest()
     name = urllib.parse.quote(username, safe="")
@@ -155,9 +156,10 @@ def render_markdown_html(content: str, ref_namespace: str | None = None,
     原文中的 ``#<笔记ID>`` 快捷引用会被展开为指向该笔记的链接（#87）。
     """
     from . import config
+    from .feature_flags import feature_enabled
     if config.MARKDOWN_AVAILABLE and config.BLEACH_AVAILABLE:
         try:
-            if ref_namespace and ref_url_prefix and config.NOTE_REFS_ENABLED:
+            if ref_namespace and ref_url_prefix and feature_enabled("note_refs"):
                 content = expand_note_refs(
                     content, ref_namespace, ref_url_prefix,
                     _note_ref_resolver(ref_namespace),
@@ -347,7 +349,8 @@ def render_pygments_head() -> str:
 def render_latex_head() -> str:
     """返回启用 LaTeX 渲染所需的 <head> 内容（KaTeX）"""
     from . import config
-    if not config.LATEX_RENDER_ENABLED:
+    from .feature_flags import feature_enabled
+    if not feature_enabled("latex_render"):
         return ""
     return (
         f'<link rel="stylesheet" href="{config.LATEX_CDN}/katex.min.css">\n'
@@ -376,7 +379,8 @@ def render_code_highlight_head() -> str:
     暴露 window.CodeHighlight.apply(root) 供动态渲染的预览调用。
     """
     from . import config
-    if not config.CODE_HIGHLIGHT_ENABLED:
+    from .feature_flags import feature_enabled
+    if not feature_enabled("code_highlight"):
         return ""
     cdn = config.CODE_HIGHLIGHT_CDN.rstrip("/")
     return (

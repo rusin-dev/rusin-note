@@ -158,6 +158,24 @@ STRINGS = {
         "note_refs_label": "引用笔记",
         "note_refs_recent": "最近编辑",
         "note_refs_no_match": "没有匹配的笔记",
+        # 功能开关（#90）
+        "feature_world_notes": "公开笔记",
+        "feature_benben": "犇犇动态",
+        "feature_share_links": "分享链接",
+        "feature_open_register": "开放注册",
+        "feature_note_refs": "笔记快捷引用",
+        "feature_latex_render": "LaTeX 公式渲染",
+        "feature_code_highlight": "代码高亮",
+        "feature_avatar": "用户头像",
+        "features_status_title": "功能状态",
+        "features_status_desc": "站点当前启用 / 停用的功能（由管理员配置）",
+        "feature_on": "已启用",
+        "feature_off": "已停用",
+        "admin_features_title": "功能开关管理",
+        "admin_features_desc": "通过滑块开关启用或停用站点功能，保存后立即生效，启用中的功能会在统计页呈现",
+        "admin_features_submit": "保存设置",
+        "admin_features_saved": "设置已保存",
+        "admin_features_link": "管理功能开关",
     },
     "en": {
         # Navbar
@@ -305,6 +323,24 @@ STRINGS = {
         "note_refs_label": "Reference a note",
         "note_refs_recent": "Recently edited",
         "note_refs_no_match": "No matching notes",
+        # Feature flags (#90)
+        "feature_world_notes": "Public Notes",
+        "feature_benben": "Benben Feed",
+        "feature_share_links": "Share Links",
+        "feature_open_register": "Open Registration",
+        "feature_note_refs": "Note Quick References",
+        "feature_latex_render": "LaTeX Rendering",
+        "feature_code_highlight": "Code Highlighting",
+        "feature_avatar": "User Avatars",
+        "features_status_title": "Feature Status",
+        "features_status_desc": "Features currently enabled on this site (configured by the admin)",
+        "feature_on": "Enabled",
+        "feature_off": "Disabled",
+        "admin_features_title": "Feature Flags",
+        "admin_features_desc": "Toggle site features on or off with the switches. Changes take effect immediately; enabled features are shown on the stats page",
+        "admin_features_submit": "Save",
+        "admin_features_saved": "Settings saved",
+        "admin_features_link": "Manage feature flags",
     },
 }
 
@@ -348,6 +384,7 @@ def detect_lang_from_request() -> str:
 def register_i18n(app: Flask) -> None:
     """注册 Jinja2 全局上下文，使模板可直接用 {{ t('key') }} / {{ lang }} / {{ theme }} / {{ theme_script }} / {{ theme_vars }} / {{ current_user }} / {{ site_name }}"""
     from . import config as _cfg
+    from .feature_flags import feature_enabled
     from .theme import THEME_VARS, get_theme_script
     from .utils import get_avatar_url, render_code_highlight_head, render_pygments_head
 
@@ -366,6 +403,7 @@ def register_i18n(app: Flask) -> None:
             "site_name": _cfg.SITE_NAME,
             "code_highlight_head": render_code_highlight_head(),
             "get_avatar": get_avatar_url,
+            "feature_enabled": feature_enabled,
         }
 
 

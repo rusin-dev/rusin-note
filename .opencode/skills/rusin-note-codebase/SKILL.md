@@ -28,6 +28,7 @@ Rusin-Note 是一个受 note.ms 启发的轻量级云端剪贴板 / 在线记事
 | `sessions.json` | `sessions.json` | 会话 | `{sha256(token): {username, created_at}}` |
 | `shares.json` | `shares.json` | 分享链接 | `{token: {owner, note_id, created_at, editable, views}}` |
 | `benben:posts` | `benben.json` | 犇犇（已持久化） | `[{username, content, time, ip}]`，最多 `benben.max_posts` 条（默认 200） |
+| `feature_flags` | `feature_flags.json` | 功能开关运行时状态（#90） | `{feature_key: bool}`，默认值来自 config.json（`features` 段 + 历史功能各自配置段） |
 | `note:<u>:<id>` | `notes/<u>/<id>.txt` | 笔记 | file 后端存纯文本（mtime 取文件 stat）；memory/upstash 存 `{"content", "mtime"}` |
 | `secret_key` | `.secret_key` | SECRET_KEY | 纯文本 |
 
@@ -73,28 +74,30 @@ upstash 后端所有键统一加 `rusin:` 前缀；memory 后端 get/set 带 dee
 | `theme.py` | 暗色主题 CSS 变量（`THEME_VARS`）与切换脚本（Cookie + localStorage + 系统偏好）、favicon 内存缓存 |
 | `logger.py` | `create_logger(name)` 返回写入 `log/{timestamp}.log` 的 RotatingFileHandler 日志器；文件不可写（无服务器只读 FS）时回退 stderr |
 | `utils.py` | `format_size`/`format_note_time` 格式化、`render_markdown_html`（markdown + codehilite/Pygments 高亮+行号 + bleach 清洗防 XSS）、`render_pygments_head`（亮/暗两套高亮 CSS，注入 base）、`render_latex_head`（KaTeX CDN 引入）、`read_disclaimer` |
+| `feature_flags.py` | **功能开关（#90）**：`FEATURES` 注册表（world_notes/benben/share_links/open_register/note_refs/latex_render/code_highlight/avatar）+ 运行时状态（KV 键 `feature_flags`，进程内 5s TTL 缓存）；`feature_enabled(key)` 查询、`set_flags` 整体写入、`require_feature(key)` 视图装饰器（停用→404，须放 `@bp.route` 后、缓存/限流装饰器前）、`is_admin`（`RUSIN_ADMIN` env + config `admin_users` 并集）；默认值：新功能读 `features` 段，历史功能沿用 latex_render/note_refs 等原配置段 |
 | `background.py` | 后台守护线程：会话清理、分享视图定期刷盘、过期笔记清理（`start_background_threads()` 一次性启动；`SERVERLESS` 时为无操作） |
 
 ## app/views/ 蓝图与路由
 
-注册顺序在 `views/__init__.py`：home → auth → benben → static_routes → world → user → share → **world_short（必须最后，因含 catch-all 短链）**。
+注册顺序在 `views/__init__.py`：home → auth → benben → static_routes → world → user → share → admin → **插件蓝图** → **world_short（必须最后，因含 catch-all 短链）**。
 
 | 蓝图 | 模块 | 路由与作用 |
 |---|---|---|
-| home | `home.py` | `/` 首页（登录态/匿名态卡片不同）、`/count` 统计、`/disclaimer` 免责声明 |
-| auth | `auth.py` | `/register` GET/POST（注册限流，密码复杂度校验）、`/login` GET/POST、`/logout`、`/lang/<lang>` 语言切换（回跳 Referer） |
-| world | `world.py` | `/world`（生成随机 ID 重定向）、`/world/<id>` GET/POST（公开笔记，POST 走 SAVE 限流）、`/world/<id>/md` 与 `/world/<id>.md` Markdown 只读渲染 |
-| world_short | `world_short.py` | `/<id>`（短链重定向到 `/world/<id>`）、`/<id>.md`（短链 Markdown），catch-all 必须最后注册 |
-| user | `user.py` | `/user/<u>/` 笔记列表、`/user/<u>/new` 新建、`/user/<u>/<id>` GET/POST、`/user/<u>/<id>/md`、`/user/<u>/shares` 分享管理（创建/删除）。全部 `_require_auth`（当前会话用户须等于 URL 用户名，否则 401） |
-| share | `share.py` | `/share/<token>`（可编辑则进编辑页、只读则进 Markdown 页；每次访问 `increment_share_views`）、POST 写回分享者原笔记（可编辑才允许，否则 403）、`/share/<token>/md` 与 `/share/<token>.md` |
-| benben | `benben.py` | `/benben` GET 分页查看（新→旧，`page` 参数）、POST 发布（需登录 + 内容长度 + 单用户冷却 + 限流） |
+| home | `home.py` | `/` 首页（登录态/匿名态卡片不同，卡片按功能开关过滤）、`/count` 统计（含「功能状态」呈现区）、`/disclaimer` 免责声明 |
+| auth | `auth.py` | `/register` GET/POST（注册限流，密码复杂度校验；受 `open_register` 开关控制）、`/login` GET/POST、`/logout`、`/lang/<lang>` 语言切换（回跳 Referer） |
+| world | `world.py` | `/world`（生成随机 ID 重定向）、`/world/<id>` GET/POST（公开笔记，POST 走 SAVE 限流）、`/world/<id>/md` 与 `/world/<id>.md` Markdown 只读渲染；全部受 `world_notes` 开关控制 |
+| world_short | `world_short.py` | `/<id>`（短链重定向到 `/world/<id>`）、`/<id>.md`（短链 Markdown），catch-all 必须最后注册；受 `world_notes` 开关控制 |
+| user | `user.py` | `/user/<u>/` 笔记列表、`/user/<u>/new` 新建、`/user/<u>/<id>` GET/POST、`/user/<u>/<id>/md`、`/user/<u>/refs` 引用搜索（`note_refs` 开关）、`/user/<u>/shares` 分享管理（创建/删除，`share_links` 开关）。全部 `_require_auth`（当前会话用户须等于 URL 用户名，否则 401） |
+| share | `share.py` | `/share/<token>`（可编辑则进编辑页、只读则进 Markdown 页；每次访问 `increment_share_views`）、POST 写回分享者原笔记（可编辑才允许，否则 403）、`/share/<token>/md` 与 `/share/<token>.md`；全部受 `share_links` 开关控制 |
+| benben | `benben.py` | `/benben` GET 分页查看（新→旧，`page` 参数）、POST 发布（需登录 + 内容长度 + 单用户冷却 + 限流）；受 `benben` 开关控制 |
+| admin | `admin.py` | `/admin/features` GET/POST 功能开关滑块管理页（仅管理员，非管理员 404；POST 保存后 `cache.clear()`） |
 | static_routes | `static_routes.py` | `/favicon.ico`（内存缓存） |
 | — | `_helpers.py` | 共享：`check_note_id()`（非法 ID 分情况 400/404）、`build_note_context()`（构造 note_edit/note_md 模板上下文） |
 
 ## 模板（templates/，Jinja2）
 
-- `base.html` 基础布局；`partials/_navbar.html` 导航栏
-- `home.html` 首页、`count.html` 统计、`disclaimer.html` 免责声明
+- `base.html` 基础布局（含功能开关滑块 `.ff-switch` 与状态卡 `.ff-card` 样式）；`partials/_navbar.html` 导航栏（benben/注册/分享入口按 `feature_enabled` 条件渲染）
+- `home.html` 首页、`count.html` 统计（含「功能状态」呈现区）、`disclaimer.html` 免责声明、`admin/features.html` 功能开关滑块管理页
 - `auth/` 注册/登录；`notes/` 笔记（`note_edit.html` 编辑页、`note_md.html` Markdown 只读页、`user_list.html` 笔记列表）；`share/share_list.html` 分享管理；`benben/benben.html` 犇犇
 - `errors/` 错误页 400/401/404/429/500（403/413 复用 400 模板）
 
@@ -123,6 +126,7 @@ upstash 后端所有键统一加 `rusin:` 前缀；memory 后端 get/set 带 dee
 - `note_editor`（`live_preview_default` 编辑页实时渲染默认值，默认 false，访客可手动开、以 localStorage 记住）
 - `avatar`（用户头像：`enabled` 默认 true；`url_template` 默认 cn.cravatar.com，占位符 `{hash}`=md5(用户名)、`{username}`=URL 编码用户名；`size` 备用值）
 - `max_note_id_length`（250）、`logger`（日志大小/路径）、`debug`
+- `features`（功能开关默认值：world_notes/benben/share_links/open_register，#90）、`admin_users`（功能开关管理员，与环境变量 `RUSIN_ADMIN` 取并集）
 
 ## 常见改动点
 
@@ -131,5 +135,6 @@ upstash 后端所有键统一加 `rusin:` 前缀；memory 后端 get/set 带 dee
 - **新增头像显示位**：模板直接用 `{{ get_avatar(username) }}`（已由 i18n 注入全局），空串时用 `{% if av %}` 隐藏 `<img>`；生成逻辑见 `utils.get_avatar_url`，配置在 `config.json` 的 `avatar`
 - **改限流**：`config.json` 对应键 + 视图函数 `@limiter.limit` 字符串
 - **改数据格式**：留意 `store.py`/`auth.py` 中的旧数据兼容注释（BUG-7 损坏数据跳过等）；加字段时给 `get_*` 用 `.get()` 兜底
+- **新增可开关功能（#90）**：`feature_flags.py` 的 `FEATURES` 注册表登记（key/icon）+ i18n 加 `feature_<key>` zh/en 文案 + 视图加 `@require_feature(key)`（放 `@bp.route` 之后、`@cache.cached`/`@limiter.limit` 之前）+ config.json `features` 段加默认值；模板用 `feature_enabled(key)` 条件渲染
 - **新增存储键/后端**：键布局在 `storage.py`（`KV_FILE_MAP`/`_note_key`），file 后端新键需在 `KV_FILE_MAP` 登记路径；新增后端需实现 `StorageBackend` 全部方法并在 `select_backend()` 注册（postgres 后端新表需在 `_ensure_schema` 增加 DDL）
 - **写路径并发**：读改写必须「线程锁 → `storage.lock(键)`」再重读合并，顺序不可颠倒；纯整值覆盖（`write_note`）无需跨实例锁
