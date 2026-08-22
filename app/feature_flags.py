@@ -37,6 +37,8 @@ FEATURES = [
     {"key": "note_refs", "icon": "fa-link"},            # 笔记快捷引用（#87）
     {"key": "note_tags", "icon": "fa-tags"},            # 笔记标签（编辑页底部标签栏 + 列表页筛选）
     {"key": "note_folders", "icon": "fa-folder"},       # 笔记文件夹（单归属归类 + 列表页筛选）
+    {"key": "note_pins", "icon": "fa-thumbtack"},       # 笔记置顶（列表页图钉开关，置顶浮前）
+    {"key": "heading_anchors", "icon": "fa-anchor"},    # Markdown 标题锚点（slug id + 页内 #链接 + 深链定位）
     {"key": "latex_render", "icon": "fa-square-root-variable"},
     {"key": "code_highlight", "icon": "fa-code"},
     {"key": "avatar", "icon": "fa-user"},

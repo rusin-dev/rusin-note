@@ -20,6 +20,12 @@
     .note-tags a:hover { text-decoration: none; color: var(--text); border-color: var(--hover); }
     .note-tags a.note-folder { color: var(--text); }
     .note-tags a.note-folder i { font-size: 10px; }
+    /* 笔记置顶：图钉开关 + 置顶行底色 */
+    .pin-form { display: inline-flex; margin-right: 6px; vertical-align: middle; }
+    .pin-btn { display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; padding: 0; border: none; border-radius: 6px; background: transparent; color: var(--muted); cursor: pointer; font-size: 13px; transition: background 0.15s ease, color 0.15s ease; }
+    .pin-btn:hover { background: var(--card-bg); color: var(--text); }
+    .pin-btn.pinned { color: var(--link); }
+    .note-list li.pinned-row { background: var(--card-bg); }
 </style>
 <div style="margin-bottom: 16px;">
     <a href="/user/{{ username|e }}/new">{{ t('user_new_note') }}</a>
@@ -47,7 +53,19 @@
 {% endif %}
 <ul class="note-list">
     {% for item in items %}
-    <li>
+    <li{% if pins_enabled and item.pinned %} class="pinned-row"{% endif %}>
+        {% if pins_enabled %}
+        <form method="POST" action="/user/{{ username|e }}/{{ item.id|e }}/pin" class="pin-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            {% if active_tag %}<input type="hidden" name="tag" value="{{ active_tag|e }}">{% endif %}
+            {% if active_folder %}<input type="hidden" name="folder" value="{{ active_folder|e }}">{% endif %}
+            <button type="submit" class="pin-btn{% if item.pinned %} pinned{% endif %}"
+                    title="{{ t('note_pins_toggle') }}" aria-label="{{ t('note_pins_toggle') }}"
+                    aria-pressed="{{ 'true' if item.pinned else 'false' }}">
+                <i class="fa-solid fa-thumbtack" aria-hidden="true"></i>
+            </button>
+        </form>
+        {% endif %}
         <a href="/user/{{ username|e }}/{{ item.id|e }}">{{ item.id|e }}</a>
         {% if item.mtime %}<span class="note-time">{{ item.mtime }}</span>{% endif %}
         {% if item.size %}<span class="note-size">{{ item.size }}</span>{% endif %}

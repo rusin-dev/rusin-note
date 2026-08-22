@@ -86,7 +86,10 @@
     "benben": true,
     "share_links": true,
     "open_register": true,
-    "note_tags": true
+    "note_tags": true,
+    "note_folders": true,
+    "note_pins": true,
+    "heading_anchors": true
   },
   "admin_users": [],
   "max_note_id_length": 250,
