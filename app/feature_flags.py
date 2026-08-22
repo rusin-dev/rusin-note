@@ -39,6 +39,7 @@ FEATURES = [
     {"key": "note_folders", "icon": "fa-folder"},       # 笔记文件夹（单归属归类 + 列表页筛选）
     {"key": "note_pins", "icon": "fa-thumbtack"},       # 笔记置顶（列表页图钉开关，置顶浮前）
     {"key": "heading_anchors", "icon": "fa-anchor"},    # Markdown 标题锚点（slug id + 页内 #链接 + 深链定位）
+    {"key": "note_images", "icon": "fa-image"},         # 笔记图床（编辑器粘贴/拖拽上传 + /image/<u>/<id> 服务）
     {"key": "latex_render", "icon": "fa-square-root-variable"},
     {"key": "code_highlight", "icon": "fa-code"},
     {"key": "avatar", "icon": "fa-user"},
@@ -51,6 +52,7 @@ _HERITAGE_DEFAULTS = {
     "latex_render": lambda: config.LATEX_RENDER_ENABLED,
     "code_highlight": lambda: config.CODE_HIGHLIGHT_ENABLED,
     "avatar": lambda: config.AVATAR_ENABLED,
+    "note_images": lambda: config.IMAGES_ENABLED,
 }
 _FEATURES_CFG = config.config.get("features", {})
 

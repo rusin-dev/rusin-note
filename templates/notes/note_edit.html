@@ -339,6 +339,71 @@
                 }
             });
 
+            // 图床上传：粘贴 / 拖拽图片 → 上传到当前用户名下 → 光标处插入 Markdown 引用
+            const IMAGES_API = {{ (note_images_api or '')|tojson }};
+            function uploadImage(file) {
+                if (!IMAGES_API) return;
+                showStatus(L10N.imgUploading, 'saving');
+                const fd = new FormData();
+                fd.append('file', file, file.name || 'image');
+                fd.append(CSRF_FIELD, form.querySelector('input[name="' + CSRF_FIELD + '"]').value);
+                fetch(IMAGES_API, { method: 'POST', body: fd })
+                    .then(r => r.json().then(j => {
+                        if (!r.ok) throw new Error(j.error || ('HTTP ' + r.status));
+                        return j;
+                    }))
+                    .then(data => {
+                        insertAtCursor('![' + altName(file) + '](' + data.url + ')');
+                        showStatus(L10N.imgDone, '');
+                        showHint(L10N.imgDone);
+                    })
+                    .catch(err => {
+                        showStatus(L10N.imgFailed, 'error');
+                        showHint(err.message);
+                    });
+            }
+            function altName(file) {
+                return (file && file.name ? file.name : 'image')
+                    .replace(/\.(png|jpe?g|gif|webp)$/i, '')
+                    .replace(/[\[\]]/g, '').slice(0, 60) || 'image';
+            }
+            function insertAtCursor(text) {
+                const start = textarea.selectionStart;
+                const end = textarea.selectionEnd;
+                const before = textarea.value.slice(0, start);
+                const after = textarea.value.slice(end);
+                const pad = before && !before.endsWith('\n') ? '\n\n' : '';
+                textarea.value = before + pad + text + '\n' + after;
+                const caret = (before + pad + text).length;
+                textarea.focus();
+                textarea.selectionStart = textarea.selectionEnd = caret;
+                textarea.dispatchEvent(new Event('input', { bubbles: true }));
+            }
+            function pickImage(files) {
+                if (!files || !files.length) return null;
+                for (let i = 0; i < files.length; i++) {
+                    if (files[i].type && files[i].type.indexOf('image/') === 0) return files[i];
+                }
+                return null;
+            }
+            textarea.addEventListener('paste', function(e) {
+                if (!IMAGES_API) return;
+                const img = pickImage(e.clipboardData && e.clipboardData.files);
+                if (!img) return;
+                e.preventDefault();
+                uploadImage(img);
+            });
+            ['dragover', 'dragenter'].forEach(function(evt) {
+                textarea.addEventListener(evt, function(e) { e.preventDefault(); });
+            });
+            textarea.addEventListener('drop', function(e) {
+                if (!IMAGES_API) return;
+                const img = pickImage(e.dataTransfer && e.dataTransfer.files);
+                if (!img) return;
+                e.preventDefault();
+                uploadImage(img);
+            });
+
             function showHint(message) {
                 if (message) saveHint.innerHTML = message;
                 saveHint.classList.add('show');

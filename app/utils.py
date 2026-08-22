@@ -173,11 +173,12 @@ def render_markdown_html(content: str, ref_namespace: str | None = None,
                 'ul', 'ol', 'li', 'blockquote', 'pre', 'code',
                 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'hr',
                 'table', 'thead', 'tbody', 'tr', 'th', 'td',
-                'div', 'span',
+                'div', 'span', 'img',
             ]
             allowed_attrs = {
                 '*': ['class'],
                 'a': ['href', 'title', 'target'],
+                'img': ['src', 'alt', 'title'],
             }
             return config.bleach.clean(
                 raw_html, tags=allowed_tags, attributes=allowed_attrs, strip=True
