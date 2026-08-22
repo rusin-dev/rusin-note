@@ -7,19 +7,69 @@
 </h1>
 <style>
     .page-avatar { width: 32px; height: 32px; margin-right: 8px; }
+    .tag-cloud { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 16px; }
+    .tag-chip { display: inline-flex; align-items: center; gap: 5px; padding: 3px 12px; border-radius: 999px; font-size: 13px; background: var(--card-bg); border: 1px solid var(--card-border); color: var(--text); text-decoration: none; }
+    .tag-chip:hover { text-decoration: none; border-color: var(--hover); }
+    .tag-chip.active { background: var(--link); border-color: var(--link); color: #fff; }
+    .tag-chip .tag-count { font-size: 11px; opacity: 0.7; }
+    .tag-chip-all { display: inline-flex; align-items: center; padding: 3px 12px; border-radius: 999px; font-size: 13px; border: 1px dashed var(--card-border); color: var(--muted); text-decoration: none; }
+    .tag-chip-all:hover { text-decoration: none; color: var(--text); }
+    .cloud-divider { width: 1px; align-self: stretch; background: var(--card-border); margin: 0 4px; }
+    .note-tags { display: inline-flex; flex-wrap: wrap; gap: 6px; margin-left: 10px; vertical-align: middle; }
+    .note-tags a { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; padding: 1px 8px; border-radius: 999px; border: 1px solid var(--card-border); color: var(--muted); text-decoration: none; }
+    .note-tags a:hover { text-decoration: none; color: var(--text); border-color: var(--hover); }
+    .note-tags a.note-folder { color: var(--text); }
+    .note-tags a.note-folder i { font-size: 10px; }
 </style>
 <div style="margin-bottom: 16px;">
     <a href="/user/{{ username|e }}/new">{{ t('user_new_note') }}</a>
 </div>
+{% set has_cloud = (tag_cloud or active_tag) or (folder_cloud or active_folder) %}
+{% if (tags_enabled or folders_enabled) and has_cloud %}
+<div class="tag-cloud">
+    <a class="tag-chip-all" href="/user/{{ username|e }}">{{ t('note_tags_all') }}</a>
+    {% for folder, count in folder_cloud %}
+    <a class="tag-chip{% if folder == active_folder %} active{% endif %}"
+       href="/user/{{ username|e }}?folder={{ folder|e }}{% if active_tag %}&amp;tag={{ active_tag|e }}{% endif %}">
+        <i class="fa-solid fa-folder" aria-hidden="true" style="font-size: 11px;"></i>{{ folder|e }}<span class="tag-count">{{ count }}</span>
+    </a>
+    {% endfor %}
+    {% if folder_cloud and tag_cloud %}
+    <span class="cloud-divider" aria-hidden="true"></span>
+    {% endif %}
+    {% for tag, count in tag_cloud %}
+    <a class="tag-chip{% if tag == active_tag %} active{% endif %}"
+       href="/user/{{ username|e }}?tag={{ tag|e }}{% if active_folder %}&amp;folder={{ active_folder|e }}{% endif %}">
+        <i class="fa-solid fa-tag" aria-hidden="true" style="font-size: 10px;"></i>{{ tag|e }}<span class="tag-count">{{ count }}</span>
+    </a>
+    {% endfor %}
+</div>
+{% endif %}
 <ul class="note-list">
     {% for item in items %}
     <li>
         <a href="/user/{{ username|e }}/{{ item.id|e }}">{{ item.id|e }}</a>
         {% if item.mtime %}<span class="note-time">{{ item.mtime }}</span>{% endif %}
         {% if item.size %}<span class="note-size">{{ item.size }}</span>{% endif %}
+        {% if (tags_enabled and item.tags) or (folders_enabled and item.folder) %}
+        <span class="note-tags">
+            {% if folders_enabled and item.folder %}
+            <a class="note-folder" href="/user/{{ username|e }}?folder={{ item.folder|e }}">
+                <i class="fa-solid fa-folder" aria-hidden="true"></i>{{ item.folder|e }}
+            </a>
+            {% endif %}
+            {% if tags_enabled and item.tags %}
+                {% for tag in item.tags %}<a href="/user/{{ username|e }}?tag={{ tag|e }}">{{ tag|e }}</a>{% endfor %}
+            {% endif %}
+        </span>
+        {% endif %}
     </li>
     {% else %}
-    <li class="empty">{{ t('user_no_notes') }}</li>
+    <li class="empty">
+        {% if folders_enabled and active_folder %}{{ t('note_folders_no_match') }}
+        {%- elif tags_enabled and active_tag %}{{ t('note_tags_no_match') }}
+        {%- else %}{{ t('user_no_notes') }}{% endif %}
+    </li>
     {% endfor %}
 </ul>
 {% endblock %}
