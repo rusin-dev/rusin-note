@@ -4,6 +4,7 @@ from flask import Blueprint, abort, g, redirect, render_template, request, url_f
 from .. import config
 from ..extensions import cache, limiter
 from ..i18n import t
+from ..feature_flags import require_feature
 from ..middleware import get_current_user
 from ..notes import read_note, write_note
 from ..store import get_share, increment_share_views
