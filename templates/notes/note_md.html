@@ -1,9 +1,232 @@
 {% extends "base.html" %}
-{% block extra_head %}{{ latex_head|safe }}{{ code_highlight_head|safe }}{% endblock %}
+{% block extra_head %}{{ latex_head|safe }}{{ code_highlight_head|safe }}
+<style>
+    /* 大纲预览（Markdown 只读页目录导航） */
+    .markdown-body h1, .markdown-body h2, .markdown-body h3,
+    .markdown-body h4, .markdown-body h5, .markdown-body h6 { scroll-margin-top: 20px; }
+    .outline-panel {
+        position: fixed; top: 88px; right: 24px; bottom: 24px; width: 230px;
+        display: flex; flex-direction: column;
+        background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 10px;
+        box-shadow: var(--card-shadow); z-index: 25; overflow: hidden;
+    }
+    /* 窄屏 / 用户收起后：从右侧滑入的抽屉 */
+    .outline-panel.drawer {
+        top: 0; right: 0; bottom: 0; width: min(320px, 85vw);
+        border: none; border-left: 1px solid var(--border); border-radius: 0;
+        transform: translateX(100%); transition: transform 0.25s ease;
+    }
+    .outline-panel.drawer.open { transform: none; }
+    .outline-head {
+        display: flex; align-items: center; justify-content: space-between; gap: 8px;
+        padding: 10px 14px; font-size: 13px; color: var(--muted);
+        border-bottom: 1px solid var(--list-border); background: var(--navbar-bg);
+        text-transform: uppercase; letter-spacing: 0.5px; flex: 0 0 auto;
+    }
+    .outline-head .outline-title { display: inline-flex; align-items: center; gap: 6px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .outline-close {
+        width: 26px; height: 26px; padding: 0; font-size: 14px;
+        display: inline-flex; align-items: center; justify-content: center;
+        border-radius: 6px; border: none; background: transparent; color: var(--muted); cursor: pointer; flex-shrink: 0;
+    }
+    .outline-close:hover { background: var(--btn-hover); color: var(--text); }
+    .outline-nav { flex: 1; overflow-y: auto; padding: 8px 6px; position: relative; }
+    .outline-item {
+        display: block; padding: 5px 8px; margin: 1px 0;
+        font-size: 13px; line-height: 1.5; color: var(--text);
+        text-decoration: none; border-radius: 6px; border-left: 2px solid transparent;
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer;
+    }
+    .outline-item:hover { background: var(--btn-hover); color: var(--text); text-decoration: none; }
+    .outline-item.active { color: var(--link); border-left-color: var(--link); background: var(--card-icon-bg); font-weight: 600; }
+    .outline-l2 { padding-left: 20px; }
+    .outline-l3 { padding-left: 32px; }
+    .outline-l4 { padding-left: 44px; }
+    .outline-l5 { padding-left: 56px; }
+    .outline-l6 { padding-left: 68px; }
+    .outline-fab {
+        position: fixed; right: 20px; bottom: 20px; width: 44px; height: 44px; padding: 0;
+        display: inline-flex; align-items: center; justify-content: center;
+        border-radius: 50%; border: 1px solid var(--border);
+        background: var(--card-bg); color: var(--text); font-size: 16px;
+        cursor: pointer; z-index: 25; box-shadow: var(--card-shadow);
+    }
+    .outline-fab:hover { background: var(--btn-hover); }
+    .outline-backdrop { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.35); z-index: 24; }
+    .outline-panel[hidden], .outline-fab[hidden], .outline-backdrop[hidden] { display: none; }
+</style>
+{% endblock %}
 {% block content %}
 <h1>{{ title_label }} · {{ note_id|e }} <span style="font-size:0.6em; font-weight:400; color:#888;">{{ t('md_readonly') }}</span></h1>
 <div class="markdown-body" style="margin-top:20px; padding-bottom:40px;">
     {{ html_content|safe }}
 </div>
 <p style="margin-top: 20px;"><a href="{{ back_url }}">{{ back_label }}</a> · <a href="/">{{ t('md_home') }}</a></p>
+
+<button type="button" id="outlineFab" class="outline-fab" title="{{ t('outline_show') }}" aria-label="{{ t('outline_show') }}" aria-expanded="false" hidden>
+    <i class="fa-solid fa-list-ul" aria-hidden="true"></i>
+</button>
+<div id="outlineBackdrop" class="outline-backdrop" aria-hidden="true" hidden></div>
+<aside id="outlinePanel" class="outline-panel" aria-label="{{ t('outline_label') }}" hidden>
+    <div class="outline-head">
+        <span class="outline-title"><i class="fa-solid fa-list-ul" aria-hidden="true"></i>{{ t('outline_label') }}</span>
+        <button type="button" id="outlineClose" class="outline-close" title="{{ t('outline_hide') }}" aria-label="{{ t('outline_hide') }}"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
+    </div>
+    <nav id="outlineNav" class="outline-nav"></nav>
+</aside>
+<script>
+    /* 大纲预览：扫描渲染后的 h1-h6 生成目录，点击平滑滚动定位，滚动时高亮当前章节。
+       纯客户端实现——不放宽 bleach 的属性白名单，缓存页面同样生效。 */
+    (function () {
+        var panel = document.getElementById('outlinePanel');
+        var nav = document.getElementById('outlineNav');
+        var fab = document.getElementById('outlineFab');
+        var closeBtn = document.getElementById('outlineClose');
+        var backdrop = document.getElementById('outlineBackdrop');
+        if (!panel || !nav) return;
+
+        var WIDE_QUERY = window.matchMedia('(min-width: 1400px)');
+        var COLLAPSE_KEY = 'rusin-outline-collapsed';
+        var collapsed = false;
+        try { collapsed = localStorage.getItem(COLLAPSE_KEY) === '1'; } catch (e) {}
+
+        // ---------- 收集标题并生成锚点 ----------
+        var headings = [];
+        var links = [];
+        var minLevel = 7;
+        var nodes = document.querySelectorAll(
+            '.markdown-body h1, .markdown-body h2, .markdown-body h3, ' +
+            '.markdown-body h4, .markdown-body h5, .markdown-body h6');
+        nodes.forEach(function (h) {
+            var level = parseInt(h.tagName.charAt(1), 10);
+            if (level >= 1 && level <= 6) {
+                minLevel = Math.min(minLevel, level);
+                headings.push({ el: h, level: level });
+            }
+        });
+        if (headings.length === 0) return;  // 无标题：大纲整体隐藏
+
+        headings.forEach(function (h, i) {
+            if (!h.el.id) h.el.id = 'outline-' + i;
+            var a = document.createElement('a');
+            a.href = '#' + h.el.id;
+            // 缩进层级相对文档中出现的最浅标题计算，避免通篇 h2/h3 时整体右移
+            a.className = 'outline-item outline-l' + Math.min(h.level - minLevel + 1, 6);
+            a.textContent = h.el.textContent;
+            a.addEventListener('click', function (e) {
+                e.preventDefault();
+                activate(i);
+                h.el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                if (history.replaceState) history.replaceState(null, '', '#' + h.el.id);
+                if (panel.classList.contains('open')) closeDrawer();
+            });
+            nav.appendChild(a);
+            links.push(a);
+        });
+
+        // ---------- 滚动高亮当前章节 ----------
+        var activeIndex = -2;
+        function activate(idx) {
+            if (idx === activeIndex) return;
+            activeIndex = idx;
+            links.forEach(function (a, i) { a.classList.toggle('active', i === idx); });
+            var cur = links[idx];
+            if (cur) {
+                // 只滚动目录容器自身，避免把页面也滚走
+                var top = cur.offsetTop;
+                if (top < nav.scrollTop + 8) nav.scrollTop = top - 8;
+                else if (top + cur.offsetHeight > nav.scrollTop + nav.clientHeight - 8)
+                    nav.scrollTop = top + cur.offsetHeight - nav.clientHeight + 8;
+            }
+        }
+        var ticking = false;
+        function onScroll() {
+            if (ticking) return;
+            ticking = true;
+            requestAnimationFrame(function () {
+                ticking = false;
+                var doc = document.documentElement;
+                // 已滚到文档底部时末节标题可能停在判定线下方（高度不足无法继续上滚），直接高亮最后一项
+                if (window.innerHeight + window.scrollY >= doc.scrollHeight - 2
+                        && window.scrollY > 0) {
+                    activate(headings.length - 1);
+                    return;
+                }
+                var spyLine = 96;  // 判定线：标题滚过视口顶部 96px 即视为「当前章节」
+                var idx = -1;
+                for (var i = 0; i < headings.length; i++) {
+                    if (headings[i].el.getBoundingClientRect().top <= spyLine) idx = i;
+                    else break;
+                }
+                activate(idx);
+            });
+        }
+        window.addEventListener('scroll', onScroll, { passive: true });
+        onScroll();
+
+        // ---------- 宽屏侧栏 / 窄屏抽屉 ----------
+        var lastWide = null;
+        function applyMode(force) {
+            var wide = WIDE_QUERY.matches;
+            // 仅断点真正跨越（或强制刷新）时才重置布局，
+            // 避免无关 resize（滚动条出现等）把打开中的抽屉关掉
+            if (!force && wide === lastWide) return;
+            lastWide = wide;
+            panel.classList.remove('drawer', 'open');
+            backdrop.hidden = true;
+            fab.setAttribute('aria-expanded', 'false');
+            if (wide && !collapsed) {
+                panel.hidden = false;   // 宽屏：固定右侧栏
+                fab.hidden = true;
+            } else {
+                panel.hidden = true;    // 窄屏或已收起：悬浮按钮 + 抽屉
+                fab.hidden = false;
+            }
+        }
+        function openDrawer() {
+            panel.hidden = false;
+            panel.classList.add('drawer');
+            void panel.offsetWidth;  // 先布局再展开，保证过渡动画生效
+            panel.classList.add('open');
+            backdrop.hidden = false;
+            fab.setAttribute('aria-expanded', 'true');
+        }
+        function closeDrawer() {
+            panel.classList.remove('open');
+            backdrop.hidden = true;
+            fab.setAttribute('aria-expanded', 'false');
+            setTimeout(function () {
+                if (!panel.classList.contains('open')) {
+                    panel.hidden = true;
+                    panel.classList.remove('drawer');
+                }
+            }, 260);
+        }
+        fab.addEventListener('click', function () {
+            if (panel.classList.contains('open')) closeDrawer();
+            else openDrawer();
+        });
+        closeBtn.addEventListener('click', function () {
+            if (panel.classList.contains('open')) { closeDrawer(); return; }
+            collapsed = true;   // 宽屏侧栏收起：记住选择，之后窄屏/宽屏都走悬浮按钮
+            try { localStorage.setItem(COLLAPSE_KEY, '1'); } catch (e) {}
+            applyMode(true);
+        });
+        backdrop.addEventListener('click', closeDrawer);
+        document.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape' && panel.classList.contains('open')) closeDrawer();
+        });
+        // 双击悬浮按钮恢复默认（宽屏侧栏）
+        fab.addEventListener('dblclick', function () {
+            collapsed = false;
+            try { localStorage.removeItem(COLLAPSE_KEY); } catch (e) {}
+            applyMode(true);
+        });
+        function onBreakpointChange() { applyMode(); }
+        if (WIDE_QUERY.addEventListener) WIDE_QUERY.addEventListener('change', onBreakpointChange);
+        else if (WIDE_QUERY.addListener) WIDE_QUERY.addListener(onBreakpointChange);
+        window.addEventListener('resize', onBreakpointChange);  // matchMedia change 兜底
+        applyMode(true);
+    })();
+</script>
 {% endblock %}

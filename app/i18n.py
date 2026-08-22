@@ -111,6 +111,10 @@ STRINGS = {
         "md_back_share": "返回分享",
         "md_refresh": "刷新",
         "md_home": "首页",
+        # 大纲预览（Markdown 只读页目录导航）
+        "outline_label": "大纲",
+        "outline_show": "显示大纲",
+        "outline_hide": "收起大纲",
         # 分享管理
         "shares_title": "分享管理",
         "shares_create": "创建分享",
@@ -258,6 +262,10 @@ STRINGS = {
         "md_back_share": "Back to share",
         "md_refresh": "Refresh",
         "md_home": "Home",
+        # Outline preview (TOC navigation on the Markdown read-only page)
+        "outline_label": "Outline",
+        "outline_show": "Show outline",
+        "outline_hide": "Hide outline",
         # Share management
         "shares_title": "Share Management",
         "shares_create": "Create Share",

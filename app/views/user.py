@@ -24,7 +24,7 @@ from ..store import (
     list_user_shares,
 )
 from ..utils import format_note_time, format_size, render_latex_head, render_markdown_html
-from ._helpers import build_note_context, check_note_id
+from ._helpers import build_note_context, check_note_id, page_cache_key, purge_page_cache
 
 
 bp = Blueprint("user", __name__)
@@ -38,7 +38,7 @@ def _require_auth(username: str):
 @bp.route("/user/<username>", methods=["GET"])
 @bp.route("/user/<username>/", methods=["GET"])
 @limiter.limit(lambda: f"{config.GET_RATE_MAX} per {config.GET_RATE_WINDOW} second")
-@cache.cached(timeout=config.CACHE_TIMEOUT_NOTES)
+@cache.cached(timeout=config.CACHE_TIMEOUT_NOTES, make_cache_key=page_cache_key)
 def user_root(username):
     if not validate_username(username):
         abort(400)
@@ -124,16 +124,21 @@ def user_note_post(username, note_id):
     content = request.form.get("content", "")
     if not write_note(username, note_id, content):
         abort(500)
-    cache.delete(f"/user/{username}/{note_id}")
-    cache.delete(f"/user/{username}/{note_id}/md")
-    cache.delete(f"/user/{username}/{note_id}.md")
+    # 私有页缓存键按访问者隔离，且只有所有者能写入 200 缓存，清理即精确命中；
+    # /user/<username> 笔记列表也依赖笔记内容（mtime/size），一并刷新
+    purge_page_cache(
+        [f"/user/{username}", f"/user/{username}/",
+         f"/user/{username}/{note_id}", f"/user/{username}/{note_id}/",
+         f"/user/{username}/{note_id}.md", f"/user/{username}/{note_id}/md"],
+        viewers=(username,),
+    )
     return redirect(url_for("user.user_note_get", username=username, note_id=note_id))
 
 
 @bp.route("/user/<username>/<note_id>/md", methods=["GET"])
 @bp.route("/user/<username>/<note_id>.md", methods=["GET"])
 @limiter.limit(lambda: f"{config.GET_RATE_MAX} per {config.GET_RATE_WINDOW} second")
-@cache.cached(timeout=config.CACHE_TIMEOUT_NOTES)
+@cache.cached(timeout=config.CACHE_TIMEOUT_NOTES, make_cache_key=page_cache_key)
 def user_md(username, note_id):
     if not validate_username(username):
         abort(400)
@@ -180,7 +185,8 @@ def shares_post(username):
     if not note_exists(username, note_id):
         return _render_shares(username, error=t(getattr(g, "lang", "zh"), "err_share_note_missing")), 400
     create_share(username, note_id, editable)
-    cache.delete(f"/user/{username}/shares")
+    purge_page_cache([f"/user/{username}/shares", f"/user/{username}/shares/"],
+                     viewers=(username,))
     return redirect(url_for("user.shares_get", username=username))
 
 
@@ -195,7 +201,8 @@ def shares_delete(username):
         abort(400)
     if not delete_share(username, token):
         return _render_shares(username, error=t(getattr(g, "lang", "zh"), "err_share_delete")), 400
-    cache.delete(f"/user/{username}/shares")
+    purge_page_cache([f"/user/{username}/shares", f"/user/{username}/shares/"],
+                     viewers=(username,))
     return redirect(url_for("user.shares_get", username=username))
 
 
