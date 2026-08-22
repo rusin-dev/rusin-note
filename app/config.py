@@ -110,6 +110,11 @@ DEFAULT_CONFIG = {
         "max_size": 4294967296,
         "path": "log/"
     },
+    "plugins": {
+        "enabled": True,
+        "update_interval_hours": 6,
+        "update_stale_days": 3
+    },
     "debug": False
 }
 
@@ -330,6 +335,22 @@ AVATAR_SIZE = int(AVATAR_CFG.get("size", 24))
 LOGGER_CFG = config.get("logger", DEFAULT_CONFIG["logger"])
 LOGGER_MAX_SIZE = LOGGER_CFG.get("max_size", 4294967296)
 LOGGER_PATH = data_path(LOGGER_CFG.get("path_pattern", "log/{timestamp}.log"))
+
+# ---------- 插件系统配置 ----------
+# 插件包（*.plugin.zip）投放到运行时目录（RUSIN_DATA_DIR）即可自动安装，
+# 详见 app/plugins.py。无服务器环境（只读盘）自动禁用。
+PLUGINS_CFG = config.get("plugins", DEFAULT_CONFIG["plugins"])
+PLUGINS_ENABLED = bool(PLUGINS_CFG.get("enabled", True))
+# Phase 2 更新检查：距 last_update 超过该天数才请求 upstream_repo
+try:
+    PLUGIN_UPDATE_STALE_SECONDS = int(PLUGINS_CFG.get("update_stale_days", 3)) * 86400
+except (TypeError, ValueError):
+    PLUGIN_UPDATE_STALE_SECONDS = 3 * 86400
+# 后台更新检查线程的轮询周期（小时）
+try:
+    PLUGIN_UPDATE_CHECK_INTERVAL = int(PLUGINS_CFG.get("update_interval_hours", 6)) * 3600
+except (TypeError, ValueError):
+    PLUGIN_UPDATE_CHECK_INTERVAL = 6 * 3600
 
 DEBUG = config.get("debug", False)
 
