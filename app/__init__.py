@@ -102,7 +102,9 @@ def create_app() -> Flask:
 
     app.config.update(
         SECRET_KEY=secret,
-        MAX_CONTENT_LENGTH=config.MAX_CONTENT_BYTES,
+        # 全局请求体上限：笔记保存与图片上传共用，取两者较大值
+        #（笔记写入路径本就依赖该全局值拦超量请求）
+        MAX_CONTENT_LENGTH=max(config.MAX_CONTENT_BYTES, config.MAX_IMAGE_SIZE_BYTES),
         SESSION_COOKIE_SECURE=config.SECURE_COOKIES,
         SESSION_COOKIE_HTTPONLY=True,
         SESSION_COOKIE_SAMESITE="Lax",

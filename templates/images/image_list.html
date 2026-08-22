@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block extra_head %}
+<style>
+    .image-usage { color: var(--muted); font-size: 14px; margin: 12px 0 20px; }
+    .image-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px; }
+    .image-card {
+        background: var(--card-bg); border: 1px solid var(--card-border);
+        border-radius: 10px; padding: 12px; display: flex; flex-direction: column; gap: 8px;
+    }
+    .image-thumb {
+        height: 140px; display: flex; align-items: center; justify-content: center;
+        background: var(--code-bg); border-radius: 6px; overflow: hidden;
+    }
+    .image-thumb img { max-width: 100%; max-height: 100%; object-fit: contain; }
+    .image-name { font-family: Consolas, monospace; font-size: 12px; word-break: break-all; }
+    .image-name a { color: var(--link); text-decoration: none; }
+    .image-name a:hover { text-decoration: underline; }
+    .image-meta { color: var(--muted); font-size: 12px; display: flex; justify-content: space-between; gap: 8px; }
+    .image-card form { margin-top: auto; }
+    .btn-sm { width: auto; padding: 4px 14px; font-size: 13px; }
+</style>
+{% endblock %}
+{% block content %}
+<h1>{{ t('images_title') }}</h1>
+{% if error %}<p class="error">{{ error }}</p>{% endif %}
+<p class="image-usage">{{ usage_text }}</p>
+<div class="image-grid">
+    {% for row in rows %}
+    <div class="image-card">
+        <div class="image-thumb"><a href="{{ row.url }}" target="_blank" rel="noopener noreferrer"><img src="{{ row.url }}" alt="{{ row.id|e }}" loading="lazy"></a></div>
+        <div class="image-name"><a href="{{ row.url }}" target="_blank" rel="noopener noreferrer">{{ row.id|e }}</a></div>
+        <div class="image-meta"><span>{{ row.size }}</span><span>{{ row.mtime }}</span></div>
+        <form method="POST" action="/user/{{ username|e }}/images/delete"
+              onsubmit="return confirm('{{ t('images_delete_confirm') }}');">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="image_id" value="{{ row.id|e }}">
+            <button type="submit" class="btn-sm">{{ t('images_delete') }}</button>
+        </form>
+    </div>
+    {% else %}
+    <p class="empty">{{ t('images_empty') }}</p>
+    {% endfor %}
+</div>
+<p style="margin-top: 24px;"><a href="/user/{{ username|e }}/">{{ t('images_back') }}</a></p>
+{% endblock %}

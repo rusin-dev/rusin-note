@@ -66,7 +66,7 @@ def list_order(client, username, query=""):
     """解析列表页笔记链接的出现顺序（排除 /new 入口）"""
     html = client.get(f"/user/{username}{query}").get_data(as_text=True)
     ids = re.findall(rf'href="/user/{username}/([a-z0-9]+)"', html)
-    return [i for i in ids if i != "new"]
+    return [i for i in ids if i not in ("new", "images")]  # 排除入口链接，只留笔记
 
 
 def pin(client, username, note_id, tag=None, folder=None, csrf=None):

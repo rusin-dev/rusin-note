@@ -110,6 +110,11 @@ DEFAULT_CONFIG = {
         "url_template": "https://cn.cravatar.com/avatar/{hash}?d=identicon&f=y",
         "size": 24
     },
+    "images": {                                # 笔记图床：编辑器粘贴/拖拽上传，/image/<u>/<id> 公开访问
+        "enabled": True,
+        "max_size_kb": 2048,                   # 单张图片上限（KB）
+        "max_total_kb": 51200                  # 每用户配额（KB）
+    },
     "features": {                             # 功能开关默认值（#90）：运行时可由管理员在 /admin/features 切换
         "world_notes": True,
         "benben": True,
@@ -374,6 +379,14 @@ AVATAR_ENABLED = bool(AVATAR_CFG.get("enabled", True))
 AVATAR_URL_TEMPLATE = AVATAR_CFG.get(
     "url_template", "https://cn.cravatar.com/avatar/{hash}?d=identicon&f=y")
 AVATAR_SIZE = int(AVATAR_CFG.get("size", 24))
+
+# ---------- 笔记图床配置 ----------
+IMAGES_CFG = config.get("images", DEFAULT_CONFIG["images"])
+IMAGES_ENABLED = bool(IMAGES_CFG.get("enabled", True))
+MAX_IMAGE_SIZE_KB = IMAGES_CFG.get("max_size_kb", 2048)
+MAX_IMAGE_TOTAL_KB = IMAGES_CFG.get("max_total_kb", 51200)
+MAX_IMAGE_SIZE_BYTES = MAX_IMAGE_SIZE_KB * 1024
+MAX_IMAGE_TOTAL_BYTES = MAX_IMAGE_TOTAL_KB * 1024
 
 # ---------- 功能开关管理员（#90：/admin/features 的访问者） ----------
 # config.json 的 admin_users 与环境变量 RUSIN_ADMIN（逗号分隔用户名）取并集
