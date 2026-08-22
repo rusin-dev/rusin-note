@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block extra_head %}{{ latex_head|safe }}{{ code_highlight_head|safe }}
+{% block extra_head %}{{ latex_head|safe }}{{ code_highlight_head|safe }}{{ heading_anchors_head|safe }}
 <style>
     /* 大纲预览（Markdown 只读页目录导航） */
     .markdown-body h1, .markdown-body h2, .markdown-body h3,
@@ -74,6 +74,19 @@
     </div>
     <nav id="outlineNav" class="outline-nav"></nav>
 </aside>
+<script>
+    /* 标题锚点：给渲染后的标题分配稳定 slug id 并挂悬浮锚点链接、解析页内
+       #链接；先于下方大纲脚本运行，大纲会复用这些 id。深链定位推迟到 load
+       之后：加载早期的平滑滚动会被异步样式（FontAwesome 的 media=print
+       切换等）触发的重排打断，导致停在页首。 */
+    (function () {
+        if (!window.HeadingAnchors) return;
+        window.HeadingAnchors.apply(document.querySelector('.markdown-body'));
+        function jump() { window.HeadingAnchors.jumpToHash(); }
+        if (document.readyState === 'complete') requestAnimationFrame(jump);
+        else window.addEventListener('load', function () { requestAnimationFrame(jump); });
+    })();
+</script>
 <script>
     /* 大纲预览：扫描渲染后的 h1-h6 生成目录，点击平滑滚动定位，滚动时高亮当前章节。
        纯客户端实现——不放宽 bleach 的属性白名单，缓存页面同样生效。 */

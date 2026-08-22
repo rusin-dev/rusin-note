@@ -173,6 +173,8 @@ STRINGS = {
         "note_folders_no_match": "该文件夹下没有笔记",
         # 笔记置顶
         "note_pins_toggle": "置顶 / 取消置顶",
+        # Markdown 标题锚点
+        "note_anchor_title": "跳转到此标题",
         # 功能开关（#90）
         "feature_world_notes": "公开笔记",
         "feature_benben": "犇犇动态",
@@ -182,6 +184,7 @@ STRINGS = {
         "feature_note_tags": "笔记标签",
         "feature_note_folders": "笔记文件夹",
         "feature_note_pins": "笔记置顶",
+        "feature_heading_anchors": "Markdown 标题锚点",
         "feature_latex_render": "LaTeX 公式渲染",
         "feature_code_highlight": "代码高亮",
         "feature_avatar": "用户头像",
@@ -356,6 +359,8 @@ STRINGS = {
         "note_folders_no_match": "No notes in this folder",
         # Note pinning
         "note_pins_toggle": "Pin / unpin",
+        # Markdown heading anchors
+        "note_anchor_title": "Link to this heading",
         # Feature flags (#90)
         "feature_world_notes": "Public Notes",
         "feature_benben": "Benben Feed",
@@ -365,6 +370,7 @@ STRINGS = {
         "feature_note_tags": "Note Tags",
         "feature_note_folders": "Note Folders",
         "feature_note_pins": "Note Pinning",
+        "feature_heading_anchors": "Markdown Heading Anchors",
         "feature_latex_render": "LaTeX Rendering",
         "feature_code_highlight": "Code Highlighting",
         "feature_avatar": "User Avatars",
@@ -422,7 +428,10 @@ def register_i18n(app: Flask) -> None:
     from . import config as _cfg
     from .feature_flags import feature_enabled
     from .theme import THEME_VARS, get_theme_script
-    from .utils import get_avatar_url, render_code_highlight_head, render_pygments_head
+    from .utils import (
+        get_avatar_url, render_code_highlight_head, render_heading_anchors_head,
+        render_pygments_head,
+    )
 
     @app.context_processor
     def inject_globals():
@@ -438,6 +447,7 @@ def register_i18n(app: Flask) -> None:
             "current_user": getattr(g, "current_user", None),
             "site_name": _cfg.SITE_NAME,
             "code_highlight_head": render_code_highlight_head(),
+            "heading_anchors_head": render_heading_anchors_head(),
             "get_avatar": get_avatar_url,
             "feature_enabled": feature_enabled,
         }

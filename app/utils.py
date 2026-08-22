@@ -474,6 +474,108 @@ def render_code_highlight_head() -> str:
     )
 
 
+def render_heading_anchors_head() -> str:
+    """启用 Markdown 标题锚点所需的 <head> 内容（纯客户端实现）。
+
+    window.HeadingAnchors.apply(root) 为渲染结果中的 h1-h6 按标题文本生成
+    稳定 slug id（支持中日韩文字，重复标题自动加 -1/-2 后缀），并在标题上
+    挂悬浮锚点链接；同时把正文里用户手写的页内 ``[链接](#标题)`` 重写到
+    实际分配的 id。jumpToHash() 在页面加载时按 location.hash 定位（直接
+    命中 id 或按 slug 兜底）。不放宽服务端 bleach 的属性白名单，缓存页面
+    同样生效；编辑器实时预览在每次渲染后调用 apply()。
+
+    暴露 window.HeadingAnchors = { apply, jumpToHash }。
+    """
+    from . import config
+    from .feature_flags import feature_enabled
+    if not feature_enabled("heading_anchors"):
+        return ""
+    from flask import g
+    from .i18n import t
+    title = t(getattr(g, "lang", "zh"), "note_anchor_title")
+    title = title.replace("\\", "\\\\").replace('"', '\\"')
+    return (
+        "<style>\n"
+        ".heading-anchor { opacity: 0; margin-left: 8px; font-size: 0.8em;"
+        " color: var(--muted); text-decoration: none; transition: opacity 0.15s ease;"
+        " outline-offset: 2px; border-radius: 3px; }\n"
+        "h1:hover > .heading-anchor, h2:hover > .heading-anchor,"
+        " h3:hover > .heading-anchor, h4:hover > .heading-anchor,"
+        " h5:hover > .heading-anchor, h6:hover > .heading-anchor,"
+        " .heading-anchor:focus-visible { opacity: 1; }\n"
+        ".heading-anchor:hover { color: var(--link); text-decoration: none; }\n"
+        ".heading-anchor:focus-visible { outline: 2px solid var(--link); }\n"
+        "@media (hover: none) { .heading-anchor { opacity: 0.55; } }\n"
+        "</style>\n"
+        "<script>\n"
+        "window.HeadingAnchors = (function() {\n"
+        "    var ANCHOR_TITLE = \"" + title + "\";\n"
+        "    var lastMap = {};   // 基础 slug -> 实际 id，jumpToHash 兜底用\n"
+        "    function slugify(text) {\n"
+        "        return String(text || '').trim().toLowerCase()\n"
+        "            .replace(/[^\\p{L}\\p{N}_\\- ]+/gu, '')\n"
+        "            .replace(/ +/g, '-')\n"
+        "            .replace(/-{2,}/g, '-')\n"
+        "            .replace(/^-+|-+$/g, '');\n"
+        "    }\n"
+        "    function apply(root) {\n"
+        "        var scope = root || document;\n"
+        "        var bySlug = {};\n"
+        "        var headings = scope.querySelectorAll('h1,h2,h3,h4,h5,h6');\n"
+        "        for (var i = 0; i < headings.length; i++) {\n"
+        "            var h = headings[i];\n"
+        "            var base = slugify(h.textContent) || 'section';\n"
+        "            var id = base, n = 1;\n"
+        "            while (true) {\n"
+        "                var hit = document.getElementById(id);\n"
+        "                if (!hit || hit === h) break;\n"
+        "                id = base + '-' + n; n++;\n"
+        "            }\n"
+        "            h.id = id;\n"
+        "            if (!(base in bySlug)) bySlug[base] = id;\n"
+        "            if (!h.querySelector('.heading-anchor')) {\n"
+        "                var a = document.createElement('a');\n"
+        "                a.className = 'heading-anchor';\n"
+        "                a.href = '#' + id;\n"
+        "                a.title = ANCHOR_TITLE;\n"
+        "                a.setAttribute('aria-label', ANCHOR_TITLE);\n"
+        "                a.innerHTML = '<i class=\"fa-solid fa-link\" aria-hidden=\"true\"></i>';\n"
+        "                h.appendChild(a);\n"
+        "            }\n"
+        "        }\n"
+        "        // 解析正文里的页内 #链接：命中已分配 id 或标题 slug 则重写\n"
+        "        var links = scope.querySelectorAll('a[href^=\"#\"]');\n"
+        "        for (var j = 0; j < links.length; j++) {\n"
+        "            var a2 = links[j];\n"
+        "            if (a2.classList.contains('heading-anchor')) continue;\n"
+        "            var raw = a2.getAttribute('href');\n"
+        "            if (raw.length <= 1) continue;\n"
+        "            var frag = '';\n"
+        "            try { frag = decodeURIComponent(raw.slice(1)).trim(); } catch (e) { continue; }\n"
+        "            if (!frag || document.getElementById(frag)) continue;\n"
+        "            var mapped = bySlug[slugify(frag)];\n"
+        "            if (mapped) a2.setAttribute('href', '#' + mapped);\n"
+        "        }\n"
+        "        lastMap = bySlug;\n"
+        "    }\n"
+        "    function jumpToHash() {\n"
+        "        var raw = window.location.hash;\n"
+        "        if (!raw || raw.length <= 1) return false;\n"
+        "        var frag = '';\n"
+        "        try { frag = decodeURIComponent(raw.slice(1)).trim(); } catch (e) { return false; }\n"
+        "        if (!frag) return false;\n"
+        "        var target = document.getElementById(frag)\n"
+        "            || document.getElementById(lastMap[slugify(frag)] || '');\n"
+        "        if (!target) return false;\n"
+        "        target.scrollIntoView({ behavior: 'smooth', block: 'start' });\n"
+        "        return true;\n"
+        "    }\n"
+        "    return { apply: apply, jumpToHash: jumpToHash, slugify: slugify };\n"
+        "})();\n"
+        "</script>"
+    )
+
+
 def read_disclaimer(lang: str) -> str:
     """读取免责声明文件并渲染为 HTML"""
     import os
