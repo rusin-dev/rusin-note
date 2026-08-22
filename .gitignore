@@ -29,6 +29,7 @@ sessions.json
 users.json
 shares.json
 benben.json
+.env
 
 # 其他
 note/
