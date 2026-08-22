@@ -14,8 +14,9 @@ from ..notes import (
     read_note,
     write_note,
 )
+from ..middleware import get_current_user
 from ..utils import render_latex_head, render_markdown_html
-from ._helpers import build_note_context, check_note_id
+from ._helpers import build_note_context, check_note_id, page_cache_key, purge_page_cache
 
 
 bp = Blueprint("world", __name__)
@@ -55,9 +56,12 @@ def world_note_post(note_id):
     content = request.form.get("content", "")
     if not write_note("public", note_id, content):
         abort(500)
-    cache.delete(f"/world/{note_id}")
-    cache.delete(f"/world/{note_id}.md")
-    cache.delete(f"/world/{note_id}/md")
+    # /world/<id> 编辑页虽未缓存，一并清理保持对称；/<id>.md 是短链渲染入口
+    purge_page_cache(
+        [f"/world/{note_id}", f"/world/{note_id}.md", f"/world/{note_id}/md",
+         f"/{note_id}.md"],
+        viewers=(None, get_current_user()),
+    )
     return redirect(url_for("world.world_note_get", note_id=note_id))
 
 
@@ -65,7 +69,7 @@ def world_note_post(note_id):
 @bp.route("/world/<note_id>.md", methods=["GET"])
 @require_feature("world_notes")
 @limiter.limit(lambda: f"{config.GET_RATE_MAX} per {config.GET_RATE_WINDOW} second")
-@cache.cached(timeout=config.CACHE_TIMEOUT_NOTES)
+@cache.cached(timeout=config.CACHE_TIMEOUT_NOTES, make_cache_key=page_cache_key)
 def world_md(note_id):
     check_note_id(note_id)
     content = read_note("public", note_id)

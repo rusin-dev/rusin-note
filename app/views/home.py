@@ -7,17 +7,13 @@ from ..feature_flags import feature_enabled, get_all_features, is_admin
 from ..i18n import t
 from ..notes import get_stats
 from ..utils import format_size, read_disclaimer
+from ._helpers import page_cache_key
 
 bp = Blueprint("home", __name__)
 
 
-def _index_cache_key():
-    user = getattr(g, "current_user", None)
-    return f"home_index:{user or 'anonymous'}"
-
-
 @bp.route("/")
-@cache.cached(timeout=config.CACHE_TIMEOUT_INDEX, make_cache_key=_index_cache_key)
+@cache.cached(timeout=config.CACHE_TIMEOUT_INDEX, make_cache_key=page_cache_key)
 def index():
     lang = getattr(g, "lang", "zh")
     current_user = getattr(g, "current_user", None)
