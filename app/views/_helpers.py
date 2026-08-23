@@ -108,6 +108,9 @@ def build_note_context(
         "refLabel": t(lang, "note_refs_label"),
         "refRecent": t(lang, "note_refs_recent"),
         "refNoMatch": t(lang, "note_refs_no_match"),
+        "imgUploading": t(lang, "note_images_uploading"),
+        "imgDone": t(lang, "note_images_done"),
+        "imgFailed": t(lang, "note_images_failed"),
     }
 
     return {

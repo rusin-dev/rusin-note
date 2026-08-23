@@ -13,6 +13,7 @@
 选择优先级（RUSIN_STORAGE 显式指定 > KV 环境变量自动识别 > DATABASE_URL
 自动识别 > 无服务器平台默认 memory > 本地默认 file）。
 """
+import base64
 import json
 import os
 import threading
@@ -65,6 +66,9 @@ _RAW_TEXT_KEYS = {"secret_key"}
 
 # 笔记键前缀：note:<username>:<note_id>
 NOTE_KEY_PREFIX = "note:"
+# 图片键前缀（仅 KV 默认实现使用；file/postgres 后端有原生二进制通道）：
+# img:<username>:<image_id>
+IMAGE_KEY_PREFIX = "img:"
 
 
 def _note_key(username: str, note_id: str) -> str:
@@ -132,6 +136,61 @@ class StorageBackend:
     def iter_all_notes(self):
         """遍历全部笔记，产出 (username, note_id)"""
         raise NotImplementedError
+
+    # ---------- 图片专用（图床：二进制） ----------
+    # 基类默认实现：base64 进通用 KV（键 img:<username>:<image_id>，值
+    # {"d": base64, "t": mtime, "s": size}），memory / upstash 后端直接继承；
+    # file / postgres 后端覆盖为原生二进制（文件 / BYTEA 列）。
+    def _image_key(self, username: str, image_id: str) -> str:
+        return f"{IMAGE_KEY_PREFIX}{username}:{image_id}"
+
+    def write_image(self, username: str, image_id: str, data: bytes) -> bool:
+        payload = {
+            "d": base64.b64encode(bytes(data)).decode("ascii"),
+            "t": time.time(),
+            "s": len(data),
+        }
+        return self.set(self._image_key(username, image_id), payload)
+
+    def read_image(self, username: str, image_id: str) -> bytes | None:
+        payload = self.get(self._image_key(username, image_id))
+        if not isinstance(payload, dict) or not isinstance(payload.get("d"), str):
+            return None
+        try:
+            return base64.b64decode(payload["d"])
+        except (ValueError, TypeError):
+            return None
+
+    def delete_image(self, username: str, image_id: str) -> bool:
+        return self.delete(self._image_key(username, image_id))
+
+    def image_mtime(self, username: str, image_id: str) -> float | None:
+        payload = self.get(self._image_key(username, image_id))
+        t = payload.get("t") if isinstance(payload, dict) else None
+        return t if isinstance(t, (int, float)) else None
+
+    def image_size(self, username: str, image_id: str) -> int | None:
+        payload = self.get(self._image_key(username, image_id))
+        s = payload.get("s") if isinstance(payload, dict) else None
+        return s if isinstance(s, int) else None
+
+    def list_images(self, username: str) -> list:
+        prefix = f"{IMAGE_KEY_PREFIX}{username}:"
+        ids = []
+        for key in self.list_keys(prefix):
+            image_id = key[len(prefix):]
+            if image_id:
+                ids.append(image_id)
+        return ids
+
+    def image_usage(self, username: str) -> int:
+        """该用户图片总字节数（配额计算用）"""
+        total = 0
+        for image_id in self.list_images(username):
+            size = self.image_size(username, image_id)
+            if size:
+                total += size
+        return total
 
     # ---------- 跨进程/跨实例互斥 ----------
     @contextmanager
@@ -280,6 +339,66 @@ class FileBackend(StorageBackend):
             for fname in os.listdir(user_dir):
                 if fname.endswith(".txt"):
                     yield username, fname[:-4]
+
+    # ---------- 图片：images/<user>/<id>（二进制原子写，mtime/size 来自文件系统） ----------
+    def _image_path(self, username: str, image_id: str) -> str:
+        return data_path("images", username, image_id)
+
+    def read_image(self, username: str, image_id: str) -> bytes | None:
+        try:
+            with open(self._image_path(username, image_id), "rb") as f:
+                return f.read()
+        except (FileNotFoundError, IOError, OSError):
+            return None
+
+    def write_image(self, username: str, image_id: str, data: bytes) -> bool:
+        path = self._image_path(username, image_id)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        temp_path = f"{path}.{os.getpid()}.tmp"
+        try:
+            with open(temp_path, "wb") as f:
+                f.write(data)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(temp_path, path)
+            return True
+        except (IOError, OSError):
+            try:
+                if os.path.exists(temp_path):
+                    os.remove(temp_path)
+            except OSError:
+                pass
+            return False
+
+    def delete_image(self, username: str, image_id: str) -> bool:
+        try:
+            os.remove(self._image_path(username, image_id))
+            return True
+        except FileNotFoundError:
+            return True
+        except OSError:
+            return False
+
+    def image_mtime(self, username: str, image_id: str) -> float | None:
+        try:
+            return os.path.getmtime(self._image_path(username, image_id))
+        except (IOError, OSError):
+            return None
+
+    def image_size(self, username: str, image_id: str) -> int | None:
+        try:
+            return os.path.getsize(self._image_path(username, image_id))
+        except (IOError, OSError):
+            return None
+
+    def list_images(self, username: str) -> list:
+        user_dir = data_path("images", username)
+        if not os.path.isdir(user_dir):
+            return []
+        try:
+            return [f for f in os.listdir(user_dir) if "." in f]
+        except OSError:
+            return []
 
     # ---------- 锁：fcntl/msvcrt 跨进程文件锁 ----------
     @contextmanager
@@ -547,6 +666,15 @@ CREATE TABLE IF NOT EXISTS storage_notes (
     PRIMARY KEY (username, note_id)
 )
 """
+_SCHEMA_IMAGES = """
+CREATE TABLE IF NOT EXISTS storage_images (
+    username TEXT NOT NULL,
+    image_id TEXT NOT NULL,
+    data     BYTEA NOT NULL,
+    mtime    DOUBLE PRECISION NOT NULL,
+    PRIMARY KEY (username, image_id)
+)
+"""
 
 
 class PostgresBackend(StorageBackend):
@@ -580,6 +708,7 @@ class PostgresBackend(StorageBackend):
                 with conn.cursor() as cur:
                     cur.execute(_SCHEMA_KV)
                     cur.execute(_SCHEMA_NOTES)
+                    cur.execute(_SCHEMA_IMAGES)
                 conn.commit()
                 self._schema_ready = True
             except StorageError:
@@ -678,6 +807,48 @@ class PostgresBackend(StorageBackend):
             "SELECT username, note_id FROM storage_notes", fetch="all")
         for username, note_id in rows:
             yield username, note_id
+
+    # ---------- 图片：storage_images 表（BYTEA 原生二进制） ----------
+    def write_image(self, username: str, image_id: str, data: bytes) -> bool:
+        self._execute(
+            "INSERT INTO storage_images (username, image_id, data, mtime) "
+            "VALUES (%s, %s, %s, %s) "
+            "ON CONFLICT (username, image_id) DO UPDATE "
+            "SET data = EXCLUDED.data, mtime = EXCLUDED.mtime",
+            (username, image_id, psycopg.Binary(bytes(data)), time.time()))
+        return True
+
+    def read_image(self, username: str, image_id: str) -> bytes | None:
+        value = self._execute(
+            "SELECT data FROM storage_images WHERE username = %s AND image_id = %s",
+            (username, image_id), fetch="one")
+        return bytes(value) if value is not None else None
+
+    def delete_image(self, username: str, image_id: str) -> bool:
+        return bool(self._execute(
+            "DELETE FROM storage_images WHERE username = %s AND image_id = %s",
+            (username, image_id)))
+
+    def image_mtime(self, username: str, image_id: str) -> float | None:
+        return self._execute(
+            "SELECT mtime FROM storage_images WHERE username = %s AND image_id = %s",
+            (username, image_id), fetch="one")
+
+    def image_size(self, username: str, image_id: str) -> int | None:
+        return self._execute(
+            "SELECT octet_length(data) FROM storage_images WHERE username = %s AND image_id = %s",
+            (username, image_id), fetch="one")
+
+    def list_images(self, username: str) -> list:
+        rows = self._execute(
+            "SELECT image_id FROM storage_images WHERE username = %s", (username,), fetch="all")
+        return [r[0] for r in rows]
+
+    def image_usage(self, username: str) -> int:
+        total = self._execute(
+            "SELECT COALESCE(SUM(octet_length(data)), 0) FROM storage_images WHERE username = %s",
+            (username,), fetch="one")
+        return int(total or 0)
 
     # ---------- 锁：PG advisory lock（跨实例互斥，事务结束自动释放） ----------
     @contextmanager

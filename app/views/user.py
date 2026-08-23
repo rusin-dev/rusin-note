@@ -6,6 +6,18 @@ from .. import config
 from ..extensions import cache, limiter
 from ..i18n import t
 from ..feature_flags import feature_enabled, require_feature
+from ..images import (
+    delete_image,
+    generate_image_id,
+    get_image_mtime,
+    get_image_size,
+    image_url,
+    list_user_images,
+    sniff_image_format,
+    user_image_usage,
+    validate_image_id,
+    write_image,
+)
 from ..middleware import get_current_user
 from ..notes import (
     generate_random_id,
@@ -141,6 +153,87 @@ def user_refs_search(username):
     return jsonify({"items": search_user_notes(username, q)})
 
 
+# ---------- 笔记图床：/user/<u>/images（管理页 + 编辑器上传 API） ----------
+# 必须注册在 /user/<username>/<note_id> 之前，否则 images 会被当作笔记 ID
+@bp.route("/user/<username>/images", methods=["GET"])
+@require_feature("note_images")
+@limiter.limit(lambda: f"{config.GET_RATE_MAX} per {config.GET_RATE_WINDOW} second")
+def images_page(username):
+    if not validate_username(username):
+        abort(400)
+    _require_auth(username)
+    return _render_images(username, error="")
+
+
+@bp.route("/user/<username>/images", methods=["POST"])
+@require_feature("note_images")
+@limiter.limit(lambda: f"{config.RATE_MAX} per {config.RATE_WINDOW} second")
+def images_upload(username):
+    """编辑器粘贴/拖拽上传（multipart，file 字段 + csrf_token）：
+    校验链 魔数 → 单图大小 → 用户配额，成功返回 JSON {url, name}。"""
+    if not validate_username(username):
+        abort(400)
+    _require_auth(username)
+    lang = getattr(g, "lang", "zh")
+    file = request.files.get("file")
+    data = file.read() if file is not None else b""
+    ext = sniff_image_format(data)
+    if ext is None:
+        return jsonify({"error": t(lang, "err_image_format")}), 400
+    if len(data) > config.MAX_IMAGE_SIZE_BYTES:
+        return jsonify({"error": t(lang, "err_image_too_large",
+                                   max=config.MAX_IMAGE_SIZE_KB)}), 400
+    if user_image_usage(username) + len(data) > config.MAX_IMAGE_TOTAL_BYTES:
+        return jsonify({"error": t(lang, "err_image_quota",
+                                   total=f"{config.MAX_IMAGE_TOTAL_KB} KB")}), 400
+    image_id = generate_image_id(ext)
+    if not write_image(username, image_id, data):
+        return jsonify({"error": t(lang, "err_image_upload")}), 500
+    return jsonify({"url": image_url(username, image_id), "name": image_id})
+
+
+@bp.route("/user/<username>/images/delete", methods=["POST"])
+@require_feature("note_images")
+@limiter.limit(lambda: f"{config.RATE_MAX} per {config.RATE_WINDOW} second")
+def images_delete(username):
+    if not validate_username(username):
+        abort(400)
+    _require_auth(username)
+    image_id = request.form.get("image_id", "").strip()
+    if not validate_image_id(image_id):
+        abort(400)
+    if not delete_image(username, image_id):
+        return _render_images(username, error=t(getattr(g, "lang", "zh"),
+                                                "err_image_upload")), 400
+    return redirect(url_for("user.images_page", username=username))
+
+
+def _render_images(username, error):
+    lang = getattr(g, "lang", "zh")
+    rows = []
+    for image_id in list_user_images(username):
+        mtime = get_image_mtime(username, image_id)
+        size = get_image_size(username, image_id)
+        rows.append({
+            "id": image_id,
+            "url": image_url(username, image_id),
+            "mtime": format_note_time(mtime) if mtime else "",
+            "size": format_size(size) if size is not None else "",
+        })
+    rows.sort(key=lambda r: r["id"])
+    usage_text = t(lang, "images_usage",
+                   used=format_size(user_image_usage(username)),
+                   total=format_size(config.MAX_IMAGE_TOTAL_BYTES),
+                   count=len(rows))
+    return render_template(
+        "images/image_list.html",
+        username=username,
+        rows=rows,
+        usage_text=usage_text,
+        error=error,
+    )
+
+
 @bp.route("/user/<username>/<note_id>", methods=["GET"])
 @bp.route("/user/<username>/<note_id>/", methods=["GET"])
 @limiter.limit(lambda: f"{config.GET_RATE_MAX} per {config.GET_RATE_WINDOW} second")
@@ -166,6 +259,9 @@ def user_note_get(username, note_id):
     note_folder_value = get_note_folder(username, note_id) if note_folders_enabled else ""
     folder_options = sorted({f for f in get_user_note_folders(username).values() if f}) \
         if note_folders_enabled else []
+    # 图床上传 API（编辑器粘贴/拖拽上传用；world/share 页不启用）
+    note_images_api = url_for("user.images_upload", username=username) \
+        if feature_enabled("note_images") else None
     return render_template(
         "notes/note_edit.html",
         note_id=note_id,
@@ -179,6 +275,7 @@ def user_note_get(username, note_id):
         note_folders_enabled=note_folders_enabled,
         note_folder_value=note_folder_value,
         folder_options=folder_options,
+        note_images_api=note_images_api,
         **ctx,
     )
 
