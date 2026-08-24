@@ -30,6 +30,7 @@
 <div style="margin-bottom: 16px;">
     <a href="/user/{{ username|e }}/new">{{ t('user_new_note') }}</a>
     {% if feature_enabled('note_images') %} · <a href="/user/{{ username|e }}/images">{{ t('user_images_link') }}</a>{% endif %}
+    {% if feature_enabled('note_attachments') %} · <a href="/user/{{ username|e }}/attachments">{{ t('user_attachments_link') }}</a>{% endif %}
 </div>
 {% set has_cloud = (tag_cloud or active_tag) or (folder_cloud or active_folder) %}
 {% if (tags_enabled or folders_enabled) and has_cloud %}

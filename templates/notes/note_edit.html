@@ -77,6 +77,9 @@
         .save-btn { position: fixed; bottom: 24px; right: 24px; background: var(--btn-bg); border: 1px solid var(--navbar-border); padding: 8px 20px; border-radius: 20px; font-size: 14px; color: var(--text); cursor: pointer; backdrop-filter: blur(4px); transition: all 0.2s; z-index: 10; font-weight: 500; }
         .save-btn:hover { background: var(--btn-hover); transform: scale(1.02); }
         .save-btn:active { background: var(--border); transform: scale(0.98); }
+        .attachment-btn { position: fixed; bottom: 70px; right: 24px; background: var(--btn-bg); border: 1px solid var(--navbar-border); padding: 8px 20px; border-radius: 20px; font-size: 14px; color: var(--text); cursor: pointer; backdrop-filter: blur(4px); transition: all 0.2s; z-index: 10; font-weight: 500; }
+        .attachment-btn:hover { background: var(--btn-hover); transform: scale(1.02); }
+        .attachment-btn:active { background: var(--border); transform: scale(0.98); }
         .pane-header.editor-header { justify-content: space-between; }
         .pane-header.preview-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
         .preview-title { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
@@ -175,6 +178,7 @@
             .navbar-brand-name { max-width: 45vw; }
             textarea { padding: 16px 18px; font-size: 15px; }
             .save-btn { bottom: 16px; right: 16px; padding: 6px 16px; font-size: 13px; }
+            .attachment-btn { bottom: 60px; right: 16px; padding: 6px 16px; font-size: 13px; }
             .save-hint { bottom: 70px; padding: 8px 16px; font-size: 12px; white-space: nowrap; }
             .save-status { bottom: 70px; right: 16px; font-size: 12px; padding: 4px 14px; }
             .note-mtime { bottom: 16px; font-size: 11px; }
@@ -236,6 +240,12 @@
             <div class="preview-body markdown-body" id="previewBody"></div>
         </div>
     </div>
+    {% if note_attachments_api %}
+    <input type="file" id="attachmentInput" style="display: none;" multiple>
+    <button type="button" class="attachment-btn" id="attachmentBtn">
+        <i class="fa-solid fa-paperclip" aria-hidden="true"></i> {{ t('note_attachment_btn') }}
+    </button>
+    {% endif %}
     <button type="button" class="save-btn" id="saveBtn">{{ t('note_save_btn') }}</button>
     <div class="save-hint" id="saveHint">{{ hint_text|safe }}</div>
     <div class="save-status" id="saveStatus"></div>
@@ -404,6 +414,30 @@
                 uploadImage(img);
             });
 
+            // 附件上传：选择文件 → 上传到当前用户名下 → 光标处插入 Markdown 链接
+            const ATTACHMENTS_API = {{ (note_attachments_api or '')|tojson }};
+            function uploadAttachment(file) {
+                if (!ATTACHMENTS_API) return;
+                showStatus(L10N.attUploading, 'saving');
+                const fd = new FormData();
+                fd.append('file', file, file.name || 'file');
+                fd.append(CSRF_FIELD, form.querySelector('input[name="' + CSRF_FIELD + '"]').value);
+                fetch(ATTACHMENTS_API, { method: 'POST', body: fd })
+                    .then(r => r.json().then(j => {
+                        if (!r.ok) throw new Error(j.error || ('HTTP ' + r.status));
+                        return j;
+                    }))
+                    .then(data => {
+                        insertAtCursor('[' + data.name + '](' + data.url + ')');
+                        showStatus(L10N.attDone, '');
+                        showHint(L10N.attDone);
+                    })
+                    .catch(err => {
+                        showStatus(L10N.attFailed, 'error');
+                        showHint(err.message);
+                    });
+            }
+
             function showHint(message) {
                 if (message) saveHint.innerHTML = message;
                 saveHint.classList.add('show');
@@ -443,6 +477,24 @@
                     saveStatus.classList.remove('show');
                 }
             });
+
+            // 附件上传按钮
+            var attachmentBtn = document.getElementById('attachmentBtn');
+            var attachmentInput = document.getElementById('attachmentInput');
+            if (attachmentBtn && attachmentInput) {
+                attachmentBtn.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    attachmentInput.click();
+                });
+                attachmentInput.addEventListener('change', function(e) {
+                    var files = e.target.files;
+                    if (!files || !files.length) return;
+                    for (var i = 0; i < files.length; i++) {
+                        uploadAttachment(files[i]);
+                    }
+                    attachmentInput.value = '';
+                });
+            }
 
             saveBtn.addEventListener('click', function(e) {
                 e.preventDefault();

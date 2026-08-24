@@ -115,6 +115,24 @@ DEFAULT_CONFIG = {
         "max_size_kb": 2048,                   # 单张图片上限（KB）
         "max_total_kb": 51200                  # 每用户配额（KB）
     },
+    "attachments": {                          # 笔记附件：编辑器上传，/attachment/<u>/<id> 公开访问
+        "enabled": True,
+        "max_size_kb": 10240,                  # 单个附件上限（KB），默认 10 MB
+        "max_total_kb": 10240,                 # 每用户配额（KB），默认 10 MB
+        "blocked_extensions": [                # 黑名单扩展名（不含点），可执行文件
+            "exe", "bat", "cmd", "com", "msi", "scr", "pif",
+            "vbs", "vbe", "js", "jse", "ws", "wsf", "wsc", "wsh",
+            "ps1", "psm1", "psd1", "psc1", "psc2",
+            "reg", "inf", "hta", "cpl", "lnk", "url",
+            "sh", "bash", "csh", "ksh", "zsh", "fish",
+            "command", "app", "workflow", "scpt", "applescript",
+            "dylib", "so", "dll", "class", "jar",
+            "py", "pyc", "pyo", "pyd", "rb", "pl", "pm", "tcl", "tk",
+            "zip", "zipx", "rar", "7z", "cab", "lzh", "ace", "arc", "arj",
+            "tar", "tar.gz", "tgz", "tpz", "gz", "bz2", "xz", "z",
+            "deb", "rpm", "dmg", "iso", "img", "bin",
+        ]
+    },
     "features": {                             # 功能开关默认值（#90）：运行时可由管理员在 /admin/features 切换
         "world_notes": True,
         "benben": True,
@@ -387,6 +405,15 @@ MAX_IMAGE_SIZE_KB = IMAGES_CFG.get("max_size_kb", 2048)
 MAX_IMAGE_TOTAL_KB = IMAGES_CFG.get("max_total_kb", 51200)
 MAX_IMAGE_SIZE_BYTES = MAX_IMAGE_SIZE_KB * 1024
 MAX_IMAGE_TOTAL_BYTES = MAX_IMAGE_TOTAL_KB * 1024
+
+# ---------- 笔记附件配置 ----------
+ATTACHMENTS_CFG = config.get("attachments", DEFAULT_CONFIG["attachments"])
+ATTACHMENTS_ENABLED = bool(ATTACHMENTS_CFG.get("enabled", True))
+MAX_ATTACHMENT_SIZE_KB = ATTACHMENTS_CFG.get("max_size_kb", 10240)
+MAX_ATTACHMENT_TOTAL_KB = ATTACHMENTS_CFG.get("max_total_kb", 10240)
+MAX_ATTACHMENT_SIZE_BYTES = MAX_ATTACHMENT_SIZE_KB * 1024
+MAX_ATTACHMENT_TOTAL_BYTES = MAX_ATTACHMENT_TOTAL_KB * 1024
+ATTACHMENT_BLOCKED_EXTENSIONS = ATTACHMENTS_CFG.get("blocked_extensions", DEFAULT_CONFIG["attachments"]["blocked_extensions"])
 
 # ---------- 功能开关管理员（#90：/admin/features 的访问者） ----------
 # config.json 的 admin_users 与环境变量 RUSIN_ADMIN（逗号分隔用户名）取并集

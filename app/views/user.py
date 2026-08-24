@@ -18,6 +18,20 @@ from ..images import (
     validate_image_id,
     write_image,
 )
+from ..attachments import (
+    attachment_content_type,
+    attachment_url,
+    delete_attachment,
+    generate_attachment_id,
+    get_attachment_mtime,
+    get_attachment_size,
+    list_user_attachments,
+    read_attachment_meta,
+    user_attachment_usage,
+    validate_attachment_id,
+    validate_attachment_type,
+    write_attachment,
+)
 from ..middleware import get_current_user
 from ..notes import (
     generate_random_id,
@@ -234,6 +248,116 @@ def _render_images(username, error):
     )
 
 
+# ---------- 笔记附件：/user/<u>/attachments（管理页 + 编辑器上传 API） ----------
+# 必须注册在 /user/<username>/<note_id> 之前，否则 attachments 会被当作笔记 ID
+@bp.route("/user/<username>/attachments", methods=["GET"])
+@require_feature("note_attachments")
+@limiter.limit(lambda: f"{config.GET_RATE_MAX} per {config.GET_RATE_WINDOW} second")
+def attachments_page(username):
+    if not validate_username(username):
+        abort(400)
+    _require_auth(username)
+    return _render_attachments(username, error="")
+
+
+@bp.route("/user/<username>/attachments", methods=["POST"])
+@require_feature("note_attachments")
+@limiter.limit(lambda: f"{config.RATE_MAX} per {config.RATE_WINDOW} second")
+def attachments_upload(username):
+    """编辑器上传附件（multipart，file 字段 + csrf_token）：
+    校验链 类型黑名单 → 单文件大小 → 用户配额，成功返回 JSON {url, name, id}。"""
+    if not validate_username(username):
+        abort(400)
+    _require_auth(username)
+    lang = getattr(g, "lang", "zh")
+    file = request.files.get("file")
+    if not file or not file.filename:
+        return jsonify({"error": t(lang, "err_attachment_no_file")}), 400
+    
+    from werkzeug.utils import secure_filename
+    filename = secure_filename(file.filename) or "unnamed"
+    
+    # 类型校验（黑名单）
+    is_valid, error_key = validate_attachment_type(filename)
+    if not is_valid:
+        return jsonify({"error": t(lang, error_key)}), 400
+    
+    # 读取数据
+    data = file.read()
+    if not data:
+        return jsonify({"error": t(lang, "err_attachment_empty")}), 400
+    
+    # 大小校验（单个文件）
+    if len(data) > config.MAX_ATTACHMENT_SIZE_BYTES:
+        return jsonify({"error": t(lang, "err_attachment_too_large",
+                                   max=config.MAX_ATTACHMENT_SIZE_KB)}), 400
+    
+    # 配额校验（用户总量）
+    if user_attachment_usage(username) + len(data) > config.MAX_ATTACHMENT_TOTAL_BYTES:
+        return jsonify({"error": t(lang, "err_attachment_quota",
+                                   total=f"{config.MAX_ATTACHMENT_TOTAL_KB} KB")}), 400
+    
+    # 生成 ID
+    attachment_id = generate_attachment_id(filename)
+    
+    # 写入存储
+    content_type = attachment_content_type(filename)
+    if not write_attachment(username, attachment_id, data, filename, content_type):
+        return jsonify({"error": t(lang, "err_attachment_upload")}), 500
+    
+    return jsonify({
+        "url": attachment_url(username, attachment_id),
+        "name": filename,
+        "id": attachment_id,
+    })
+
+
+@bp.route("/user/<username>/attachments/delete", methods=["POST"])
+@require_feature("note_attachments")
+@limiter.limit(lambda: f"{config.RATE_MAX} per {config.RATE_WINDOW} second")
+def attachments_delete(username):
+    if not validate_username(username):
+        abort(400)
+    _require_auth(username)
+    attachment_id = request.form.get("attachment_id", "").strip()
+    if not validate_attachment_id(attachment_id):
+        abort(400)
+    if not delete_attachment(username, attachment_id):
+        return _render_attachments(username, error=t(getattr(g, "lang", "zh"),
+                                                     "err_attachment_upload")), 400
+    return redirect(url_for("user.attachments_page", username=username))
+
+
+def _render_attachments(username, error):
+    lang = getattr(g, "lang", "zh")
+    rows = []
+    for attachment_id in list_user_attachments(username):
+        meta = read_attachment_meta(username, attachment_id)
+        mtime = get_attachment_mtime(username, attachment_id)
+        size = get_attachment_size(username, attachment_id)
+        rows.append({
+            "id": attachment_id,
+            "url": attachment_url(username, attachment_id),
+            "filename": meta.get("filename", attachment_id) if meta else attachment_id,
+            "content_type": meta.get("content_type", "application/octet-stream") if meta else "application/octet-stream",
+            "mtime": format_note_time(mtime) if mtime else "",
+            "size": format_size(size) if size is not None else "",
+        })
+    rows.sort(key=lambda r: r["filename"])
+    usage_text = t(lang, "attachments_usage",
+                   used=format_size(user_attachment_usage(username)),
+                   total=format_size(config.MAX_ATTACHMENT_TOTAL_BYTES),
+                   count=len(rows))
+    return render_template(
+        "attachments/attachment_list.html",
+        username=username,
+        rows=rows,
+        usage_text=usage_text,
+        error=error,
+        max_size_kb=config.MAX_ATTACHMENT_SIZE_KB,
+    )
+
+
 @bp.route("/user/<username>/<note_id>", methods=["GET"])
 @bp.route("/user/<username>/<note_id>/", methods=["GET"])
 @limiter.limit(lambda: f"{config.GET_RATE_MAX} per {config.GET_RATE_WINDOW} second")
@@ -262,6 +386,9 @@ def user_note_get(username, note_id):
     # 图床上传 API（编辑器粘贴/拖拽上传用；world/share 页不启用）
     note_images_api = url_for("user.images_upload", username=username) \
         if feature_enabled("note_images") else None
+    # 附件上传 API（编辑器上传附件用；world/share 页不启用）
+    note_attachments_api = url_for("user.attachments_upload", username=username) \
+        if feature_enabled("note_attachments") else None
     return render_template(
         "notes/note_edit.html",
         note_id=note_id,
@@ -276,6 +403,7 @@ def user_note_get(username, note_id):
         note_folder_value=note_folder_value,
         folder_options=folder_options,
         note_images_api=note_images_api,
+        note_attachments_api=note_attachments_api,
         **ctx,
     )
 

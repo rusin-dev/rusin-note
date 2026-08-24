@@ -111,6 +111,9 @@ def build_note_context(
         "imgUploading": t(lang, "note_images_uploading"),
         "imgDone": t(lang, "note_images_done"),
         "imgFailed": t(lang, "note_images_failed"),
+        "attUploading": t(lang, "note_attachments_uploading"),
+        "attDone": t(lang, "note_attachments_done"),
+        "attFailed": t(lang, "note_attachments_failed"),
     }
 
     return {

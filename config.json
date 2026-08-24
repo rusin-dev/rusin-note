@@ -86,6 +86,24 @@
     "max_size_kb": 2048,
     "max_total_kb": 51200
   },
+  "attachments": {
+    "enabled": true,
+    "max_size_kb": 10240,
+    "max_total_kb": 10240,
+    "blocked_extensions": [
+      "exe", "bat", "cmd", "com", "msi", "scr", "pif",
+      "vbs", "vbe", "js", "jse", "ws", "wsf", "wsc", "wsh",
+      "ps1", "psm1", "psd1", "psc1", "psc2",
+      "reg", "inf", "hta", "cpl", "lnk", "url",
+      "sh", "bash", "csh", "ksh", "zsh", "fish",
+      "command", "app", "workflow", "scpt", "applescript",
+      "dylib", "so", "dll", "class", "jar",
+      "py", "pyc", "pyo", "pyd", "rb", "pl", "pm", "tcl", "tk",
+      "zip", "zipx", "rar", "7z", "cab", "lzh", "ace", "arc", "arj",
+      "tar", "tar.gz", "tgz", "tpz", "gz", "bz2", "xz", "z",
+      "deb", "rpm", "dmg", "iso", "img", "bin"
+    ]
+  },
   "features": {
     "world_notes": true,
     "benben": true,
