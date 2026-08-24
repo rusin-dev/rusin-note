@@ -38,6 +38,7 @@
 - **笔记快捷引用（`#` 引用）**：参考 GitHub Issues——在自己的私有笔记编辑页输入 `#` 会弹出自动补全列表（按笔记 ID 与首行标题模糊匹配、最近编辑优先），选中即插入 `#笔记ID`；渲染后自动变成指向该笔记的链接（悬停可见标题预览）。公开笔记中的 `#ID` 同样会解析为公开笔记链接。代码块内的 `#include` 等内容不受影响。
 - **笔记图床**：编辑器支持粘贴/拖拽上传图片，自动压缩存储，笔记中以 Markdown 语法引用，公开可读无需登录。
 - **笔记附件**：支持上传任意文件类型（可执行文件除外），默认单文件 10MB、每用户 10MB 配额（可在 `config.json` 调整），附件管理页支持拖拽上传，笔记中以链接形式引用。
+- **评论系统**：笔记和分享页面支持评论功能，支持匿名评论，可配置最大评论数（默认 200 条）、冷却时间、分页加载，与犇犇动态类似的发布等待机制。
 - **犇犇动态**：内置轻量动态流，登录用户可发布内容，未登录用户可浏览，支持实时预览、分页加载和发布冷却。
 - **功能开关（Feature Flags）**：管理员在 `/admin/features` 用滑块开关启用/停用站点功能（公开笔记、犇犇、分享链接、开放注册、快捷引用、笔记标签、笔记文件夹、笔记置顶、笔记图床、笔记附件、Markdown 标题锚点、LaTeX、代码高亮、头像），保存后立即生效、无需重启；启用的功能会在 `/count` 数据汇总页呈现，停用的功能入口自动隐藏、路由直接 404。
 - **多语言界面**：内置简体中文与 English，可手动切换，也可按浏览器语言自动选择。
@@ -432,6 +433,13 @@ rusin-note:.
    - `max_size_kb` ：单个附件上限（KB），默认 `10240`（10MB）；
    - `max_total_kb` ：每用户附件总配额（KB），默认 `10240`（10MB）；
    - `blocked_extensions` ：禁止上传的文件扩展名列表（黑名单模式），默认包含 `.exe`、`.bat`、`.sh`、`.zip` 等可执行文件与压缩包。  
+- `comments` 评论系统（/comments/<target_type>/<target_id>，支持笔记和分享页面评论）。
+   - `enabled` ：是否开启，默认 `true`；置 `false` 后评论页面返回 404；
+   - `max_length` ：单条评论最大长度（字符），默认 `1024`（约 1KB）；
+   - `max_comments` ：每个目标（笔记/分享）最多评论数，默认 `200`；
+   - `cooldown_seconds` ：单个用户两次发布评论的最小间隔（秒），默认 `3`；
+   - `page_size` ：每页显示评论数，默认 `50`；
+   - `max_height_px` ：评论内容渲染后的最大显示高度（px），默认 `1000`，超出部分滚动。  
 - `password_policy`：密码策略，定义访客密码的复杂度要求。  
    - `min_length`：密码最小长度，默认 `8`；  
    - `max_length`：密码最大长度，默认 `128`（硬上限 `128`，防止超长密码进入 PBKDF2 慢哈希消耗 CPU）；  
@@ -457,7 +465,7 @@ rusin-note:.
    - `update_interval_hours`：后台更新检查线程的轮询周期（单位：**小时**），默认 $6$；
    - `update_stale_days`：距 `last_update` 超过该天数才请求 `upstream_repo`（单位：**天**），默认 $3$。
 - `features` / `admin_users` 功能开关（#90）。
-   - `features`：各功能的**默认开关**，包括 `world_notes`（公开笔记与短链）、`benben`（犇犇动态）、`share_links`（分享链接）、`open_register`（开放注册）、`note_tags`（笔记标签）、`note_folders`（笔记文件夹）、`note_pins`（笔记置顶）、`note_images`（笔记图床）、`note_attachments`（笔记附件）、`heading_anchors`（Markdown 标题锚点），均默认 `true`。历史功能（`note_refs`、`latex_render`、`code_highlight`、`avatar`）的默认值沿用各自原有配置段；
+   - `features`：各功能的**默认开关**，包括 `world_notes`（公开笔记与短链）、`benben`（犇犇动态）、`share_links`（分享链接）、`open_register`（开放注册）、`note_tags`（笔记标签）、`note_folders`（笔记文件夹）、`note_pins`（笔记置顶）、`note_images`（笔记图床）、`note_attachments`（笔记附件）、`comments`（评论系统）、`heading_anchors`（Markdown 标题锚点），均默认 `true`。历史功能（`note_refs`、`latex_render`、`code_highlight`、`avatar`）的默认值沿用各自原有配置段；
    - `admin_users`：功能开关管理员用户名列表；也可用环境变量 `RUSIN_ADMIN` 指定（多个用户名逗号分隔，两者取并集）。
 
    管理员登录后可在 `/admin/features` 用滑块开关切换各功能的启用状态，保存后立即生效（无需重启）：运行时状态持久化在存储后端（file 后端即数据目录下的 `feature_flags.json`），多实例部署经约 5 秒的缓存 TTL 自动收敛；停用的功能路由直接 404、导航与首页入口自动隐藏。全部功能开关状态会呈现在 `/count` 数据汇总页的「功能状态」区（未设管理员时该区对所有人可见，但无人能修改开关）。注意：无服务器 `memory` 后端不持久，实例冷启动后回退到 `config.json` 默认值。

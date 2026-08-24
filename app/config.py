@@ -133,6 +133,14 @@ DEFAULT_CONFIG = {
             "deb", "rpm", "dmg", "iso", "img", "bin",
         ]
     },
+    "comments": {                            # 评论系统：笔记/分享页面的评论功能
+        "enabled": True,
+        "max_length": 1024,                  # 单条评论最大长度（字符）
+        "max_comments": 200,                 # 每个目标（笔记/分享）最多评论数
+        "cooldown_seconds": 3,               # 单用户发布评论冷却时间（秒）
+        "page_size": 50,                     # 每页显示评论数
+        "max_height_px": 1000,               # 评论内容渲染后最大显示高度（px）
+    },
     "features": {                             # 功能开关默认值（#90）：运行时可由管理员在 /admin/features 切换
         "world_notes": True,
         "benben": True,
@@ -141,7 +149,10 @@ DEFAULT_CONFIG = {
         "note_tags": True,
         "note_folders": True,
         "note_pins": True,
-        "heading_anchors": True
+        "heading_anchors": True,
+        "note_images": True,
+        "note_attachments": True,
+        "comments": True,
     },
     "admin_users": [],                        # 功能开关管理员用户名（也可用环境变量 RUSIN_ADMIN 指定，逗号分隔）
     "max_note_id_length": 250,
@@ -414,6 +425,21 @@ MAX_ATTACHMENT_TOTAL_KB = ATTACHMENTS_CFG.get("max_total_kb", 10240)
 MAX_ATTACHMENT_SIZE_BYTES = MAX_ATTACHMENT_SIZE_KB * 1024
 MAX_ATTACHMENT_TOTAL_BYTES = MAX_ATTACHMENT_TOTAL_KB * 1024
 ATTACHMENT_BLOCKED_EXTENSIONS = ATTACHMENTS_CFG.get("blocked_extensions", DEFAULT_CONFIG["attachments"]["blocked_extensions"])
+
+# ---------- 评论系统配置 ----------
+COMMENTS_CFG = config.get("comments", DEFAULT_CONFIG["comments"])
+COMMENTS_ENABLED = bool(COMMENTS_CFG.get("enabled", True))
+COMMENTS_MAX_LENGTH = COMMENTS_CFG.get("max_length", 1024)
+COMMENTS_MAX_POSTS = COMMENTS_CFG.get("max_comments", 200)
+COMMENTS_COOLDOWN_SECONDS = COMMENTS_CFG.get("cooldown_seconds", 3)
+COMMENTS_PAGE_SIZE = COMMENTS_CFG.get("page_size", 50)
+COMMENTS_MAX_HEIGHT_PX = COMMENTS_CFG.get("max_height_px", 1000)
+try:
+    COMMENTS_MAX_HEIGHT_PX = int(COMMENTS_MAX_HEIGHT_PX)
+    if COMMENTS_MAX_HEIGHT_PX <= 0:
+        COMMENTS_MAX_HEIGHT_PX = 1000
+except (TypeError, ValueError):
+    COMMENTS_MAX_HEIGHT_PX = 1000
 
 # ---------- 功能开关管理员（#90：/admin/features 的访问者） ----------
 # config.json 的 admin_users 与环境变量 RUSIN_ADMIN（逗号分隔用户名）取并集
