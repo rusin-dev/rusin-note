@@ -44,6 +44,7 @@ def world_note_get(note_id):
         content=content,
         is_world=True,
         action_url=url_for("world.world_note_post", note_id=note_id),
+        comment_url=f"/comments/note/public/{note_id}",
         **ctx,
     )
 

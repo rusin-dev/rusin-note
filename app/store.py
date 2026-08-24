@@ -406,6 +406,111 @@ def get_benben_posts(page: int, page_size: int):
     return posts, has_more
 
 
+# ---------- 评论系统存储 ----------
+# 所有评论存储在单个 KV 键 comments:all，格式：{target_key: [comment, ...]}
+# target_key 格式："share:<token>" 或 "note:<username>:<note_id>"
+# 每条评论格式: {"username": str, "content": str, "time": float, "ip": str, "is_anonymous": bool}
+K_COMMENTS = "comments:all"
+comments_data = {}  # {target_key: [comment, ...]}
+comments_lock = threading.Lock()
+_comments_last_resync = 0.0
+_COMMENTS_RESYNC_INTERVAL = 2.0
+
+
+def _comments_target_key(target_type: str, target_id: str) -> str:
+    """构造评论目标键（内存中的键，不含存储层前缀）"""
+    return f"{target_type}:{target_id}"
+
+
+def _resync_comments_locked():
+    """周期重载所有评论（多实例同步）。须已持有 comments_lock。"""
+    global _comments_last_resync
+    now = time.time()
+    if now - _comments_last_resync < _COMMENTS_RESYNC_INTERVAL:
+        return
+    _comments_last_resync = now
+    data = _read(K_COMMENTS)
+    if isinstance(data, dict):
+        comments_data.clear()
+        comments_data.update(data)
+
+
+def add_comment(target_type: str, target_id: str, username: str, content: str,
+                ip: str = "", is_anonymous: bool = False) -> bool:
+    """新增一条评论并持久化（跨实例互斥，超出上限丢弃最旧）。"""
+    target_key = _comments_target_key(target_type, target_id)
+    try:
+        with comments_lock:
+            with storage.lock(K_COMMENTS):
+                _resync_comments_locked()
+                if target_key not in comments_data:
+                    comments_data[target_key] = []
+                comments_data[target_key].append({
+                    "username": username,
+                    "content": content,
+                    "time": time.time(),
+                    "ip": ip,
+                    "is_anonymous": is_anonymous,
+                })
+                # 超出上限丢弃最旧
+                max_comments = config.COMMENTS_MAX_POSTS
+                if max_comments > 0 and len(comments_data[target_key]) > max_comments:
+                    comments_data[target_key] = comments_data[target_key][-max_comments:]
+                ok = _persist(K_COMMENTS, dict(comments_data))
+                return ok
+    except StorageError as e:
+        logger.error(f"[错误] 发布评论失败: {e}")
+        return False
+
+
+def get_comments(target_type: str, target_id: str, page: int, page_size: int):
+    """按页返回评论（新→旧），page 从 1 开始。返回 (comments, has_more)。"""
+    target_key = _comments_target_key(target_type, target_id)
+    with comments_lock:
+        _resync_comments_locked()
+        posts = comments_data.get(target_key, [])
+        total = len(posts)
+    start = total - page * page_size
+    if start < 0:
+        start = 0
+    end = total - (page - 1) * page_size
+    if end <= 0:
+        return [], False
+    with comments_lock:
+        result = list(posts[start:end])  # 旧→新
+    result.reverse()  # 新→旧
+    has_more = total > page * page_size
+    return result, has_more
+
+
+def count_comments(target_type: str, target_id: str) -> int:
+    """返回指定目标的评论总数"""
+    target_key = _comments_target_key(target_type, target_id)
+    with comments_lock:
+        _resync_comments_locked()
+        return len(comments_data.get(target_key, []))
+
+
+# ---------- 评论发布冷却（单用户限流，内存态） ----------
+# 格式: {username: 上次发布时间戳}。冷却时间由 config.COMMENTS_COOLDOWN_SECONDS 控制。
+comments_last_post = {}
+comments_cooldown_lock = threading.Lock()
+
+
+def get_comment_cooldown(username: str) -> float:
+    """返回该用户距下次可发布的剩余冷却秒数，0 表示可以发布"""
+    with comments_cooldown_lock:
+        last = comments_last_post.get(username, 0)
+    remaining = config.COMMENTS_COOLDOWN_SECONDS - (time.time() - last)
+    return remaining if remaining > 0 else 0.0
+
+
+def mark_comment_post(username: str):
+    """记录用户最近一次成功发布评论的时间（发布成功后调用）"""
+    with comments_cooldown_lock:
+        comments_last_post[username] = time.time()
+
+
 load_users()
 load_sessions()
 load_shares()

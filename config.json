@@ -104,6 +104,14 @@
       "deb", "rpm", "dmg", "iso", "img", "bin"
     ]
   },
+  "comments": {
+    "enabled": true,
+    "max_length": 1024,
+    "max_comments": 200,
+    "cooldown_seconds": 3,
+    "page_size": 50,
+    "max_height_px": 1000
+  },
   "features": {
     "world_notes": true,
     "benben": true,
@@ -112,7 +120,10 @@
     "note_tags": true,
     "note_folders": true,
     "note_pins": true,
-    "heading_anchors": true
+    "heading_anchors": true,
+    "note_images": true,
+    "note_attachments": true,
+    "comments": true
   },
   "admin_users": [],
   "max_note_id_length": 250,

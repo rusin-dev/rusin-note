@@ -246,6 +246,11 @@
         <i class="fa-solid fa-paperclip" aria-hidden="true"></i> {{ t('note_attachment_btn') }}
     </button>
     {% endif %}
+    {% if comment_url %}
+    <a href="{{ comment_url }}" class="attachment-btn" id="commentBtn">
+        <i class="fa-solid fa-comments" aria-hidden="true"></i> {{ t('comments_title') }}
+    </a>
+    {% endif %}
     <button type="button" class="save-btn" id="saveBtn">{{ t('note_save_btn') }}</button>
     <div class="save-hint" id="saveHint">{{ hint_text|safe }}</div>
     <div class="save-status" id="saveStatus"></div>

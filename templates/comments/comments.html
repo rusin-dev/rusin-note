@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+{% block extra_head %}
+<style>
+    .comment-post { border: 1px solid var(--card-border); border-radius: 8px; padding: 12px 16px; margin-bottom: 12px; background: var(--card-bg); }
+    .comment-head { font-weight: 500; margin-bottom: 6px; }
+    .comment-avatar { width: 24px; height: 24px; margin-right: 6px; }
+    .comment-time { color: var(--muted); font-size: 13px; font-weight: 400; margin-left: 8px; }
+    .comment-anonymous { color: var(--muted); font-style: italic; }
+    .comment-body { font-size: 15px; word-break: break-word; max-height: {{ max_height_px }}px; overflow-y: auto; }
+    .comment-form { max-width: 720px; margin: 16px 0 24px; }
+    .comment-form button[type="submit"] { margin-top: 8px; }
+    .comment-more { text-align: center; margin-top: 16px; }
+    .comment-preview { border: 1px dashed var(--border); border-radius: 8px; padding: 12px 16px; margin-bottom: 16px; background: var(--card-bg); font-size: 15px; word-break: break-word; display: none; }
+    .comment-count { color: var(--muted); font-size: 14px; margin: 12px 0 16px; }
+</style>
+{{ latex_head|safe }}
+{{ code_highlight_head|safe }}
+<script defer src="{{ config.GLOBAL_CDN }}/npm/marked@12.0.2/marked.min.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    var L10N = {{ preview_l10n|tojson }};
+    var ta = document.getElementById('commentInput');
+    var pre = document.getElementById('commentPreview');
+    if (!ta || !pre) return;
+    var timer = null;
+    function renderPreview() {
+        var text = ta.value.trim();
+        if (!text) { pre.style.display = 'none'; return; }
+        if (!window.marked) { pre.textContent = L10N.loadFailed; pre.style.display = 'block'; return; }
+        var html = '';
+        try { html = window.marked.parse(text); } catch (e) { html = '<p class="error">' + L10N.renderFailed + '</p>'; }
+        var tmp = document.createElement('div');
+        tmp.innerHTML = html;
+        tmp.querySelectorAll('script, iframe, object, embed, link, meta, style').forEach(function(el) { el.remove(); });
+        tmp.querySelectorAll('*').forEach(function(el) {
+            ['onerror','onclick','onload','onmouseover','onmouseout','onfocus','onblur','onchange','onsubmit'].forEach(function(a) { el.removeAttribute(a); });
+        });
+        tmp.querySelectorAll('a').forEach(function(a) {
+            a.setAttribute('rel', 'noopener noreferrer');
+            var href = a.getAttribute('href') || '';
+            if (!/^(https?:|mailto:|#)/i.test(href)) a.removeAttribute('href');
+        });
+        pre.innerHTML = tmp.innerHTML;
+        pre.style.display = 'block';
+        if (window.CodeHighlight) window.CodeHighlight.apply(pre);
+        if (window.renderMathInElement) {
+            try {
+                window.renderMathInElement(pre, {
+                    delimiters: [
+                        {left: '$$', right: '$$', display: true},
+                        {left: '$', right: '$', display: false},
+                        {left: '\\(', right: '\\)', display: false},
+                        {left: '\\[', right: '\\]', display: true}
+                    ],
+                    throwOnError: false
+                });
+            } catch (e) {}
+        }
+    }
+    ta.addEventListener('input', function() { clearTimeout(timer); timer = setTimeout(renderPreview, 300); });
+    renderPreview();
+});
+</script>
+{% endblock %}
+{% block content %}
+<h1>{{ t('comments_title') }} - {{ target_title|e }}</h1>
+<p class="comment-count">{{ t('comments_count', count=comment_count) }}</p>
+{% if error %}<p class="error">{{ error }}</p>{% endif %}
+<form method="POST" action="/comments/{{ target_type|e }}/{{ target_id|e }}" class="comment-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="form-group">
+        <label>{{ t('comments_label', max=max_length) }}</label>
+        <textarea name="content" id="commentInput" rows="4" maxlength="{{ max_length }}">{{ prefill|e }}</textarea>
+    </div>
+    <div id="commentPreview" class="comment-preview markdown-body"></div>
+    {% if current_user %}
+    <p style="font-size: 13px; color: var(--muted); margin: 8px 0;">{{ t('comments_logged_in_as') }}{{ current_user|e }}</p>
+    {% else %}
+    <p style="font-size: 13px; color: var(--muted); margin: 8px 0;">{{ t('comments_anonymous') }}</p>
+    {% endif %}
+    <button type="submit" style="width:auto;">{{ t('comments_submit') }}</button>
+</form>
+<div class="comment-list">
+    {% for item in items %}
+    <div class="comment-post">
+        <div class="comment-head">
+            {% set av = get_avatar(item.username) if not item.is_anonymous else '' %}
+            {% if av %}<img class="avatar comment-avatar" src="{{ av|e }}" alt="" loading="lazy" referrerpolicy="no-referrer">{% endif %}
+            {% if item.is_anonymous %}
+                <span class="comment-anonymous">匿名用户</span>
+            {% else %}
+                {{ item.username|e }}
+            {% endif %}
+            <span class="comment-time">{{ item.time_str }}</span>
+        </div>
+        <div class="comment-body markdown-body">{{ item.content_html|safe }}</div>
+    </div>
+    {% else %}
+    <center><p class="empty">{{ t('comments_empty') }}</p></center>
+    {% endfor %}
+</div>
+{% if has_more %}
+<p class="comment-more"><a href="/comments/{{ target_type|e }}/{{ target_id|e }}?page={{ page + 1 }}">{{ t('comments_more') }}</a></p>
+{% else %}
+<center><p class="comment-more empty">{{ t('comments_no_more') }}</p></center>
+{% endif %}
+<p style="margin-top: 24px;"><a href="javascript:history.back()">{{ t('comments_back') }}</a></p>
+{% endblock %}

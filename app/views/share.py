@@ -44,6 +44,7 @@ def share_view_get(token):
             is_world=False,
             action_url=url_for("share.share_view_post", token=token),
             is_share=True,
+            comment_url=f"/comments/share/{token}",
             **ctx,
         )
     lang = getattr(g, "lang", "zh")

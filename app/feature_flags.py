@@ -41,6 +41,7 @@ FEATURES = [
     {"key": "heading_anchors", "icon": "fa-anchor"},    # Markdown 标题锚点（slug id + 页内 #链接 + 深链定位）
     {"key": "note_images", "icon": "fa-image"},         # 笔记图床（编辑器粘贴/拖拽上传 + /image/<u>/<id> 服务）
     {"key": "note_attachments", "icon": "fa-paperclip"}, # 笔记附件（编辑器上传 + /attachment/<u>/<id> 服务）
+    {"key": "comments", "icon": "fa-comments"},         # 评论系统（笔记/分享页面评论功能）
     {"key": "latex_render", "icon": "fa-square-root-variable"},
     {"key": "code_highlight", "icon": "fa-code"},
     {"key": "avatar", "icon": "fa-user"},
@@ -55,6 +56,7 @@ _HERITAGE_DEFAULTS = {
     "avatar": lambda: config.AVATAR_ENABLED,
     "note_images": lambda: config.IMAGES_ENABLED,
     "note_attachments": lambda: config.ATTACHMENTS_ENABLED,
+    "comments": lambda: config.COMMENTS_ENABLED,
 }
 _FEATURES_CFG = config.config.get("features", {})
 

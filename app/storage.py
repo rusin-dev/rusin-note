@@ -55,6 +55,7 @@ KV_FILE_MAP = {
     "sessions.json": "sessions.json",
     "shares.json": "shares.json",
     "benben:posts": "benben.json",
+    "comments:all": "comments.json",
     "note_tags": "note_tags.json",
     "note_folders": "note_folders.json",
     "note_pins": "note_pins.json",
