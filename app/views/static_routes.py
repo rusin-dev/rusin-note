@@ -1,10 +1,11 @@
-"""静态资源路由：/favicon.ico、/image/（站点静态图 + 用户图床）"""
+"""静态资源路由：/favicon.ico、/image/（站点静态图 + 用户图床）、/attachment/（用户附件）"""
 import os
 import re
 
 from flask import Blueprint, abort, Response
 
 from .. import config
+from ..attachments import attachment_content_type, read_attachment, read_attachment_meta, validate_attachment_id
 from ..extensions import limiter
 from ..images import image_mimetype, read_image, validate_image_id
 from ..notes import validate_username
@@ -61,4 +62,33 @@ def user_image(username, image_id):
         abort(404)
     resp = Response(data, mimetype=image_mimetype(image_id))
     resp.headers["Cache-Control"] = "public, max-age=86400"
+    return resp
+
+
+@bp.route("/attachment/<username>/<attachment_id>")
+@limiter.limit(lambda: f"{config.GET_RATE_MAX} per {config.GET_RATE_WINDOW} second")
+def user_attachment(username, attachment_id):
+    """用户附件（笔记内 Markdown 链接）。
+
+    公开可读、不设登录：分享链接 / 公开笔记 / 只读页都要能下载附件，
+    访问控制依赖 attachment_id 的随机不可猜性（与分享 token 同一模型）。
+    不挂 require_feature——功能停用时已写入笔记的附件不应集体失效。
+    ID 不可变，允许浏览器长缓存。"""
+    if not validate_username(username) or not validate_attachment_id(attachment_id):
+        abort(404)
+    data = read_attachment(username, attachment_id)
+    if not data:
+        abort(404)
+    # 读取元数据获取 filename 和 content_type
+    meta = read_attachment_meta(username, attachment_id)
+    if meta:
+        filename = meta.get("filename", attachment_id)
+        content_type = meta.get("content_type", "application/octet-stream")
+    else:
+        filename = attachment_id
+        content_type = attachment_content_type(attachment_id)
+    resp = Response(data, mimetype=content_type)
+    resp.headers["Cache-Control"] = "public, max-age=86400"
+    # 设置 Content-Disposition 以便浏览器下载
+    resp.headers["Content-Disposition"] = f'attachment; filename="{filename}"'
     return resp
