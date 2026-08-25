@@ -3,7 +3,7 @@ import io
 import os
 import random
 import re
-from pathlib import Path
+import stat
 
 from flask import Blueprint, abort, request, Response, jsonify
 
@@ -30,33 +30,37 @@ _IMAGE_NAME_RE = re.compile(r"^[a-zA-Z0-9_\-]+\.(png|jpg|jpeg|gif|svg|ico|webp)$
 def image(name):
     if not _IMAGE_NAME_RE.match(name):
         abort(404)
-    # 路径安全校验：name 已受正则约束（仅允许字母数字下划线连字符和后缀名），
-    # 在拼接后再用 resolve() + startswith() 做纵深防御，防止符号链接穿越。
-    upload_root = Path(config.UPLOAD_DIR).resolve()
+    # O_NOFOLLOW：内核级拒绝跟随符号链接，防止 ../ 穿越。
+    # 失败时回退 isfile 检查（Windows 不支持 O_NOFOLLOW）。
+    upload_path = os.path.join(config.UPLOAD_DIR, name)
+    fd = None
     try:
-        upload_path = (upload_root / name).resolve()
-        if not str(upload_path).startswith(str(upload_root)):
+        fd = os.open(upload_path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+        stat_info = os.fstat(fd)
+        if not stat.S_ISREG(stat_info.st_mode):
             abort(404)
-    except (OSError, ValueError):
-        abort(404)
-    if upload_path.is_file():
-        return Response(upload_path.read_bytes(), mimetype="image/gif")
-    # 回退 static image/
-    path = os.path.join("image", name)
-    if not os.path.isfile(path):
-        abort(404)
-    with open(path, "rb") as f:
-        data = f.read()
-    mimetype = {
-        ".png": "image/png",
-        ".jpg": "image/jpeg",
-        ".jpeg": "image/jpeg",
-        ".gif": "image/gif",
-        ".svg": "image/svg+xml",
-        ".ico": "image/x-icon",
-        ".webp": "image/webp",
-    }.get(os.path.splitext(name)[1].lower(), "application/octet-stream")
-    return Response(data, mimetype=mimetype)
+        data = os.read(fd, stat_info.st_size)
+    except (OSError, IOError):
+        # 不在 uploads/，尝试静态 image/
+        static_path = os.path.join("image", name)
+        if not os.path.isfile(static_path):
+            abort(404)
+        with open(static_path, "rb") as f:
+            data = f.read()
+        mimetype = {
+            ".png": "image/png",
+            ".jpg": "image/jpeg",
+            ".jpeg": "image/jpeg",
+            ".gif": "image/gif",
+            ".svg": "image/svg+xml",
+            ".ico": "image/x-icon",
+            ".webp": "image/webp",
+        }.get(os.path.splitext(name)[1].lower(), "application/octet-stream")
+        return Response(data, mimetype=mimetype)
+    finally:
+        if fd is not None:
+            os.close(fd)
+    return Response(data, mimetype="image/gif")
 
 
 # ---------- 图片上传路由 ----------
