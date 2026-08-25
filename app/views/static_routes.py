@@ -29,10 +29,15 @@ _IMAGE_NAME_RE = re.compile(r"^[a-zA-Z0-9_\-]+\.(png|jpg|jpeg|gif|svg|ico|webp)$
 def image(name):
     if not _IMAGE_NAME_RE.match(name):
         abort(404)
-    # 先查 uploads/（用户上传的 GIF）
+    # 先查 uploads/（用户上传的 GIF），路径安全校验防止 ../ 穿越
     upload_root = os.path.abspath(config.UPLOAD_DIR)
     upload_path = os.path.abspath(os.path.join(upload_root, name))
-    if os.path.commonpath([upload_root, upload_path]) != upload_root:
+    # os.path.commonpath 在不同盘符（Windows）会抛 ValueError，需捕获
+    try:
+        if os.path.commonpath([upload_root, upload_path]) != upload_root:
+            abort(404)
+    except ValueError:
+        # 盘符不同或路径无效时拒绝
         abort(404)
     if os.path.isfile(upload_path):
         with open(upload_path, "rb") as f:
