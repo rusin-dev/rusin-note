@@ -1,14 +1,14 @@
-"""静态资源路由：/favicon.ico、/image/（站点静态图 + 用户图床）、/attachment/（用户附件）"""
+"""静态资源路由：/favicon.ico、/image/、/upload"""
+import io
 import os
+import random
 import re
 
-from flask import Blueprint, abort, Response
+from flask import Blueprint, abort, request, Response, jsonify
 
 from .. import config
-from ..attachments import attachment_content_type, read_attachment, read_attachment_meta, validate_attachment_id
 from ..extensions import limiter
-from ..images import image_mimetype, read_image, validate_image_id
-from ..notes import validate_username
+from ..feature_flags import require_feature
 from ..theme import get_favicon
 
 bp = Blueprint("static_routes", __name__)
@@ -29,6 +29,13 @@ _IMAGE_NAME_RE = re.compile(r"^[a-zA-Z0-9_\-]+\.(png|jpg|jpeg|gif|svg|ico|webp)$
 def image(name):
     if not _IMAGE_NAME_RE.match(name):
         abort(404)
+    # 先查 uploads/（用户上传的 GIF）
+    upload_path = os.path.join(config.UPLOAD_DIR, name)
+    if os.path.isfile(upload_path):
+        with open(upload_path, "rb") as f:
+            data = f.read()
+        return Response(data, mimetype="image/gif")
+    # 回退 static image/
     path = os.path.join("image", name)
     if not os.path.isfile(path):
         abort(404)
@@ -46,49 +53,76 @@ def image(name):
     return Response(data, mimetype=mimetype)
 
 
-@bp.route("/image/<username>/<image_id>")
-@limiter.limit(lambda: f"{config.GET_RATE_MAX} per {config.GET_RATE_WINDOW} second")
-def user_image(username, image_id):
-    """用户图床图片（笔记内 Markdown 引用）。
-
-    公开可读、不设登录：分享链接 / 公开笔记 / 只读页都要能渲染图片，
-    访问控制依赖 image_id 的随机不可猜性（与分享 token 同一模型）。
-    不挂 require_feature——功能停用时已写入笔记的图片不应集体裂图。
-    ID 不可变，允许浏览器长缓存。"""
-    if not validate_username(username) or not validate_image_id(image_id):
-        abort(404)
-    data = read_image(username, image_id)
-    if not data:
-        abort(404)
-    resp = Response(data, mimetype=image_mimetype(image_id))
-    resp.headers["Cache-Control"] = "public, max-age=86400"
-    return resp
+# ---------- 图片上传路由 ----------
+_ALLOWED_IMAGE_TYPES = {"image/png", "image/jpeg", "image/gif", "image/webp", "image/bmp"}
+_ID_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
 
 
-@bp.route("/attachment/<username>/<attachment_id>")
-@limiter.limit(lambda: f"{config.GET_RATE_MAX} per {config.GET_RATE_WINDOW} second")
-def user_attachment(username, attachment_id):
-    """用户附件（笔记内 Markdown 链接）。
+def _generate_upload_id() -> str:
+    """生成 10 位图片 ID：前缀 i_ + 8 位随机字符"""
+    return "i_" + "".join(random.choices(_ID_CHARS, k=8))
 
-    公开可读、不设登录：分享链接 / 公开笔记 / 只读页都要能下载附件，
-    访问控制依赖 attachment_id 的随机不可猜性（与分享 token 同一模型）。
-    不挂 require_feature——功能停用时已写入笔记的附件不应集体失效。
-    ID 不可变，允许浏览器长缓存。"""
-    if not validate_username(username) or not validate_attachment_id(attachment_id):
-        abort(404)
-    data = read_attachment(username, attachment_id)
-    if not data:
-        abort(404)
-    # 读取元数据获取 filename 和 content_type
-    meta = read_attachment_meta(username, attachment_id)
-    if meta:
-        filename = meta.get("filename", attachment_id)
-        content_type = meta.get("content_type", "application/octet-stream")
-    else:
-        filename = attachment_id
-        content_type = attachment_content_type(attachment_id)
-    resp = Response(data, mimetype=content_type)
-    resp.headers["Cache-Control"] = "public, max-age=86400"
-    # 设置 Content-Disposition 以便浏览器下载
-    resp.headers["Content-Disposition"] = f'attachment; filename="{filename}"'
-    return resp
+
+def _convert_to_compressed_gif(data: bytes) -> bytes:
+    """将图片数据转换为高压缩 GIF（最小体积策略）"""
+    from PIL import Image
+    img = Image.open(io.BytesIO(data))
+    # 转为 RGB（去掉 alpha 通道）
+    if img.mode in ("RGBA", "P", "LA"):
+        background = Image.new("RGB", img.size, (255, 255, 255))
+        if img.mode == "P":
+            img = img.convert("RGBA")
+        background.paste(img, mask=img.split()[-1] if img.mode == "RGBA" else None)
+        img = background
+    elif img.mode != "RGB":
+        img = img.convert("RGB")
+    # 缩小到最大 800px（保持比例）
+    max_size = 800
+    if max(img.size) > max_size:
+        ratio = max_size / max(img.size)
+        new_size = (int(img.size[0] * ratio), int(img.size[1] * ratio))
+        img = img.resize(new_size, Image.LANCZOS)
+    # 量化降色（256 色调色板，大幅压缩）
+    img = img.quantize(colors=256, method=Image.Quantize.MEDIANCUT)
+    # 输出 GIF
+    buf = io.BytesIO()
+    img.save(buf, format="GIF", optimize=True)
+    return buf.getvalue()
+
+
+@bp.route("/upload", methods=["POST"])
+@limiter.limit(lambda: f"{config.UPLOAD_RATE_MAX} per {config.UPLOAD_RATE_WINDOW} second")
+@require_feature("image_upload")
+def upload_image():
+    """接收图片上传，转换为压缩 GIF，返回访问 URL"""
+    if "file" not in request.files:
+        return jsonify({"error": "no file provided"}), 400
+    file = request.files["file"]
+    if not file.filename:
+        return jsonify({"error": "empty filename"}), 400
+    # 大小校验
+    content_length = request.content_length
+    if content_length is not None and content_length > config.MAX_UPLOAD_BYTES:
+        return jsonify({"error": "file too large"}), 413
+    # MIME 类型校验
+    mime = file.content_type or ""
+    if mime not in _ALLOWED_IMAGE_TYPES:
+        return jsonify({"error": "unsupported image type"}), 400
+    # 读取数据
+    data = file.read()
+    if len(data) > config.MAX_UPLOAD_BYTES:
+        return jsonify({"error": "file too large"}), 413
+    # 转换并压缩为 GIF
+    try:
+        gif_data = _convert_to_compressed_gif(data)
+    except Exception:
+        return jsonify({"error": "failed to process image"}), 400
+    # 生成唯一 ID
+    upload_id = _generate_upload_id()
+    filename = upload_id + ".gif"
+    # 确保 uploads/ 目录存在
+    os.makedirs(config.UPLOAD_DIR, exist_ok=True)
+    dest_path = os.path.join(config.UPLOAD_DIR, filename)
+    with open(dest_path, "wb") as f:
+        f.write(gif_data)
+    return jsonify({"url": f"/image/{filename}"})

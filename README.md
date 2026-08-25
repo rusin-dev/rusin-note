@@ -35,12 +35,18 @@
 - **安全分享链接**：可为用户笔记生成带随机 token 的分享链接，并支持分享内容写回，便于跨设备协作。
 - **Markdown 与 LaTeX 渲染**：只读页面和犇犇动态支持 Markdown、KaTeX 公式与 Pygments 代码高亮（代码块自动带行号），适合保存代码片段、说明文档和数学内容。编辑页实时渲染可手动开关。
 - **大纲预览**：只读页自动提取 `h1`-`h6` 标题生成目录——宽屏显示右侧大纲栏、窄屏显示悬浮按钮 + 侧滑抽屉，点击平滑定位到对应章节，滚动时自动高亮当前所在章节；编辑页实时预览栏头部也有「大纲」下拉，随输入实时更新。纯客户端实现，无标题时自动隐藏。
+- **Markdown 标题锚点**：每个 Markdown 标题自动生成 slug id，支持页内 `#链接` 跳转、深链直接定位到指定章节，点击锚点图标可复制链接。
 - **笔记快捷引用（`#` 引用）**：参考 GitHub Issues——在自己的私有笔记编辑页输入 `#` 会弹出自动补全列表（按笔记 ID 与首行标题模糊匹配、最近编辑优先），选中即插入 `#笔记ID`；渲染后自动变成指向该笔记的链接（悬停可见标题预览）。公开笔记中的 `#ID` 同样会解析为公开笔记链接。代码块内的 `#include` 等内容不受影响。
-- **笔记图床**：编辑器支持粘贴/拖拽上传图片，自动压缩存储，笔记中以 Markdown 语法引用，公开可读无需登录。
+- **笔记标签**：在编辑页底部为笔记添加标签，标签栏自动补全（匹配已有标签）；公开笔记列表页支持按标签筛选。
+- **笔记文件夹**：支持将笔记归入文件夹（单归属），用户可在文件夹视图下管理自己的笔记，列表页支持按文件夹筛选。
+- **笔记置顶**：在笔记列表页可通过图钉图标将重要笔记置顶，置顶笔记始终显示在最前面。
+- **Markdown 标题锚点**：每个 Markdown 标题自动生成 slug id，支持页内 `#链接` 跳转、深链直接定位到指定章节，点击锚点图标可复制链接。
+- **笔记图床**：编辑器支持粘贴/拖拽上传图片，自动压缩为 GIF 存储，笔记中以 Markdown 语法引用，公开可读无需登录（200KB 限制）。
 - **笔记附件**：支持上传任意文件类型（可执行文件除外），默认单文件 10MB、每用户 10MB 配额（可在 `config.json` 调整），附件管理页支持拖拽上传，笔记中以链接形式引用。
 - **评论系统**：笔记和分享页面支持评论功能，支持匿名评论，可配置最大评论数（默认 200 条）、冷却时间、分页加载，与犇犇动态类似的发布等待机制。
 - **犇犇动态**：内置轻量动态流，登录用户可发布内容，未登录用户可浏览，支持实时预览、分页加载和发布冷却。
-- **功能开关（Feature Flags）**：管理员在 `/admin/features` 用滑块开关启用/停用站点功能（公开笔记、犇犇、分享链接、开放注册、快捷引用、笔记标签、笔记文件夹、笔记置顶、笔记图床、笔记附件、Markdown 标题锚点、LaTeX、代码高亮、头像），保存后立即生效、无需重启；启用的功能会在 `/count` 数据汇总页呈现，停用的功能入口自动隐藏、路由直接 404。
+- **功能开关（Feature Flags）**：管理员在 `/admin/features` 用滑块开关启用/停用站点功能（公开笔记、犇犇、分享链接、开放注册、快捷引用、笔记标签、笔记文件夹、笔记置顶、Markdown 标题锚点、笔记图床、笔记附件、评论系统、LaTeX、代码高亮、头像、组织），保存后立即生效、无需重启；启用的功能会在 `/count` 数据汇总页呈现，停用的功能入口自动隐藏、路由直接 404。
+- **组织/团队协作**：创建组织并邀请成员加入，支持 Owner / Admin / Member 三级角色体系。组织笔记独立存储在 `_orgs/<org_name>/` 命名空间，与个人笔记完全隔离。三种加入方式：邀请制（生成邀请码分享）、公开加入（自由加入）、审批制（申请后由 Admin/Owner 审批）。Owner 可管理组织设置、添加/移除管理员、删除组织；Admin 可管理成员和邀请；Member 可创建和编辑组织笔记。
 - **多语言界面**：内置简体中文与 English，可手动切换，也可按浏览器语言自动选择。
 - **部署友好**：配置集中在 `config.json`，支持笔记过期清理、会话超时、密码策略、反向代理真实 IP、HTTPS Cookie 等常见部署选项。无服务器部署时数据可接入外部 KV 存储（Vercel KV / Upstash），冷启动不丢数据。
 - **基础防护完善**：包含 CSRF 防护、请求限流、保存限流、注册限流、内容安全清洗和代理头信任开关，降低公开部署风险。
@@ -184,6 +190,10 @@ python 版本 $\geq$ 3.10。
 /data/sessions.json
 /data/shares.json
 /data/benben.json
+/data/orgs.json
+/data/org_members.json
+/data/org_invites.json
+/data/org_join_requests.json
 /data/log/
 ```
 
@@ -320,6 +330,7 @@ rusin-note:.
 │          auth.py（登录与注册）
 │          benben.py（犇犇动态）
 │          home.py（首页）
+│          org.py（组织与团队协作）
 │          share.py（分享页面）
 │          static_routes.py（静态与说明页面）
 │          user.py（用户与用户笔记）
@@ -336,6 +347,7 @@ rusin-note:.
 │  ├─benben（犇犇页面）
 │  ├─errors（错误页）
 │  ├─notes（笔记页面）
+│  ├─org（组织页面）
 │  ├─partials（公共片段）
 │  └─share（分享页面）
 │
@@ -424,6 +436,9 @@ rusin-note:.
    - `enabled` ：是否开启，默认 `true`；置 `false` 后编辑器不弹引用补全框、渲染时不把 `#ID` 转为链接；
    - `search_limit` ：补全接口单次最多返回条数，默认 `8`；
    - `scan_limit` ：补全搜索最多扫描的笔记数（按修改时间倒序），默认 `100`。upstash / postgres 等远程存储后端每篇笔记需一次网络读取，笔记较多时可适当调低。
+- `max_note_tags`：每篇笔记最多标签数，默认 `10`；
+- `max_tag_length`：单个标签最大长度（单位：**字符**），默认 `24`；
+- `max_folder_name_length`：文件夹名最大长度（单位：**字符**），默认 `32`；
 - `avatar` 用户头像（通过第三方服务生成，显示在导航栏当前用户、犇犇动态发布者与用户笔记列表标题处）。
    - `enabled` ：是否开启，默认 `true`；置 `false` 后完全关闭头像显示；
    - `url_template` ：头像 URL 模板，默认 `https://cn.cravatar.com/avatar/{hash}?d=identicon&f=y`。支持两个占位符：`{hash}`（`md5(用户名)` 小写十六进制）、`{username}`（URL 编码后的用户名）。由于本站用户没有邮箱，默认用 `md5(用户名)` 作为哈希，`d=identicon` 会让 Gravatar 系服务为每个哈希生成确定性的几何头像；也可换成其他按用户名生成头像的服务（如 DiceBear：`https://api.dicebear.com/9.x/identicon/svg?seed={username}`）；
@@ -465,7 +480,7 @@ rusin-note:.
    - `update_interval_hours`：后台更新检查线程的轮询周期（单位：**小时**），默认 $6$；
    - `update_stale_days`：距 `last_update` 超过该天数才请求 `upstream_repo`（单位：**天**），默认 $3$。
 - `features` / `admin_users` 功能开关（#90）。
-   - `features`：各功能的**默认开关**，包括 `world_notes`（公开笔记与短链）、`benben`（犇犇动态）、`share_links`（分享链接）、`open_register`（开放注册）、`note_tags`（笔记标签）、`note_folders`（笔记文件夹）、`note_pins`（笔记置顶）、`note_images`（笔记图床）、`note_attachments`（笔记附件）、`comments`（评论系统）、`heading_anchors`（Markdown 标题锚点），均默认 `true`。历史功能（`note_refs`、`latex_render`、`code_highlight`、`avatar`）的默认值沿用各自原有配置段；
+   - `features`：各功能的**默认开关**，包括 `world_notes`（公开笔记与短链）、`benben`（犇犇动态）、`share_links`（分享链接）、`open_register`（开放注册）、`note_tags`（笔记标签）、`note_folders`（笔记文件夹）、`note_pins`（笔记置顶）、`heading_anchors`（Markdown 标题锚点）、`note_images`（笔记图床）、`note_attachments`（笔记附件）、`comments`（评论系统）、`orgs`（组织与团队协作），均默认 `true`。历史功能（`note_refs`、`latex_render`、`code_highlight`、`avatar`）的默认值沿用各自原有配置段；
    - `admin_users`：功能开关管理员用户名列表；也可用环境变量 `RUSIN_ADMIN` 指定（多个用户名逗号分隔，两者取并集）。
 
    管理员登录后可在 `/admin/features` 用滑块开关切换各功能的启用状态，保存后立即生效（无需重启）：运行时状态持久化在存储后端（file 后端即数据目录下的 `feature_flags.json`），多实例部署经约 5 秒的缓存 TTL 自动收敛；停用的功能路由直接 404、导航与首页入口自动隐藏。全部功能开关状态会呈现在 `/count` 数据汇总页的「功能状态」区（未设管理员时该区对所有人可见，但无人能修改开关）。注意：无服务器 `memory` 后端不持久，实例冷启动后回退到 `config.json` 默认值。

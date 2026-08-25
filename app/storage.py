@@ -61,6 +61,13 @@ KV_FILE_MAP = {
     "note_pins": "note_pins.json",
     "feature_flags": "feature_flags.json",
     "secret_key": ".secret_key",
+    # 组织相关
+    "orgs": "orgs.json",
+    "org_members": "org_members.json",
+    "org_invites": "org_invites.json",
+    "org_join_requests": "org_join_requests.json",
+    # 笔记标题
+    "note_titles": "note_titles.json",
 }
 # .secret_key 以纯文本（非 JSON）存储，与旧版文件格式兼容
 _RAW_TEXT_KEYS = {"secret_key"}
