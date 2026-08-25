@@ -3,6 +3,7 @@ import io
 import os
 import random
 import re
+from pathlib import Path
 
 from flask import Blueprint, abort, request, Response, jsonify
 
@@ -29,16 +30,17 @@ _IMAGE_NAME_RE = re.compile(r"^[a-zA-Z0-9_\-]+\.(png|jpg|jpeg|gif|svg|ico|webp)$
 def image(name):
     if not _IMAGE_NAME_RE.match(name):
         abort(404)
-    # 先查 uploads/（用户上传的 GIF），路径安全校验防止 ../ 穿越
-    upload_root = os.path.abspath(config.UPLOAD_DIR)
-    upload_path = os.path.normpath(os.path.join(upload_root, name))
-    # 规范化后，确保目标路径仍在 upload_root 内
-    if not (upload_path == upload_root or upload_path.startswith(upload_root + os.sep)):
+    # 路径安全校验：name 已受正则约束（仅允许字母数字下划线连字符和后缀名），
+    # 在拼接后再用 resolve() + startswith() 做纵深防御，防止符号链接穿越。
+    upload_root = Path(config.UPLOAD_DIR).resolve()
+    try:
+        upload_path = (upload_root / name).resolve()
+        if not str(upload_path).startswith(str(upload_root)):
+            abort(404)
+    except (OSError, ValueError):
         abort(404)
-    if os.path.isfile(upload_path):
-        with open(upload_path, "rb") as f:
-            data = f.read()
-        return Response(data, mimetype="image/gif")
+    if upload_path.is_file():
+        return Response(upload_path.read_bytes(), mimetype="image/gif")
     # 回退 static image/
     path = os.path.join("image", name)
     if not os.path.isfile(path):
