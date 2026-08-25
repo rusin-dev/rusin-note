@@ -31,13 +31,9 @@ def image(name):
         abort(404)
     # 先查 uploads/（用户上传的 GIF），路径安全校验防止 ../ 穿越
     upload_root = os.path.abspath(config.UPLOAD_DIR)
-    upload_path = os.path.abspath(os.path.join(upload_root, name))
-    # os.path.commonpath 在不同盘符（Windows）会抛 ValueError，需捕获
-    try:
-        if os.path.commonpath([upload_root, upload_path]) != upload_root:
-            abort(404)
-    except ValueError:
-        # 盘符不同或路径无效时拒绝
+    upload_path = os.path.normpath(os.path.join(upload_root, name))
+    # 规范化后，确保目标路径仍在 upload_root 内
+    if not (upload_path == upload_root or upload_path.startswith(upload_root + os.sep)):
         abort(404)
     if os.path.isfile(upload_path):
         with open(upload_path, "rb") as f:
