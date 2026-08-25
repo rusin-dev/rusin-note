@@ -30,7 +30,10 @@ def image(name):
     if not _IMAGE_NAME_RE.match(name):
         abort(404)
     # 先查 uploads/（用户上传的 GIF）
-    upload_path = os.path.join(config.UPLOAD_DIR, name)
+    upload_root = os.path.abspath(config.UPLOAD_DIR)
+    upload_path = os.path.abspath(os.path.join(upload_root, name))
+    if os.path.commonpath([upload_root, upload_path]) != upload_root:
+        abort(404)
     if os.path.isfile(upload_path):
         with open(upload_path, "rb") as f:
             data = f.read()
