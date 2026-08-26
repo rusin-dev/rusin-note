@@ -30,37 +30,44 @@ _IMAGE_NAME_RE = re.compile(r"^[a-zA-Z0-9_\-]+\.(png|jpg|jpeg|gif|svg|ico|webp)$
 def image(name):
     if not _IMAGE_NAME_RE.match(name):
         abort(404)
-    # O_NOFOLLOW：内核级拒绝跟随符号链接，防止 ../ 穿越。
-    # 失败时回退 isfile 检查（Windows 不支持 O_NOFOLLOW）。
-    upload_path = os.path.join(config.UPLOAD_DIR, name)
-    fd = None
-    try:
-        fd = os.open(upload_path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
-        stat_info = os.fstat(fd)
-        if not stat.S_ISREG(stat_info.st_mode):
-            abort(404)
-        data = os.read(fd, stat_info.st_size)
-    except (OSError, IOError):
-        # 不在 uploads/，尝试静态 image/
-        static_path = os.path.join("image", name)
-        if not os.path.isfile(static_path):
-            abort(404)
-        with open(static_path, "rb") as f:
-            data = f.read()
-        mimetype = {
-            ".png": "image/png",
-            ".jpg": "image/jpeg",
-            ".jpeg": "image/jpeg",
-            ".gif": "image/gif",
-            ".svg": "image/svg+xml",
-            ".ico": "image/x-icon",
-            ".webp": "image/webp",
-        }.get(os.path.splitext(name)[1].lower(), "application/octet-stream")
-        return Response(data, mimetype=mimetype)
-    finally:
-        if fd is not None:
-            os.close(fd)
-    return Response(data, mimetype="image/gif")
+    # 先查 uploads/（用户上传）：realpath 规范化后用 startswith 前缀校验，
+    # 防止 ../ 穿越；O_NOFOLLOW 内核级拒绝跟随符号链接（Windows 不支持时忽略）。
+    upload_root = os.path.realpath(config.UPLOAD_DIR)
+    upload_path = os.path.realpath(os.path.join(upload_root, name))
+    if upload_path.startswith(upload_root + os.sep):
+        fd = None
+        try:
+            fd = os.open(upload_path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+            stat_info = os.fstat(fd)
+            if not stat.S_ISREG(stat_info.st_mode):
+                abort(404)
+            return Response(os.read(fd, stat_info.st_size), mimetype="image/gif")
+        except OSError:
+            # 不在 uploads/，继续尝试静态 image/
+            pass
+        finally:
+            if fd is not None:
+                os.close(fd)
+    # 回退仓库内置 image/：同样先规范化再校验前缀
+    static_root = os.path.realpath(
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "image")
+    )
+    static_path = os.path.realpath(os.path.join(static_root, name))
+    if static_path.startswith(static_root + os.sep):
+        if os.path.isfile(static_path):
+            with open(static_path, "rb") as f:
+                data = f.read()
+            mimetype = {
+                ".png": "image/png",
+                ".jpg": "image/jpeg",
+                ".jpeg": "image/jpeg",
+                ".gif": "image/gif",
+                ".svg": "image/svg+xml",
+                ".ico": "image/x-icon",
+                ".webp": "image/webp",
+            }.get(os.path.splitext(name)[1].lower(), "application/octet-stream")
+            return Response(data, mimetype=mimetype)
+    abort(404)
 
 
 # ---------- 图片上传路由 ----------
