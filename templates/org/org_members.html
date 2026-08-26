@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="org-header">
+    <h1>{{ t('org_members_title') }} - {{ org.name|e }}</h1>
+    <a href="{{ url_for('org.org_home', org_name=org_name) }}">&larr; {{ t('org_back') }}</a>
+</div>
+
+{% if members %}
+<table class="members-table">
+    <thead>
+        <tr>
+            <th>{{ t('org_member_user') }}</th>
+            <th>{{ t('org_member_role') }}</th>
+            <th>{{ t('org_member_joined') }}</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for username, info in members.items() %}
+        <tr>
+            <td><a href="{{ url_for('user.user_root', username=username) }}">{{ username|e }}</a></td>
+            <td><span class="role-badge role-{{ info.role }}">{{ t('org_role_' ~ info.role) }}</span></td>
+            <td>{{ info.joined_at | format_note_time }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<p class="empty">{{ t('org_members_empty') }}</p>
+{% endif %}
+{% endblock %}

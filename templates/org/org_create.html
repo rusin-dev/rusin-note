@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>{{ t('org_create_title') }}</h1>
+
+{% if error %}<p class="error">{{ error }}</p>{% endif %}
+
+<form method="post" class="org-create-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="form-group">
+        <label>{{ t('org_create_org_name') }}</label>
+        <input type="text" name="org_name" required maxlength="50" pattern="[a-zA-Z0-9_\-]+" placeholder="{{ t('org_create_org_name_placeholder') }}">
+        <small>{{ t('org_create_org_name_hint') }}</small>
+    </div>
+    <div class="form-group">
+        <label>{{ t('org_create_name') }}</label>
+        <input type="text" name="name" required maxlength="100" placeholder="{{ t('org_create_name_placeholder') }}">
+    </div>
+    <div class="form-group">
+        <label>{{ t('org_create_description') }}</label>
+        <textarea name="description" maxlength="500" placeholder="{{ t('org_create_description_placeholder') }}"></textarea>
+    </div>
+    <div class="form-group">
+        <label>{{ t('org_create_join_policy') }}</label>
+        <select name="join_policy">
+            <option value="invite">{{ t('org_join_policy_invite') }}</option>
+            <option value="public">{{ t('org_join_policy_public') }}</option>
+            <option value="approve">{{ t('org_join_policy_approve') }}</option>
+        </select>
+    </div>
+    <button type="submit" class="btn btn-primary">{{ t('org_create_submit') }}</button>
+</form>
+
+<p style="margin-top: 16px;"><a href="{{ url_for('org.org_mine') }}">{{ t('org_back_mine') }}</a></p>
+{% endblock %}

@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="org-header">
+    <h1>{{ t('org_invites_title') }} - {{ org.name|e }}</h1>
+    <a href="{{ url_for('org.org_settings', org_name=org_name) }}">&larr; {{ t('org_settings') }}</a>
+</div>
+
+{% if new_code %}
+<div class="invite-created">
+    <p>{{ t('org_invite_created') }}</p>
+    <code class="invite-code">{{ new_code }}</code>
+    <p class="hint">{{ t('org_invite_share_hint') }}</p>
+</div>
+{% endif %}
+
+<h2>{{ t('org_invite_create') }}</h2>
+<form method="post" class="invite-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="action" value="create_invite">
+    <div class="form-group">
+        <label>{{ t('org_invite_type') }}</label>
+        <select name="type">
+            <option value="invite">{{ t('org_invite_type_invite') }}</option>
+            <option value="approve">{{ t('org_invite_type_approve') }}</option>
+        </select>
+    </div>
+    <div class="form-group">
+        <label>{{ t('org_invite_expires') }}</label>
+        <select name="expires_days">
+            <option value="7">7 {{ t('org_invite_days') }}</option>
+            <option value="14">14 {{ t('org_invite_days') }}</option>
+            <option value="30">30 {{ t('org_invite_days') }}</option>
+        </select>
+    </div>
+    <button type="submit" class="btn btn-primary">{{ t('org_invite_generate') }}</button>
+</form>
+
+{% if invites %}
+<h2 style="margin-top: 24px;">{{ t('org_invites_active') }}</h2>
+<table class="invites-table">
+    <thead>
+        <tr>
+            <th>{{ t('org_invite_code') }}</th>
+            <th>{{ t('org_invite_type') }}</th>
+            <th>{{ t('org_invite_created_by') }}</th>
+            <th>{{ t('org_invite_expires_at') }}</th>
+            <th>{{ t('org_invite_actions') }}</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for invite in invites %}
+        <tr>
+            <td><code>{{ invite.code }}</code></td>
+            <td>{{ t('org_invite_type_' ~ invite.type) }}</td>
+            <td>{{ invite.created_by }}</td>
+            <td>{{ invite.expires_at | format_note_time }}</td>
+            <td>
+                <form method="post" style="display: inline;">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="action" value="delete_invite">
+                    <input type="hidden" name="code" value="{{ invite.code }}">
+                    <button type="submit" class="btn btn-sm btn-danger">{{ t('org_invite_revoke') }}</button>
+                </form>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<p class="empty">{{ t('org_invites_empty') }}</p>
+{% endif %}
+{% endblock %}

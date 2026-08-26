@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="org-header">
+    <h1>{{ t('org_notes') }} - {{ org.name|e }}</h1>
+    <a href="{{ url_for('org.org_home', org_name=org_name) }}">&larr; {{ t('org_back') }}</a>
+</div>
+
+<div class="notes-actions">
+    <a href="{{ url_for('org.org_note_new', org_name=org_name) }}" class="btn btn-primary">
+        <i class="fa-solid fa-plus"></i> {{ t('org_note_new') }}
+    </a>
+</div>
+
+{% if notes %}
+<table class="notes-table">
+    <thead>
+        <tr>
+            <th>{{ t('note_id') }}</th>
+            <th>{{ t('note_mtime') }}</th>
+            <th>{{ t('note_size') }}</th>
+            <th>{{ t('note_actions') }}</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for note in notes %}
+        <tr>
+            <td><a href="{{ url_for('org.org_note_view', org_name=org_name, note_id=note.id) }}">{{ note.id|e }}</a></td>
+            <td>{{ note.mtime }}</td>
+            <td>{{ note.size }}</td>
+            <td>
+                <a href="{{ url_for('org.org_note_view', org_name=org_name, note_id=note.id) }}">{{ t('note_view') }}</a>
+                <a href="{{ url_for('org.org_note_edit', org_name=org_name, note_id=note.id) }}">{{ t('note_edit') }}</a>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<p class="empty">{{ t('org_notes_empty') }}</p>
+{% endif %}
+{% endblock %}
