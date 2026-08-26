@@ -511,6 +511,428 @@ def mark_comment_post(username: str):
         comments_last_post[username] = time.time()
 
 
+# ---------- 组织存储 ----------
+# orgs: {org_name: {"name": str, "description": str, "owner": str, "join_policy": str, "created_at": float}}
+orgs = {}
+# org_members: {org_name: {username: {"role": str, "joined_at": float}}}
+org_members = {}
+# org_invites: {invite_code: {"org_name": str, "created_by": str, "type": str, "created_at": float, "expires_at": float}}
+org_invites = {}
+# org_join_requests: {org_name: {username: {"message": str, "created_at": float, "status": str}}}
+org_join_requests = {}
+
+orgs_lock = threading.Lock()
+org_members_lock = threading.Lock()
+org_invites_lock = threading.Lock()
+org_join_requests_lock = threading.Lock()
+
+K_ORGS = "orgs"
+K_ORG_MEMBERS = "org_members"
+K_ORG_INVITES = "org_invites"
+K_ORG_JOIN_REQUESTS = "org_join_requests"
+
+# 组织角色层级
+ROLE_LEVELS = {"owner": 3, "admin": 2, "member": 1}
+
+
+def load_orgs():
+    with orgs_lock:
+        data = _read(K_ORGS)
+        if isinstance(data, dict):
+            orgs.clear()
+            orgs.update(data)
+
+
+def load_org_members():
+    with org_members_lock:
+        data = _read(K_ORG_MEMBERS)
+        if isinstance(data, dict):
+            org_members.clear()
+            org_members.update(data)
+
+
+def load_org_invites():
+    with org_invites_lock:
+        data = _read(K_ORG_INVITES)
+        if isinstance(data, dict):
+            org_invites.clear()
+            org_invites.update(data)
+
+
+def load_org_join_requests():
+    with org_join_requests_lock:
+        data = _read(K_ORG_JOIN_REQUESTS)
+        if isinstance(data, dict):
+            org_join_requests.clear()
+            org_join_requests.update(data)
+
+
+def save_orgs():
+    with orgs_lock:
+        _persist(K_ORGS, orgs)
+
+
+def save_org_members():
+    with org_members_lock:
+        _persist(K_ORG_MEMBERS, org_members)
+
+
+def save_org_invites():
+    with org_invites_lock:
+        _persist(K_ORG_INVITES, org_invites)
+
+
+def save_org_join_requests():
+    with org_join_requests_lock:
+        _persist(K_ORG_JOIN_REQUESTS, org_join_requests)
+
+
+def create_org(org_name: str, name: str, owner: str, description: str = "", join_policy: str = "invite") -> bool:
+    """创建组织，创建者自动成为 owner"""
+    try:
+        with orgs_lock:
+            with org_members_lock:
+                with storage.lock(K_ORGS):
+                    with storage.lock(K_ORG_MEMBERS):
+                        _read_merge(K_ORGS, orgs)
+                        if org_name in orgs:
+                            return False
+                        orgs[org_name] = {
+                            "name": name,
+                            "description": description,
+                            "owner": owner,
+                            "join_policy": join_policy,
+                            "created_at": time.time(),
+                        }
+                        if not _persist(K_ORGS, orgs):
+                            return False
+                        # 创建者自动成为 owner
+                        _read_merge(K_ORG_MEMBERS, org_members)
+                        if org_name not in org_members:
+                            org_members[org_name] = {}
+                        org_members[org_name][owner] = {
+                            "role": "owner",
+                            "joined_at": time.time(),
+                        }
+                        return _persist(K_ORG_MEMBERS, org_members)
+    except StorageError as e:
+        logger.error(f"[错误] 创建组织失败: {e}")
+        return False
+
+
+def get_org(org_name: str) -> dict | None:
+    with orgs_lock:
+        return orgs.get(org_name)
+
+
+def update_org(org_name: str, updates: dict) -> bool:
+    """更新组织信息（仅 owner/admin 可调用）"""
+    try:
+        with orgs_lock:
+            with storage.lock(K_ORGS):
+                _read_merge(K_ORGS, orgs)
+                if org_name not in orgs:
+                    return False
+                orgs[org_name].update(updates)
+                return _persist(K_ORGS, orgs)
+    except StorageError as e:
+        logger.error(f"[错误] 更新组织失败: {e}")
+        return False
+
+
+def delete_org(org_name: str) -> bool:
+    """删除组织（仅 owner 可调用）"""
+    try:
+        with orgs_lock:
+            with org_members_lock:
+                with storage.lock(K_ORGS):
+                    with storage.lock(K_ORG_MEMBERS):
+                        _read_merge(K_ORGS, orgs)
+                        if org_name not in orgs:
+                            return False
+                        del orgs[org_name]
+                        if not _persist(K_ORGS, orgs):
+                            return False
+                        # 删除成员关系
+                        _read_merge(K_ORG_MEMBERS, org_members)
+                        org_members.pop(org_name, None)
+                        _persist(K_ORG_MEMBERS, org_members)
+                        return True
+    except StorageError as e:
+        logger.error(f"[错误] 删除组织失败: {e}")
+        return False
+
+
+def add_org_member(org_name: str, username: str, role: str = "member") -> bool:
+    """添加组织成员"""
+    try:
+        with org_members_lock:
+            with storage.lock(K_ORG_MEMBERS):
+                _read_merge(K_ORG_MEMBERS, org_members)
+                if org_name not in org_members:
+                    org_members[org_name] = {}
+                if username in org_members[org_name]:
+                    return False  # 已是成员
+                org_members[org_name][username] = {
+                    "role": role,
+                    "joined_at": time.time(),
+                }
+                return _persist(K_ORG_MEMBERS, org_members)
+    except StorageError as e:
+        logger.error(f"[错误] 添加组织成员失败: {e}")
+        return False
+
+
+def remove_org_member(org_name: str, username: str) -> bool:
+    """移除组织成员（不能移除 owner）"""
+    try:
+        with orgs_lock:
+            with org_members_lock:
+                with storage.lock(K_ORGS):
+                    with storage.lock(K_ORG_MEMBERS):
+                        _read_merge(K_ORGS, orgs)
+                        org = orgs.get(org_name)
+                        if not org or org.get("owner") == username:
+                            return False  # 不能移除 owner
+                        _read_merge(K_ORG_MEMBERS, org_members)
+                        if org_name not in org_members:
+                            return False
+                        if username not in org_members[org_name]:
+                            return False
+                        del org_members[org_name][username]
+                        return _persist(K_ORG_MEMBERS, org_members)
+    except StorageError as e:
+        logger.error(f"[错误] 移除组织成员失败: {e}")
+        return False
+
+
+def update_org_member_role(org_name: str, username: str, new_role: str) -> bool:
+    """更新成员角色（不能修改 owner 的角色）"""
+    try:
+        with orgs_lock:
+            with org_members_lock:
+                with storage.lock(K_ORGS):
+                    with storage.lock(K_ORG_MEMBERS):
+                        _read_merge(K_ORGS, orgs)
+                        org = orgs.get(org_name)
+                        if not org or org.get("owner") == username:
+                            return False  # 不能修改 owner 角色
+                        _read_merge(K_ORG_MEMBERS, org_members)
+                        if org_name not in org_members or username not in org_members[org_name]:
+                            return False
+                        org_members[org_name][username]["role"] = new_role
+                        return _persist(K_ORG_MEMBERS, org_members)
+    except StorageError as e:
+        logger.error(f"[错误] 更新成员角色失败: {e}")
+        return False
+
+
+def get_org_member_role(org_name: str, username: str) -> str | None:
+    """获取成员角色，返回 None if not a member"""
+    with org_members_lock:
+        return org_members.get(org_name, {}).get(username, {}).get("role")
+
+
+def get_org_members(org_name: str) -> dict:
+    """获取组织所有成员及角色"""
+    with org_members_lock:
+        return dict(org_members.get(org_name, {}))
+
+
+def get_user_orgs(username: str) -> list:
+    """获取用户所在的所有组织"""
+    result = []
+    with org_members_lock:
+        for org_name, members in org_members.items():
+            if username in members:
+                result.append(org_name)
+    return result
+
+
+def get_user_role_level(username: str, org_name: str) -> int:
+    """获取用户在组织中的角色等级（用于权限比较）"""
+    role = get_org_member_role(org_name, username)
+    return ROLE_LEVELS.get(role, 0)
+
+
+def can_org_do(org_name: str, username: str, min_role: str) -> bool:
+    """检查用户是否有足够的组织权限（min_role: member < admin < owner）"""
+    return get_user_role_level(username, org_name) >= ROLE_LEVELS.get(min_role, 0)
+
+
+def create_org_invite(org_name: str, created_by: str, invite_type: str = "invite",
+                      expires_days: int = 7) -> str | None:
+    """创建邀请码，返回邀请码字符串"""
+    try:
+        invite_code = secrets.token_hex(16)
+        with org_invites_lock:
+            with storage.lock(K_ORG_INVITES):
+                _read_merge(K_ORG_INVITES, org_invites)
+                org_invites[invite_code] = {
+                    "org_name": org_name,
+                    "created_by": created_by,
+                    "type": invite_type,
+                    "created_at": time.time(),
+                    "expires_at": time.time() + expires_days * 86400,
+                }
+                if _persist(K_ORG_INVITES, org_invites):
+                    return invite_code
+                return None
+    except StorageError as e:
+        logger.error(f"[错误] 创建邀请码失败: {e}")
+        return None
+
+
+def validate_org_invite(invite_code: str) -> dict | None:
+    """验证邀请码是否有效，返回邀请信息或 None"""
+    with org_invites_lock:
+        invite = org_invites.get(invite_code)
+        if not invite:
+            return None
+        if time.time() > invite.get("expires_at", 0):
+            return None
+        return dict(invite)
+
+
+def delete_org_invite(invite_code: str) -> bool:
+    """删除邀请码"""
+    try:
+        with org_invites_lock:
+            with storage.lock(K_ORG_INVITES):
+                _read_merge(K_ORG_INVITES, org_invites)
+                if invite_code in org_invites:
+                    del org_invites[invite_code]
+                    return _persist(K_ORG_INVITES, org_invites)
+                return False
+    except StorageError as e:
+        logger.error(f"[错误] 删除邀请码失败: {e}")
+        return False
+
+
+def get_org_invites(org_name: str) -> list:
+    """获取组织所有有效邀请码"""
+    result = []
+    with org_invites_lock:
+        for code, info in org_invites.items():
+            if info.get("org_name") == org_name and time.time() <= info.get("expires_at", 0):
+                result.append({"code": code, **info})
+    return result
+
+
+def create_join_request(org_name: str, username: str, message: str = "") -> bool:
+    """创建加入申请（申请审批制）"""
+    try:
+        with org_join_requests_lock:
+            with storage.lock(K_ORG_JOIN_REQUESTS):
+                _read_merge(K_ORG_JOIN_REQUESTS, org_join_requests)
+                if org_name not in org_join_requests:
+                    org_join_requests[org_name] = {}
+                if username in org_join_requests[org_name]:
+                    return False  # 已有申请
+                org_join_requests[org_name][username] = {
+                    "message": message,
+                    "created_at": time.time(),
+                    "status": "pending",
+                }
+                return _persist(K_ORG_JOIN_REQUESTS, org_join_requests)
+    except StorageError as e:
+        logger.error(f"[错误] 创建加入申请失败: {e}")
+        return False
+
+
+def approve_join_request(org_name: str, username: str) -> bool:
+    """批准加入申请，同时自动添加为成员"""
+    try:
+        with org_join_requests_lock:
+            with org_members_lock:
+                with storage.lock(K_ORG_JOIN_REQUESTS):
+                    with storage.lock(K_ORG_MEMBERS):
+                        _read_merge(K_ORG_JOIN_REQUESTS, org_join_requests)
+                        if org_name not in org_join_requests:
+                            return False
+                        req = org_join_requests[org_name].get(username)
+                        if not req or req.get("status") != "pending":
+                            return False
+                        req["status"] = "approved"
+                        if not _persist(K_ORG_JOIN_REQUESTS, org_join_requests):
+                            return False
+                        # 自动添加为成员
+                        _read_merge(K_ORG_MEMBERS, org_members)
+                        if org_name not in org_members:
+                            org_members[org_name] = {}
+                        org_members[org_name][username] = {
+                            "role": "member",
+                            "joined_at": time.time(),
+                        }
+                        return _persist(K_ORG_MEMBERS, org_members)
+    except StorageError as e:
+        logger.error(f"[错误] 批准加入申请失败: {e}")
+        return False
+
+
+def reject_join_request(org_name: str, username: str) -> bool:
+    """拒绝加入申请"""
+    try:
+        with org_join_requests_lock:
+            with storage.lock(K_ORG_JOIN_REQUESTS):
+                _read_merge(K_ORG_JOIN_REQUESTS, org_join_requests)
+                if org_name not in org_join_requests:
+                    return False
+                req = org_join_requests[org_name].get(username)
+                if not req or req.get("status") != "pending":
+                    return False
+                req["status"] = "rejected"
+                return _persist(K_ORG_JOIN_REQUESTS, org_join_requests)
+    except StorageError as e:
+        logger.error(f"[错误] 拒绝加入申请失败: {e}")
+        return False
+
+
+def get_org_join_requests(org_name: str, status: str = None) -> dict:
+    """获取组织的加入申请，可按 status 过滤"""
+    with org_join_requests_lock:
+        requests = org_join_requests.get(org_name, {})
+        if status:
+            return {u: r for u, r in requests.items() if r.get("status") == status}
+        return dict(requests)
+
+
+def org_invite_join(invite_code: str, username: str) -> bool:
+    """通过邀请码加入组织"""
+    try:
+        invite = validate_org_invite(invite_code)
+        if not invite:
+            return False
+        org_name = invite.get("org_name")
+        # 公开加入或邀请加入
+        org = get_org(org_name)
+        if not org:
+            return False
+        policy = org.get("join_policy")
+        if policy == "invite" and invite.get("type") != "invite":
+            return False
+        # 检查是否已有成员资格
+        with org_members_lock:
+            if org_name in org_members and username in org_members[org_name]:
+                return False  # 已是成员
+        return add_org_member(org_name, username, "member")
+    except StorageError as e:
+        logger.error(f"[错误] 通过邀请码加入组织失败: {e}")
+        return False
+
+
+def org_public_join(org_name: str, username: str) -> bool:
+    """公开加入组织"""
+    org = get_org(org_name)
+    if not org or org.get("join_policy") != "public":
+        return False
+    return add_org_member(org_name, username, "member")
+
+
 load_users()
 load_sessions()
 load_shares()
+load_orgs()
+load_org_members()
+load_org_invites()
+load_org_join_requests()

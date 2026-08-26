@@ -628,6 +628,85 @@
             }
             setTimeout(autoResize, 100);
             textarea.addEventListener('input', autoResize);
+
+            // ---------- 图片上传（粘贴/拖拽） ----------
+            const MAX_UPLOAD_SIZE = 200 * 1024; // 200KB
+
+            function insertAtCursor(text) {
+                const start = textarea.selectionStart;
+                const end = textarea.selectionEnd;
+                const before = textarea.value.slice(0, start);
+                const after = textarea.value.slice(end);
+                textarea.value = before + text + after;
+                textarea.selectionStart = textarea.selectionEnd = start + text.length;
+                textarea.dispatchEvent(new Event('input'));
+            }
+
+            async function uploadImage(file) {
+                if (!file) return;
+                if (file.size > MAX_UPLOAD_SIZE) {
+                    showHint('图片大小不能超过 200KB');
+                    return;
+                }
+                const formData = new FormData();
+                formData.append('file', file);
+                formData.append('csrf_token', form.querySelector('[name="csrf_token"]').value);
+                try {
+                    showStatus('上传中…', 'saving');
+                    const resp = await fetch('/upload', { method: 'POST', body: formData });
+                    if (!resp.ok) {
+                        showStatus('上传失败', 'error');
+                        showHint('图片上传失败，请重试');
+                        return;
+                    }
+                    const data = await resp.json();
+                    if (data.error) {
+                        showStatus('上传失败', 'error');
+                        showHint(data.error);
+                        return;
+                    }
+                    insertAtCursor('![](' + data.url + ')');
+                    showStatus('已上传', '');
+                } catch (e) {
+                    showStatus('上传失败', 'error');
+                    showHint('网络错误，请重试');
+                }
+            }
+
+            // 粘贴上传
+            textarea.addEventListener('paste', async (e) => {
+                const items = [...e.clipboardData.items];
+                for (const item of items) {
+                    if (item.type.startsWith('image/')) {
+                        e.preventDefault();
+                        await uploadImage(item.getAsFile());
+                        return;
+                    }
+                }
+            });
+
+            // 拖拽上传
+            textarea.addEventListener('dragover', (e) => {
+                const hasImage = [...e.dataTransfer.items].some(i => i.type.startsWith('image/'));
+                if (hasImage) {
+                    e.preventDefault();
+                    textarea.style.caretColor = 'transparent';
+                }
+            });
+            textarea.addEventListener('dragleave', () => {
+                textarea.style.caretColor = '';
+            });
+            textarea.addEventListener('drop', async (e) => {
+                const items = [...e.dataTransfer.items];
+                for (const item of items) {
+                    if (item.type.startsWith('image/')) {
+                        e.preventDefault();
+                        textarea.style.caretColor = '';
+                        await uploadImage(item.getAsFile());
+                        return;
+                    }
+                }
+            });
         })();
     </script>
     <script>

@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="org-header">
+    <h1>{{ org.name|e }} / {{ note_id|e }}</h1>
+    <div class="note-meta">
+        <span>{{ t('note_mtime') }}: {{ mtime }}</span>
+        <a href="{{ url_for('org.org_notes', org_name=org_name) }}">&larr; {{ t('org_notes') }}</a>
+    </div>
+</div>
+
+<div class="note-actions">
+    <a href="{{ url_for('org.org_note_edit', org_name=org_name, note_id=note_id) }}" class="btn">{{ t('note_edit') }}</a>
+    <form method="post" action="{{ url_for('org.org_note_delete', org_name=org_name, note_id=note_id) }}" onsubmit="return confirm('{{ t('confirm_delete') }}');">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="btn btn-danger">{{ t('note_delete') }}</button>
+    </form>
+</div>
+
+<div class="note-content">
+    {{ content | safe }}
+</div>
+{% endblock %}

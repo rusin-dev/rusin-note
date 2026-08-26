@@ -15,6 +15,7 @@
             <a href="/user/{{ current_user|e }}/new"><i class="fa-solid fa-square-plus" aria-hidden="true"></i>{{ t('nav_new_note') }}</a>
             {% if feature_enabled('share_links') %}<a href="/user/{{ current_user|e }}/shares/"><i class="fa-solid fa-share-nodes" aria-hidden="true"></i>{{ t('nav_share_mgmt') }}</a>{% endif %}
             {% if feature_enabled('benben') %}<a href="/benben"><i class="fa-solid fa-sticky-note" aria-hidden="true"></i>{{ t('nav_benben') }}</a>{% endif %}
+            {% if feature_enabled('orgs') %}<a href="/org/mine"><i class="fa-solid fa-users" aria-hidden="true"></i>{{ t('nav_orgs') }}</a>{% endif %}
             <a href="/logout"><i class="fa-solid fa-right-from-bracket" aria-hidden="true"></i>{{ t('nav_logout') }}</a>
         </span>
     {% else %}

@@ -178,7 +178,7 @@ def render_markdown_html(content: str, ref_namespace: str | None = None,
             allowed_attrs = {
                 '*': ['class'],
                 'a': ['href', 'title', 'target'],
-                'img': ['src', 'alt', 'title'],
+                'img': ['src', 'alt', 'title', 'width', 'height'],
             }
             return config.bleach.clean(
                 raw_html, tags=allowed_tags, attributes=allowed_attrs, strip=True

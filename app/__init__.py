@@ -96,6 +96,10 @@ def create_app() -> Flask:
         static_folder=None,
     )
 
+    # 注册 Jinja filter：format_note_time（将 Unix 时间戳格式化为可读时间）
+    from .utils import format_note_time
+    app.jinja_env.filters["format_note_time"] = format_note_time
+
     secret = os.environ.get("RUSIN_SECRET_KEY")
     if not secret:
         secret = _load_or_create_secret_key()

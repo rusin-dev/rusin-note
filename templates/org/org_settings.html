@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="org-header">
+    <h1>{{ t('org_settings') }} - {{ org.name|e }}</h1>
+    <a href="{{ url_for('org.org_home', org_name=org_name) }}">&larr; {{ t('org_back') }}</a>
+</div>
+
+<h2>{{ t('org_settings_basic') }}</h2>
+<form method="post" class="settings-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="action" value="update_info">
+    <div class="form-group">
+        <label>{{ t('org_settings_name') }}</label>
+        <input type="text" name="name" value="{{ org.name|e }}" maxlength="100">
+    </div>
+    <div class="form-group">
+        <label>{{ t('org_settings_description') }}</label>
+        <textarea name="description" maxlength="500">{{ org.description|e }}</textarea>
+    </div>
+    <div class="form-group">
+        <label>{{ t('org_settings_join_policy') }}</label>
+        <select name="join_policy">
+            <option value="invite"{% if org.join_policy == 'invite' %} selected{% endif %}>{{ t('org_join_policy_invite') }}</option>
+            <option value="public"{% if org.join_policy == 'public' %} selected{% endif %}>{{ t('org_join_policy_public') }}</option>
+            <option value="approve"{% if org.join_policy == 'approve' %} selected{% endif %}>{{ t('org_join_policy_approve') }}</option>
+        </select>
+    </div>
+    <button type="submit" class="btn btn-primary">{{ t('org_settings_save') }}</button>
+</form>
+
+<h2 style="margin-top: 32px;">{{ t('org_settings_members') }}</h2>
+<table class="members-table">
+    <thead>
+        <tr>
+            <th>{{ t('org_member_user') }}</th>
+            <th>{{ t('org_member_role') }}</th>
+            <th>{{ t('org_member_actions') }}</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for username, info in members.items() %}
+        <tr>
+            <td><a href="{{ url_for('user.user_root', username=username) }}">{{ username|e }}</a></td>
+            <td><span class="role-badge role-{{ info.role }}">{{ t('org_role_' ~ info.role) }}</span></td>
+            <td>
+                {% if info.role != 'owner' %}
+                {% if can_org_do(org_name, current_user, 'owner') %}
+                <form method="post" style="display: inline;">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="action" value="update_role">
+                    <input type="hidden" name="username" value="{{ username }}">
+                    <select name="role" onchange="this.form.submit()">
+                        <option value="admin"{% if info.role == 'admin' %} selected{% endif %}>{{ t('org_role_admin') }}</option>
+                        <option value="member"{% if info.role == 'member' %} selected{% endif %}>{{ t('org_role_member') }}</option>
+                    </select>
+                </form>
+                <form method="post" style="display: inline;" onsubmit="return confirm('{{ t('confirm_remove_member') }}');">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="action" value="remove_member">
+                    <input type="hidden" name="username" value="{{ username }}">
+                    <button type="submit" class="btn btn-sm btn-danger">{{ t('org_remove') }}</button>
+                </form>
+                {% endif %}
+                {% endif %}
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+{% if can_org_do(org_name, current_user, 'owner') %}
+<h2 style="margin-top: 32px; color: #d32f2f;">{{ t('org_settings_danger') }}</h2>
+<form method="post" onsubmit="return confirm('{{ t('confirm_delete_org') }}');">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="action" value="delete_org">
+    <button type="submit" class="btn btn-danger">{{ t('org_delete') }}</button>
+</form>
+{% endif %}
+{% endblock %}

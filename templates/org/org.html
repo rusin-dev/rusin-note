@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="org-header">
+    <h1>{{ org.name|e }} <small>({{ org_name|e }})</small></h1>
+    <p>{{ org.description|e }}</p>
+    <div class="org-meta">
+        <span><i class="fa-solid fa-user"></i> {{ t('org_owner') }}: {{ org.owner|e }}</span>
+        <span><i class="fa-solid fa-door-open"></i> {{ t('org_join_policy_' ~ org.join_policy) }}</span>
+    </div>
+</div>
+
+{% if not is_member %}
+<div class="org-join-section">
+    {% if org.join_policy == 'public' %}
+    <form method="post" action="{{ url_for('org.org_join_public', org_name=org_name) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="btn-primary">{{ t('org_join_public') }}</button>
+    </form>
+    {% elif org.join_policy == 'approve' %}
+    <form method="post" action="{{ url_for('org.org_join_approve', org_name=org_name) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="text" name="message" placeholder="{{ t('org_join_message_placeholder') }}" maxlength="200">
+        <button type="submit" class="btn-primary">{{ t('org_request_join') }}</button>
+    </form>
+    {% else %}
+    <p class="hint">{{ t('org_invite_only') }}</p>
+    {% endif %}
+</div>
+{% else %}
+<div class="org-actions">
+    <a href="{{ url_for('org.org_notes', org_name=org_name) }}" class="btn">{{ t('org_notes') }}</a>
+    <a href="{{ url_for('org.org_members', org_name=org_name) }}" class="btn">{{ t('org_members') }}</a>
+    {% if can_org_do(org_name, current_user, 'admin') %}
+    <a href="{{ url_for('org.org_settings', org_name=org_name) }}" class="btn">{{ t('org_settings') }}</a>
+    <a href="{{ url_for('org.org_invites', org_name=org_name) }}" class="btn">{{ t('org_invites') }}</a>
+    {% if org.join_policy == 'approve' %}
+    <a href="{{ url_for('org.org_requests', org_name=org_name) }}" class="btn">{{ t('org_requests') }}</a>
+    {% endif %}
+    {% endif %}
+</div>
+{% endif %}
+
+{% if members %}
+<h2 style="margin-top: 24px;">{{ t('org_members_title') }}</h2>
+<table class="members-table">
+    <thead>
+        <tr>
+            <th>{{ t('org_member_user') }}</th>
+            <th>{{ t('org_member_role') }}</th>
+            <th>{{ t('org_member_joined') }}</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for username, info in members.items() %}
+        <tr>
+            <td><a href="{{ url_for('user.user_root', username=username) }}">{{ username|e }}</a></td>
+            <td><span class="role-badge role-{{ info.role }}">{{ t('org_role_' ~ info.role) }}</span></td>
+            <td>{{ info.joined_at | format_note_time }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endif %}
+{% endblock %}

@@ -45,8 +45,14 @@ def validate_note_id(note_id: str) -> bool:
 
 # ---------- 笔记读写 ----------
 # "public" 是内部公开笔记存储命名空间，不是用户账号，需放行（validate_username 会拒绝它）
+# "_orgs/<org_name>" 是组织笔记命名空间，也需放行
 def _namespace_ok(username: str) -> bool:
-    return username == "public" or validate_username(username)
+    if username == "public":
+        return True
+    if username.startswith("_orgs/"):
+        org_name = username[len("_orgs/"):]
+        return bool(re.match(r'^[a-zA-Z0-9_\-]+$', org_name))
+    return validate_username(username)
 
 
 def read_note(username: str, note_id: str) -> str:

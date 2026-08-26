@@ -45,6 +45,8 @@ FEATURES = [
     {"key": "latex_render", "icon": "fa-square-root-variable"},
     {"key": "code_highlight", "icon": "fa-code"},
     {"key": "avatar", "icon": "fa-user"},
+    {"key": "orgs", "icon": "fa-users"},                # 组织/团队协作
+    {"key": "image_upload", "icon": "fa-image"},         # 图片上传（粘贴/拖拽自动上传为压缩 GIF）
 ]
 FEATURE_KEYS = [f["key"] for f in FEATURES]
 
