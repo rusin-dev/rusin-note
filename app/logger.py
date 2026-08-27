@@ -16,7 +16,10 @@ def create_logger(name: str) -> Logger:
     log_path = LOGGER_PATH.format(timestamp=timestamp)
     log_directory = os.path.dirname(log_path)
     if log_directory:
-        os.makedirs(log_directory, exist_ok=True)
+        try:
+            os.makedirs(log_directory, exist_ok=True)
+        except (OSError, IOError):
+            pass
     try:
         handler = RotatingFileHandler(log_path, maxBytes=LOGGER_MAX_SIZE)
     except (OSError, IOError):

@@ -126,7 +126,10 @@ def load_config():
 
 config = load_config()
 DATA_DIR = os.environ.get("RUSIN_DATA_DIR", ".")
-os.makedirs(DATA_DIR, exist_ok=True)
+try:
+    os.makedirs(DATA_DIR, exist_ok=True)
+except (OSError, IOError):
+    pass
 
 # ---------- 无服务器平台检测 ----------
 # 无服务器环境没有可写的持久磁盘：数据必须走外部存储（upstash 后端），
