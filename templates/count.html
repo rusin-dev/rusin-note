@@ -2,11 +2,13 @@
 {% block content %}
 <h1>{{ t('stats_title') }}</h1>
 <div class="stat-grid">
+    {% if show_public %}
     <div class="stat-card">
         <h3>{{ t('stats_public') }}</h3>
         <div class="number">{{ pub_cnt }}</div>
         <div class="detail">{{ t('stats_total_size', size=pub_size) }}</div>
     </div>
+    {% endif %}
     <div class="stat-card">
         <h3>{{ t('stats_private') }}</h3>
         <div class="number">{{ priv_cnt }}</div>
@@ -17,11 +19,25 @@
         <div class="number">{{ user_cnt }}</div>
         <div class="detail">{{ t('stats_users_detail') }}</div>
     </div>
+    {% if show_benben %}
     <div class="stat-card">
         <h3>{{ t('stats_benben') }}</h3>
         <div class="number">{{ benben_cnt }}</div>
         <div class="detail">{{ t('stats_benben_detail') }}</div>
     </div>
+    {% endif %}
 </div>
+<h2 style="margin-top: 36px;">{{ t('features_status_title') }}</h2>
+<p class="empty" style="margin-top: 8px;">{{ t('features_status_desc') }}</p>
+<div class="ff-grid">
+    {% for f in features %}
+    <div class="ff-card{% if not f.enabled %} ff-disabled{% endif %}">
+        <i class="fa-solid {{ f.icon }}" aria-hidden="true"></i>
+        <span class="ff-name">{{ t('feature_' ~ f.key) }}</span>
+        <span class="ff-badge {% if f.enabled %}ff-on{% else %}ff-off{% endif %}">{{ t('feature_on') if f.enabled else t('feature_off') }}</span>
+    </div>
+    {% endfor %}
+</div>
+{% if is_admin_page %}<p style="margin-top: 20px;"><a href="/admin/features">{{ t('admin_features_link') }}</a></p>{% endif %}
 <p style="margin-top: 24px;"><a href="/">{{ t('back_home') }}</a></p>
 {% endblock %}

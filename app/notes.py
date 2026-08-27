@@ -5,20 +5,27 @@ import random
 from threading import Lock
 
 from . import config
+from .folders import delete_note_folder
 from .logger import create_logger
+from .pins import delete_note_pins
 from .storage import StorageError, storage
 from .store import count_benben_posts, get_user_count
+from .tags import delete_note_tags
 
 logger = create_logger("notes")
 
 # 禁止的笔记ID（与路由冲突）
-FORBIDDEN_NOTE_IDS = {"user", "world", "shares", "login", "register"}
+FORBIDDEN_NOTE_IDS = {"user", "world", "shares", "login", "register",
+                      "refs",  # refs：与 /user/<u>/refs 引用搜索路由冲突
+                      "images",  # images：与 /user/<u>/images 图床上传/管理路由冲突
+                      "attachments",  # attachments：与 /user/<u>/attachments 附件上传/管理路由冲突
+                      "admin"}  # admin：与 /admin/features 功能开关管理路由（#90）冲突
 
 # 保留用户名（与固定路由或 notes/ 目录冲突，禁止注册）
 # 注意：public 与公开笔记存储命名空间冲突，必须保留
 RESERVED_USERNAMES = {"register", "login", "logout", "count", "disclaimer",
                       "favicon", "share", "shares", "world", "user", "new", "md",
-                      "public", "benben"}
+                      "public", "benben", "admin"}
 
 
 # ---------- 校验 ----------
@@ -38,8 +45,14 @@ def validate_note_id(note_id: str) -> bool:
 
 # ---------- 笔记读写 ----------
 # "public" 是内部公开笔记存储命名空间，不是用户账号，需放行（validate_username 会拒绝它）
+# "_orgs/<org_name>" 是组织笔记命名空间，也需放行
 def _namespace_ok(username: str) -> bool:
-    return username == "public" or validate_username(username)
+    if username == "public":
+        return True
+    if username.startswith("_orgs/"):
+        org_name = username[len("_orgs/"):]
+        return bool(re.match(r'^[a-zA-Z0-9_\-]+$', org_name))
+    return validate_username(username)
 
 
 def read_note(username: str, note_id: str) -> str:
@@ -82,10 +95,16 @@ def write_note(username: str, note_id: str, content: str) -> bool:
         return False
     with _get_note_lock(username, note_id):
         try:
-            return storage.write_note(username, note_id, content)
+            ok = storage.write_note(username, note_id, content)
         except StorageError as e:
             logger.error(f"[错误] 保存笔记 {username}/{note_id} 失败: {e}")
             return False
+    # 空内容即删除（视图与过期清理都走这里），同步清掉标签、文件夹归属与置顶
+    if ok and not content:
+        delete_note_tags(username, note_id)
+        delete_note_folder(username, note_id)
+        delete_note_pins(username, note_id)
+    return ok
 
 
 def get_note_mtime(username: str, note_id: str):
@@ -115,6 +134,48 @@ def list_user_notes(username: str) -> list[str]:
         return [nid for nid in storage.list_notes(username) if validate_note_id(nid)]
     except StorageError:
         return []
+
+
+# ---------- 快捷引用（#87：GitHub Issues 风格的 # 引用） ----------
+def title_from_content(content: str) -> str:
+    """笔记首行去掉常见 Markdown 标记后作为标题预览（最长 80 字符）"""
+    if not content:
+        return ""
+    first = content.split("\n", 1)[0].strip()
+    first = re.sub(r'^(?:#{1,6}\s*|>\s*|[-*+]\s+|\d+[.)]\s+)', '', first)
+    return first[:80]
+
+
+def note_title(username: str, note_id: str) -> str:
+    """返回笔记首行标题预览，读取失败或笔记不存在返回空串"""
+    return title_from_content(read_note(username, note_id))
+
+
+def search_user_notes(username: str, query: str) -> list[dict]:
+    """快捷引用搜索：按修改时间倒序扫描用户笔记，ID 或首行标题包含 query
+    （大小写不敏感）即命中，返回 [{"id", "title", "mtime"}]，最多
+    config.NOTE_REF_SEARCH_LIMIT 条、扫描 config.NOTE_REF_SCAN_LIMIT 篇。
+
+    query 为空时返回最近编辑的笔记（对应只输入 # 还没打字的情况）。
+    """
+    from . import config
+    note_ids = list_user_notes(username)
+    scored = []
+    for nid in note_ids:
+        mtime = get_note_mtime(username, nid) or 0
+        scored.append((mtime, nid))
+    scored.sort(reverse=True)  # 最近编辑优先
+
+    query = (query or "").strip().lower()
+    results: list[dict] = []
+    for mtime, nid in scored[:config.NOTE_REF_SCAN_LIMIT]:
+        title = note_title(username, nid)
+        if query and query not in nid.lower() and query not in title.lower():
+            continue
+        results.append({"id": nid, "title": title, "mtime": mtime})
+        if len(results) >= config.NOTE_REF_SEARCH_LIMIT:
+            break
+    return results
 
 
 # ---------- 统计函数 ----------

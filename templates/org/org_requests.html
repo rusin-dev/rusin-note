@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="org-header">
+    <h1>{{ t('org_requests_title') }} - {{ org.name|e }}</h1>
+    <a href="{{ url_for('org.org_settings', org_name=org_name) }}">&larr; {{ t('org_settings') }}</a>
+</div>
+
+{% if requests %}
+<table class="requests-table">
+    <thead>
+        <tr>
+            <th>{{ t('org_request_user') }}</th>
+            <th>{{ t('org_request_message') }}</th>
+            <th>{{ t('org_request_time') }}</th>
+            <th>{{ t('org_request_status') }}</th>
+            <th>{{ t('org_request_actions') }}</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for username, req in requests.items() %}
+        <tr>
+            <td><a href="{{ url_for('user.user_root', username=username) }}">{{ username|e }}</a></td>
+            <td>{{ req.message or '-' }}</td>
+            <td>{{ req.created_at | format_note_time }}</td>
+            <td><span class="status-badge status-{{ req.status }}">{{ t('org_request_status_' ~ req.status) }}</span></td>
+            <td>
+                {% if req.status == 'pending' %}
+                <form method="post" style="display: inline;">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="action" value="approve">
+                    <input type="hidden" name="username" value="{{ username }}">
+                    <button type="submit" class="btn btn-sm btn-success">{{ t('org_request_approve') }}</button>
+                </form>
+                <form method="post" style="display: inline;">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="action" value="reject">
+                    <input type="hidden" name="username" value="{{ username }}">
+                    <button type="submit" class="btn btn-sm btn-danger">{{ t('org_request_reject') }}</button>
+                </form>
+                {% endif %}
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<p class="empty">{{ t('org_requests_empty') }}</p>
+{% endif %}
+{% endblock %}

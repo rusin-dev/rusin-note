@@ -32,7 +32,11 @@
 - **Public and private notes**: Use random short paths for public notes, or keep private note lists under guest accounts for both temporary sharing and personal storage.
 - **Secure share links**: Generate random-token share links for user notes, with optional write-back support for simple cross-device collaboration.
 - **Markdown and LaTeX rendering**: Read-only pages and the benben feed support Markdown and KaTeX math, making the app useful for code snippets, notes, documentation, and formulas.
+- **Note image hosting**: Paste/drag-drop images in the editor, auto-compressed and stored, referenced via Markdown in notes, publicly readable without login.
+- **Note attachments**: Upload arbitrary file types (executables blocked by default), configurable per-file size limit (default 10MB) and per-user quota (default 10MB), drag-drop upload on management page, referenced as links in notes.
+- **Comment system**: Comment functionality for notes and share pages, supports anonymous comments, configurable max comments (default 200), cooldown time, paginated loading, similar posting wait mechanism to benben feed.
 - **Benben feed**: A built-in lightweight feed where logged-in users can post and anonymous users can read, with live preview, paginated loading, and post cooldowns.
+- **Feature flags**: Admins can toggle site features (public notes, benben, share links, open registration, quick references, note tags, note folders, note pinning, note image hosting, note attachments, Markdown heading anchors, LaTeX, code highlighting, avatars) on/off with switches at `/admin/features`; changes take effect immediately without a restart. Enabled features are presented on the `/count` stats page, while disabled features hide their entry points and return 404.
 - **Multi-language UI**: Simplified Chinese and English are built in, with manual switching and browser-language fallback.
 - **Deployment-friendly configuration**: Common options live in `config.json`, including note expiration, session timeout, password policy, trusted proxy IP handling, and HTTPS cookies. For serverless deployment, data can go to external storage (Upstash Redis / Neon PostgreSQL), surviving cold starts.
 - **Practical baseline protection**: Includes CSRF protection, request rate limits, save limits, registration limits, content sanitization, and a proxy-header trust switch for safer public deployments.
@@ -333,6 +337,18 @@ rusin-note:.
     - `enabled`: enable avatars, default `true`; set `false` to hide avatars entirely.
     - `url_template`: avatar URL template, default `https://cn.cravatar.com/avatar/{hash}?d=identicon&f=y`. Supports two placeholders: `{hash}` (`md5(username)` lowercase hex) and `{username}` (URL-encoded username). Since this site's users have no email, `md5(username)` is used as the hash; `d=identicon` makes Gravatar-style services generate a deterministic geometric avatar per hash. You can also swap in other username-seeded services (e.g. DiceBear: `https://api.dicebear.com/9.x/identicon/svg?seed={username}`).
     - `size`: default size in the template (currently only a fallback value; templates use fixed sizes per location).
+- `attachments`: note attachments (attachment button in editor uploads files, `/attachment/<u>/<id>` for public download).
+    - `enabled`: enable attachments, default `true`; set `false` to hide the attachment button in the editor and return 404 on the management page;
+    - `max_size_kb`: max single file size (KB), default `10240` (10MB);
+    - `max_total_kb`: per-user total quota (KB), default `10240` (10MB);
+    - `blocked_extensions`: list of blocked file extensions (blacklist mode), default includes `.exe`, `.bat`, `.sh`, `.zip` and other executables/archives.
+- `comments`: comment system (`/comments/<target_type>/<target_id>`, supports notes and share pages).
+    - `enabled`: enable comments, default `true`; set `false` to return 404 on comment pages;
+    - `max_length`: max length of a single comment (in **characters**), default `1024` (~1KB);
+    - `max_comments`: max comments per target (note/share), default `200`;
+    - `cooldown_seconds`: minimum interval between two comments by the same user (in **seconds**), default `3`;
+    - `page_size`: comments loaded per batch, default `50`;
+    - `max_height_px`: maximum display height of rendered comment content (in **px**), default `1000`, overflow scrolls within the content area.
 - `password_policy`: password policy, defining the complexity requirements for guest passwords.  
    - `min_length`: minimum password length, default `8`;  
    - `max_length`: maximum password length, default `128` (hard cap `128`, preventing oversized passwords from entering the PBKDF2 slow hash and consuming CPU);  
@@ -353,3 +369,8 @@ rusin-note:.
    - `max_posts`: maximum number of posts persisted, default `200` (keeps external KV value size bounded; oldest posts are dropped);
 
    Content supports Markdown and LaTeX math (`$...$` / `$$...$$`, controlled by the `latex_render` switch); the post form has a live preview (client-side marked.js rendering, which filters dangerous tags and links too); rendering is sanitized with bleach to prevent XSS; each page shows `page_size` posts, loaded in batches via "Load more"; loading and posting are both subject to request rate limits (GET/POST), and posting is also subject to a per-user cooldown (`cooldown_seconds`); each post's header shows the poster's IP (whether proxy headers are trusted follows `trust_proxy_headers`; not shown for old data without an IP field).
+- `features` / `admin_users` feature flags (#90).
+   - `features`: **default** on/off state of features, including `world_notes` (public notes & short links), `benben` (feed), `share_links` (share links), `open_register` (open registration), `note_tags` (note tags), `note_folders` (note folders), `note_pins` (note pinning), `note_images` (note image hosting), `note_attachments` (note attachments), `comments` (comment system), `heading_anchors` (Markdown heading anchors), all defaulting to `true`. Defaults of legacy features (`note_refs`, `latex_render`, `code_highlight`, `avatar`) still come from their own existing config sections;
+   - `admin_users`: usernames allowed to manage feature flags; can also be set via the `RUSIN_ADMIN` environment variable (comma-separated; the two are merged).
+
+   After logging in, an admin can toggle features at `/admin/features`; saving takes effect immediately (no restart needed): the runtime state is persisted in the storage backend (`feature_flags.json` under the data directory for the `file` backend), and multi-instance deployments converge within a ~5s cache TTL. Disabled features return 404 and their navbar/home entry points are hidden automatically. All feature states are presented in the "Feature Status" section of the `/count` stats page (visible to everyone when no admin is configured, but nobody can change the switches then). Note: the serverless `memory` backend is not persistent — after a cold start, flags fall back to the `config.json` defaults.

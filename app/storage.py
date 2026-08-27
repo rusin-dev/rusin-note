@@ -13,6 +13,7 @@
 选择优先级（RUSIN_STORAGE 显式指定 > KV 环境变量自动识别 > DATABASE_URL
 自动识别 > 无服务器平台默认 memory > 本地默认 file）。
 """
+import base64
 import json
 import os
 import threading
@@ -54,13 +55,31 @@ KV_FILE_MAP = {
     "sessions.json": "sessions.json",
     "shares.json": "shares.json",
     "benben:posts": "benben.json",
+    "comments:all": "comments.json",
+    "note_tags": "note_tags.json",
+    "note_folders": "note_folders.json",
+    "note_pins": "note_pins.json",
+    "feature_flags": "feature_flags.json",
     "secret_key": ".secret_key",
+    # 组织相关
+    "orgs": "orgs.json",
+    "org_members": "org_members.json",
+    "org_invites": "org_invites.json",
+    "org_join_requests": "org_join_requests.json",
+    # 笔记标题
+    "note_titles": "note_titles.json",
 }
 # .secret_key 以纯文本（非 JSON）存储，与旧版文件格式兼容
 _RAW_TEXT_KEYS = {"secret_key"}
 
 # 笔记键前缀：note:<username>:<note_id>
 NOTE_KEY_PREFIX = "note:"
+# 图片键前缀（仅 KV 默认实现使用；file/postgres 后端有原生二进制通道）：
+# img:<username>:<image_id>
+IMAGE_KEY_PREFIX = "img:"
+# 附件键前缀（仅 KV 默认实现使用；file/postgres 后端有原生二进制通道）：
+# att:<username>:<attachment_id>
+ATTACHMENT_KEY_PREFIX = "att:"
 
 
 def _note_key(username: str, note_id: str) -> str:
@@ -128,6 +147,131 @@ class StorageBackend:
     def iter_all_notes(self):
         """遍历全部笔记，产出 (username, note_id)"""
         raise NotImplementedError
+
+    # ---------- 图片专用（图床：二进制） ----------
+    # 基类默认实现：base64 进通用 KV（键 img:<username>:<image_id>，值
+    # {"d": base64, "t": mtime, "s": size}），memory / upstash 后端直接继承；
+    # file / postgres 后端覆盖为原生二进制（文件 / BYTEA 列）。
+    def _image_key(self, username: str, image_id: str) -> str:
+        return f"{IMAGE_KEY_PREFIX}{username}:{image_id}"
+
+    def write_image(self, username: str, image_id: str, data: bytes) -> bool:
+        payload = {
+            "d": base64.b64encode(bytes(data)).decode("ascii"),
+            "t": time.time(),
+            "s": len(data),
+        }
+        return self.set(self._image_key(username, image_id), payload)
+
+    def read_image(self, username: str, image_id: str) -> bytes | None:
+        payload = self.get(self._image_key(username, image_id))
+        if not isinstance(payload, dict) or not isinstance(payload.get("d"), str):
+            return None
+        try:
+            return base64.b64decode(payload["d"])
+        except (ValueError, TypeError):
+            return None
+
+    def delete_image(self, username: str, image_id: str) -> bool:
+        return self.delete(self._image_key(username, image_id))
+
+    def image_mtime(self, username: str, image_id: str) -> float | None:
+        payload = self.get(self._image_key(username, image_id))
+        t = payload.get("t") if isinstance(payload, dict) else None
+        return t if isinstance(t, (int, float)) else None
+
+    def image_size(self, username: str, image_id: str) -> int | None:
+        payload = self.get(self._image_key(username, image_id))
+        s = payload.get("s") if isinstance(payload, dict) else None
+        return s if isinstance(s, int) else None
+
+    def list_images(self, username: str) -> list:
+        prefix = f"{IMAGE_KEY_PREFIX}{username}:"
+        ids = []
+        for key in self.list_keys(prefix):
+            image_id = key[len(prefix):]
+            if image_id:
+                ids.append(image_id)
+        return ids
+
+    def image_usage(self, username: str) -> int:
+        """该用户图片总字节数（配额计算用）"""
+        total = 0
+        for image_id in self.list_images(username):
+            size = self.image_size(username, image_id)
+            if size:
+                total += size
+        return total
+
+    # ---------- 附件专用（附件：二进制） ----------
+    # 基类默认实现：base64 进通用 KV（键 att:<username>:<attachment_id>，值
+    # {"d": base64, "t": mtime, "s": size, "n": filename, "c": content_type}），
+    # memory / upstash 后端直接继承；file / postgres 后端覆盖为原生二进制。
+    def _attachment_key(self, username: str, attachment_id: str) -> str:
+        return f"{ATTACHMENT_KEY_PREFIX}{username}:{attachment_id}"
+
+    def write_attachment(self, username: str, attachment_id: str, data: bytes,
+                         filename: str = "", content_type: str = "application/octet-stream") -> bool:
+        payload = {
+            "d": base64.b64encode(bytes(data)).decode("ascii"),
+            "t": time.time(),
+            "s": len(data),
+            "n": filename,
+            "c": content_type,
+        }
+        return self.set(self._attachment_key(username, attachment_id), payload)
+
+    def read_attachment(self, username: str, attachment_id: str) -> bytes | None:
+        payload = self.get(self._attachment_key(username, attachment_id))
+        if not isinstance(payload, dict) or not isinstance(payload.get("d"), str):
+            return None
+        try:
+            return base64.b64decode(payload["d"])
+        except (ValueError, TypeError):
+            return None
+
+    def read_attachment_meta(self, username: str, attachment_id: str) -> dict | None:
+        """读取附件元数据（filename, content_type, mtime, size）"""
+        payload = self.get(self._attachment_key(username, attachment_id))
+        if not isinstance(payload, dict):
+            return None
+        return {
+            "filename": payload.get("n", ""),
+            "content_type": payload.get("c", "application/octet-stream"),
+            "mtime": payload.get("t"),
+            "size": payload.get("s"),
+        }
+
+    def delete_attachment(self, username: str, attachment_id: str) -> bool:
+        return self.delete(self._attachment_key(username, attachment_id))
+
+    def attachment_mtime(self, username: str, attachment_id: str) -> float | None:
+        payload = self.get(self._attachment_key(username, attachment_id))
+        t = payload.get("t") if isinstance(payload, dict) else None
+        return t if isinstance(t, (int, float)) else None
+
+    def attachment_size(self, username: str, attachment_id: str) -> int | None:
+        payload = self.get(self._attachment_key(username, attachment_id))
+        s = payload.get("s") if isinstance(payload, dict) else None
+        return s if isinstance(s, int) else None
+
+    def list_attachments(self, username: str) -> list:
+        prefix = f"{ATTACHMENT_KEY_PREFIX}{username}:"
+        ids = []
+        for key in self.list_keys(prefix):
+            attachment_id = key[len(prefix):]
+            if attachment_id:
+                ids.append(attachment_id)
+        return ids
+
+    def attachment_usage(self, username: str) -> int:
+        """该用户附件总字节数（配额计算用）"""
+        total = 0
+        for attachment_id in self.list_attachments(username):
+            size = self.attachment_size(username, attachment_id)
+            if size:
+                total += size
+        return total
 
     # ---------- 跨进程/跨实例互斥 ----------
     @contextmanager
@@ -276,6 +420,169 @@ class FileBackend(StorageBackend):
             for fname in os.listdir(user_dir):
                 if fname.endswith(".txt"):
                     yield username, fname[:-4]
+
+    # ---------- 图片：images/<user>/<id>（二进制原子写，mtime/size 来自文件系统） ----------
+    def _image_path(self, username: str, image_id: str) -> str:
+        return data_path("images", username, image_id)
+
+    def read_image(self, username: str, image_id: str) -> bytes | None:
+        try:
+            with open(self._image_path(username, image_id), "rb") as f:
+                return f.read()
+        except (FileNotFoundError, IOError, OSError):
+            return None
+
+    def write_image(self, username: str, image_id: str, data: bytes) -> bool:
+        path = self._image_path(username, image_id)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        temp_path = f"{path}.{os.getpid()}.tmp"
+        try:
+            with open(temp_path, "wb") as f:
+                f.write(data)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(temp_path, path)
+            return True
+        except (IOError, OSError):
+            try:
+                if os.path.exists(temp_path):
+                    os.remove(temp_path)
+            except OSError:
+                pass
+            return False
+
+    def delete_image(self, username: str, image_id: str) -> bool:
+        try:
+            os.remove(self._image_path(username, image_id))
+            return True
+        except FileNotFoundError:
+            return True
+        except OSError:
+            return False
+
+    def image_mtime(self, username: str, image_id: str) -> float | None:
+        try:
+            return os.path.getmtime(self._image_path(username, image_id))
+        except (IOError, OSError):
+            return None
+
+    def image_size(self, username: str, image_id: str) -> int | None:
+        try:
+            return os.path.getsize(self._image_path(username, image_id))
+        except (IOError, OSError):
+            return None
+
+    def list_images(self, username: str) -> list:
+        user_dir = data_path("images", username)
+        if not os.path.isdir(user_dir):
+            return []
+        try:
+            return [f for f in os.listdir(user_dir) if "." in f]
+        except OSError:
+            return []
+
+    # ---------- 附件：attachments/<user>/<id>（二进制文件 + .meta.json 元数据） ----------
+    def _attachment_path(self, username: str, attachment_id: str) -> str:
+        return data_path("attachments", username, attachment_id)
+
+    def _attachment_meta_path(self, username: str, attachment_id: str) -> str:
+        return data_path("attachments", username, f"{attachment_id}.meta.json")
+
+    def write_attachment(self, username: str, attachment_id: str, data: bytes,
+                         filename: str = "", content_type: str = "application/octet-stream") -> bool:
+        path = self._attachment_path(username, attachment_id)
+        meta_path = self._attachment_meta_path(username, attachment_id)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        temp_path = f"{path}.{os.getpid()}.tmp"
+        try:
+            with open(temp_path, "wb") as f:
+                f.write(data)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(temp_path, path)
+            # 写入元数据
+            meta = {"n": filename, "c": content_type, "t": time.time(), "s": len(data)}
+            with open(meta_path, "w", encoding="utf-8") as f:
+                json.dump(meta, f, ensure_ascii=False)
+            return True
+        except (IOError, OSError):
+            try:
+                if os.path.exists(temp_path):
+                    os.remove(temp_path)
+            except OSError:
+                pass
+            return False
+
+    def read_attachment(self, username: str, attachment_id: str) -> bytes | None:
+        try:
+            with open(self._attachment_path(username, attachment_id), "rb") as f:
+                return f.read()
+        except (FileNotFoundError, IOError, OSError):
+            return None
+
+    def read_attachment_meta(self, username: str, attachment_id: str) -> dict | None:
+        meta_path = self._attachment_meta_path(username, attachment_id)
+        if not os.path.exists(meta_path):
+            # 尝试从文件属性构建基础元数据
+            path = self._attachment_path(username, attachment_id)
+            if not os.path.exists(path):
+                return None
+            try:
+                return {
+                    "filename": attachment_id,
+                    "content_type": "application/octet-stream",
+                    "mtime": os.path.getmtime(path),
+                    "size": os.path.getsize(path),
+                }
+            except (IOError, OSError):
+                return None
+        try:
+            with open(meta_path, "r", encoding="utf-8") as f:
+                meta = json.load(f)
+            return {
+                "filename": meta.get("n", attachment_id),
+                "content_type": meta.get("c", "application/octet-stream"),
+                "mtime": meta.get("t"),
+                "size": meta.get("s"),
+            }
+        except (IOError, OSError, ValueError):
+            return None
+
+    def delete_attachment(self, username: str, attachment_id: str) -> bool:
+        try:
+            path = self._attachment_path(username, attachment_id)
+            meta_path = self._attachment_meta_path(username, attachment_id)
+            if os.path.exists(path):
+                os.remove(path)
+            if os.path.exists(meta_path):
+                os.remove(meta_path)
+            return True
+        except FileNotFoundError:
+            return True
+        except OSError:
+            return False
+
+    def attachment_mtime(self, username: str, attachment_id: str) -> float | None:
+        try:
+            return os.path.getmtime(self._attachment_path(username, attachment_id))
+        except (IOError, OSError):
+            return None
+
+    def attachment_size(self, username: str, attachment_id: str) -> int | None:
+        try:
+            return os.path.getsize(self._attachment_path(username, attachment_id))
+        except (IOError, OSError):
+            return None
+
+    def list_attachments(self, username: str) -> list:
+        user_dir = data_path("attachments", username)
+        if not os.path.isdir(user_dir):
+            return []
+        try:
+            # 只返回实际附件文件，排除 .meta.json 文件
+            return [f for f in os.listdir(user_dir) if "." in f and not f.endswith(".meta.json")]
+        except OSError:
+            return []
 
     # ---------- 锁：fcntl/msvcrt 跨进程文件锁 ----------
     @contextmanager
@@ -543,6 +850,27 @@ CREATE TABLE IF NOT EXISTS storage_notes (
     PRIMARY KEY (username, note_id)
 )
 """
+_SCHEMA_IMAGES = """
+CREATE TABLE IF NOT EXISTS storage_images (
+    username TEXT NOT NULL,
+    image_id TEXT NOT NULL,
+    data     BYTEA NOT NULL,
+    mtime    DOUBLE PRECISION NOT NULL,
+    PRIMARY KEY (username, image_id)
+)
+"""
+
+_SCHEMA_ATTACHMENTS = """
+CREATE TABLE IF NOT EXISTS storage_attachments (
+    username      TEXT NOT NULL,
+    attachment_id TEXT NOT NULL,
+    data          BYTEA NOT NULL,
+    filename      TEXT NOT NULL DEFAULT '',
+    content_type  TEXT NOT NULL DEFAULT 'application/octet-stream',
+    mtime         DOUBLE PRECISION NOT NULL,
+    PRIMARY KEY (username, attachment_id)
+)
+"""
 
 
 class PostgresBackend(StorageBackend):
@@ -576,6 +904,8 @@ class PostgresBackend(StorageBackend):
                 with conn.cursor() as cur:
                     cur.execute(_SCHEMA_KV)
                     cur.execute(_SCHEMA_NOTES)
+                    cur.execute(_SCHEMA_IMAGES)
+                    cur.execute(_SCHEMA_ATTACHMENTS)
                 conn.commit()
                 self._schema_ready = True
             except StorageError:
@@ -674,6 +1004,107 @@ class PostgresBackend(StorageBackend):
             "SELECT username, note_id FROM storage_notes", fetch="all")
         for username, note_id in rows:
             yield username, note_id
+
+    # ---------- 图片：storage_images 表（BYTEA 原生二进制） ----------
+    def write_image(self, username: str, image_id: str, data: bytes) -> bool:
+        self._execute(
+            "INSERT INTO storage_images (username, image_id, data, mtime) "
+            "VALUES (%s, %s, %s, %s) "
+            "ON CONFLICT (username, image_id) DO UPDATE "
+            "SET data = EXCLUDED.data, mtime = EXCLUDED.mtime",
+            (username, image_id, psycopg.Binary(bytes(data)), time.time()))
+        return True
+
+    def read_image(self, username: str, image_id: str) -> bytes | None:
+        value = self._execute(
+            "SELECT data FROM storage_images WHERE username = %s AND image_id = %s",
+            (username, image_id), fetch="one")
+        return bytes(value) if value is not None else None
+
+    def delete_image(self, username: str, image_id: str) -> bool:
+        return bool(self._execute(
+            "DELETE FROM storage_images WHERE username = %s AND image_id = %s",
+            (username, image_id)))
+
+    def image_mtime(self, username: str, image_id: str) -> float | None:
+        return self._execute(
+            "SELECT mtime FROM storage_images WHERE username = %s AND image_id = %s",
+            (username, image_id), fetch="one")
+
+    def image_size(self, username: str, image_id: str) -> int | None:
+        return self._execute(
+            "SELECT octet_length(data) FROM storage_images WHERE username = %s AND image_id = %s",
+            (username, image_id), fetch="one")
+
+    def list_images(self, username: str) -> list:
+        rows = self._execute(
+            "SELECT image_id FROM storage_images WHERE username = %s", (username,), fetch="all")
+        return [r[0] for r in rows]
+
+    def image_usage(self, username: str) -> int:
+        total = self._execute(
+            "SELECT COALESCE(SUM(octet_length(data)), 0) FROM storage_images WHERE username = %s",
+            (username,), fetch="one")
+        return int(total or 0)
+
+    # ---------- 附件：storage_attachments 表 ----------
+    def write_attachment(self, username: str, attachment_id: str, data: bytes,
+                         filename: str = "", content_type: str = "application/octet-stream") -> bool:
+        self._execute(
+            "INSERT INTO storage_attachments (username, attachment_id, data, filename, content_type, mtime) "
+            "VALUES (%s, %s, %s, %s, %s, %s) "
+            "ON CONFLICT (username, attachment_id) DO UPDATE "
+            "SET data = EXCLUDED.data, filename = EXCLUDED.filename, "
+            "content_type = EXCLUDED.content_type, mtime = EXCLUDED.mtime",
+            (username, attachment_id, psycopg.Binary(bytes(data)), filename, content_type, time.time()))
+        return True
+
+    def read_attachment(self, username: str, attachment_id: str) -> bytes | None:
+        value = self._execute(
+            "SELECT data FROM storage_attachments WHERE username = %s AND attachment_id = %s",
+            (username, attachment_id), fetch="one")
+        return bytes(value) if value is not None else None
+
+    def read_attachment_meta(self, username: str, attachment_id: str) -> dict | None:
+        row = self._execute(
+            "SELECT filename, content_type, mtime, octet_length(data) "
+            "FROM storage_attachments WHERE username = %s AND attachment_id = %s",
+            (username, attachment_id), fetch="one")
+        if row is None:
+            return None
+        return {
+            "filename": row[0] or attachment_id,
+            "content_type": row[1] or "application/octet-stream",
+            "mtime": row[2],
+            "size": row[3],
+        }
+
+    def delete_attachment(self, username: str, attachment_id: str) -> bool:
+        return bool(self._execute(
+            "DELETE FROM storage_attachments WHERE username = %s AND attachment_id = %s",
+            (username, attachment_id)))
+
+    def attachment_mtime(self, username: str, attachment_id: str) -> float | None:
+        return self._execute(
+            "SELECT mtime FROM storage_attachments WHERE username = %s AND attachment_id = %s",
+            (username, attachment_id), fetch="one")
+
+    def attachment_size(self, username: str, attachment_id: str) -> int | None:
+        return self._execute(
+            "SELECT octet_length(data) FROM storage_attachments WHERE username = %s AND attachment_id = %s",
+            (username, attachment_id), fetch="one")
+
+    def list_attachments(self, username: str) -> list:
+        rows = self._execute(
+            "SELECT attachment_id FROM storage_attachments WHERE username = %s",
+            (username,), fetch="all")
+        return [r[0] for r in rows]
+
+    def attachment_usage(self, username: str) -> int:
+        total = self._execute(
+            "SELECT COALESCE(SUM(octet_length(data)), 0) FROM storage_attachments WHERE username = %s",
+            (username,), fetch="one")
+        return int(total or 0)
 
     # ---------- 锁：PG advisory lock（跨实例互斥，事务结束自动释放） ----------
     @contextmanager

@@ -14,6 +14,7 @@
     <script defer src="{{ config.GLOBAL_CDN }}/npm/dompurify@3.1.7/dist/purify.min.js"></script>
     {{ latex_head|safe }}
     {{ code_highlight_head|safe }}
+    {{ heading_anchors_head|safe }}
     <style>
         {{ theme_vars|safe }}
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -76,6 +77,9 @@
         .save-btn { position: fixed; bottom: 24px; right: 24px; background: var(--btn-bg); border: 1px solid var(--navbar-border); padding: 8px 20px; border-radius: 20px; font-size: 14px; color: var(--text); cursor: pointer; backdrop-filter: blur(4px); transition: all 0.2s; z-index: 10; font-weight: 500; }
         .save-btn:hover { background: var(--btn-hover); transform: scale(1.02); }
         .save-btn:active { background: var(--border); transform: scale(0.98); }
+        .attachment-btn { position: fixed; bottom: 70px; right: 24px; background: var(--btn-bg); border: 1px solid var(--navbar-border); padding: 8px 20px; border-radius: 20px; font-size: 14px; color: var(--text); cursor: pointer; backdrop-filter: blur(4px); transition: all 0.2s; z-index: 10; font-weight: 500; }
+        .attachment-btn:hover { background: var(--btn-hover); transform: scale(1.02); }
+        .attachment-btn:active { background: var(--border); transform: scale(0.98); }
         .pane-header.editor-header { justify-content: space-between; }
         .pane-header.preview-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
         .preview-title { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
@@ -96,6 +100,50 @@
         .save-status.saving { color: #ff9800; border-color: #ff9800; }
         .save-status.error { color: #f44336; border-color: #f44336; }
         .note-mtime { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); font-size: 12px; color: var(--muted); z-index: 10; user-select: none; }
+
+        /* 笔记快捷引用（#）：自动补全下拉框 */
+        .ref-popover { position: fixed; z-index: 40; min-width: 280px; max-width: 380px; background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,.18); overflow: hidden; display: none; }
+        .ref-popover.show { display: block; }
+        .ref-popover .ref-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 6px 12px; font-size: 12px; color: var(--muted); border-bottom: 1px solid var(--border); background: var(--navbar-bg); }
+        .ref-popover .ref-head .ref-scope { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .ref-list { max-height: 236px; overflow-y: auto; }
+        .ref-item { display: flex; align-items: center; gap: 8px; padding: 7px 12px; cursor: pointer; font-size: 14px; }
+        .ref-item .ref-id { color: var(--link); font-weight: 600; white-space: nowrap; }
+        .ref-item .ref-title { color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; }
+        .ref-item .ref-title.empty { color: var(--muted); font-style: italic; }
+        .ref-item .ref-time { font-size: 11px; color: var(--muted); white-space: nowrap; }
+        .ref-item:hover, .ref-item.active { background: var(--btn-hover); }
+        .ref-empty { padding: 10px 12px; font-size: 13px; color: var(--muted); }
+        .ref-caret-mirror { position: absolute; top: 0; left: -9999px; visibility: hidden; white-space: pre-wrap; word-wrap: break-word; overflow-wrap: break-word; z-index: -1; }
+
+        /* 笔记标签 / 文件夹：编辑器底部元信息栏（右侧预留浮动保存按钮的空间） */
+        .tag-bar { flex: 0 0 auto; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 120px 8px 20px; border-top: 1px solid var(--navbar-border); background: var(--navbar-bg); }
+        .tag-bar .tag-icon { color: var(--muted); font-size: 13px; flex-shrink: 0; }
+        .tag-bar .tag-label { font-size: 12px; color: var(--muted); flex-shrink: 0; text-transform: uppercase; letter-spacing: 0.5px; }
+        .tag-bar input { flex: 1; min-width: 120px; border: none; outline: none; background: transparent; color: var(--text); font-size: 14px; font-family: inherit; }
+        .tag-bar input::placeholder { color: var(--muted); opacity: 0.8; }
+        .tag-bar .meta-divider { width: 1px; align-self: stretch; background: var(--navbar-border); flex-shrink: 0; }
+
+        /* 大纲预览（实时预览栏目录）：按钮 + 下拉浮层 */
+        .pane-header.preview-header { position: relative; }
+        .outline-btn { background: none; border: none; padding: 2px 8px; font-size: 12px; color: var(--link); cursor: pointer; border-radius: 6px; display: inline-flex; align-items: center; gap: 5px; text-transform: none; letter-spacing: 0; white-space: nowrap; }
+        .outline-btn:hover { background: var(--btn-hover); }
+        .outline-popover {
+            position: absolute; top: 100%; left: 12px; width: min(360px, 90%);
+            max-height: 50%; overflow-y: auto; padding: 6px;
+            background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px;
+            box-shadow: 0 8px 24px rgba(0,0,0,.18); z-index: 20; display: none;
+        }
+        .outline-popover.show { display: block; }
+        .outline-popover a { display: block; padding: 5px 8px; font-size: 13px; line-height: 1.5; color: var(--text); text-decoration: none; border-radius: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .outline-popover a:hover { background: var(--btn-hover); text-decoration: none; }
+        .outline-popover a.ol-l2 { padding-left: 20px; }
+        .outline-popover a.ol-l3 { padding-left: 32px; }
+        .outline-popover a.ol-l4 { padding-left: 44px; }
+        .outline-popover a.ol-l5 { padding-left: 56px; }
+        .outline-popover a.ol-l6 { padding-left: 68px; }
+        .markdown-body h1, .markdown-body h2, .markdown-body h3,
+        .markdown-body h4, .markdown-body h5, .markdown-body h6 { scroll-margin-top: 8px; }
 
         /* Markdown preview typography (matches server-side bleach output) */
         .markdown-body h1, .markdown-body h2, .markdown-body h3 { border-bottom: 1px solid var(--heading-border); padding-bottom: 6px; margin: 16px 0 12px; }
@@ -130,6 +178,7 @@
             .navbar-brand-name { max-width: 45vw; }
             textarea { padding: 16px 18px; font-size: 15px; }
             .save-btn { bottom: 16px; right: 16px; padding: 6px 16px; font-size: 13px; }
+            .attachment-btn { bottom: 60px; right: 16px; padding: 6px 16px; font-size: 13px; }
             .save-hint { bottom: 70px; padding: 8px 16px; font-size: 12px; white-space: nowrap; }
             .save-status { bottom: 70px; right: 16px; font-size: 12px; padding: 4px 14px; }
             .note-mtime { bottom: 16px; font-size: 11px; }
@@ -151,6 +200,30 @@
             <form method="POST" action="{{ action_url }}" id="noteForm" style="display:flex; flex-direction:column; flex:1; min-height:0;">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <textarea name="content" id="noteContent" autofocus spellcheck="true">{{ content|e }}</textarea>
+                {% if note_tags_enabled or note_folders_enabled %}
+                <div class="tag-bar" id="tagBar">
+                    {% if note_tags_enabled %}
+                    <i class="fa-solid fa-tags tag-icon" aria-hidden="true"></i>
+                    <label class="tag-label" for="noteTags">{{ t('note_tags_label') }}</label>
+                    <input type="text" name="tags" id="noteTags" autocomplete="off" spellcheck="false"
+                           placeholder="{{ t('note_tags_placeholder') }}" maxlength="250"
+                           value="{{ note_tags_value|e }}">
+                    {% endif %}
+                    {% if note_tags_enabled and note_folders_enabled %}
+                    <span class="meta-divider" aria-hidden="true"></span>
+                    {% endif %}
+                    {% if note_folders_enabled %}
+                    <i class="fa-solid fa-folder tag-icon" aria-hidden="true"></i>
+                    <label class="tag-label" for="noteFolder">{{ t('note_folders_label') }}</label>
+                    <input type="text" name="folder" id="noteFolder" autocomplete="off" spellcheck="false"
+                           list="folderOptions" placeholder="{{ t('note_folders_placeholder') }}"
+                           maxlength="64" value="{{ note_folder_value|e }}">
+                    <datalist id="folderOptions">
+                        {% for f in folder_options %}<option value="{{ f|e }}"></option>{% endfor %}
+                    </datalist>
+                    {% endif %}
+                </div>
+                {% endif %}
             </form>
         </div>
         <div class="pane preview-pane">
@@ -159,14 +232,35 @@
                     <span>{{ t('note_preview_label') }}</span>
                     {% if md_manual_url %}<a class="md-manual" href="{{ md_manual_url|e }}" target="_blank" rel="noopener noreferrer">{{ t('md_manual') }}</a>{% endif %}
                 </span>
+                <button type="button" class="outline-btn" id="outlineBtn" aria-haspopup="true" aria-expanded="false" style="display:none;">
+                    <i class="fa-solid fa-list-ul" aria-hidden="true"></i>{{ t('outline_label') }}
+                </button>
+                <div class="outline-popover" id="outlinePopover" role="navigation" aria-label="{{ t('outline_label') }}"></div>
             </div>
             <div class="preview-body markdown-body" id="previewBody"></div>
         </div>
     </div>
+    {% if note_attachments_api %}
+    <input type="file" id="attachmentInput" style="display: none;" multiple>
+    <button type="button" class="attachment-btn" id="attachmentBtn">
+        <i class="fa-solid fa-paperclip" aria-hidden="true"></i> {{ t('note_attachment_btn') }}
+    </button>
+    {% endif %}
+    {% if comment_url %}
+    <a href="{{ comment_url }}" class="attachment-btn" id="commentBtn">
+        <i class="fa-solid fa-comments" aria-hidden="true"></i> {{ t('comments_title') }}
+    </a>
+    {% endif %}
     <button type="button" class="save-btn" id="saveBtn">{{ t('note_save_btn') }}</button>
     <div class="save-hint" id="saveHint">{{ hint_text|safe }}</div>
     <div class="save-status" id="saveStatus"></div>
     <div class="note-mtime" id="noteMtime">{{ last_edited }}</div>
+    {% if note_refs %}
+    <div class="ref-popover" id="refPopover" role="listbox" aria-label="{{ t('note_refs_label') }}">
+        <div class="ref-head"><span>{{ t('note_refs_label') }}</span><span class="ref-scope" id="refScope"></span></div>
+        <div class="ref-list" id="refList"></div>
+    </div>
+    {% endif %}
     <script>
         (function () {
             var GAP = 16;
@@ -222,6 +316,8 @@
         (function() {
             const form = document.getElementById('noteForm');
             const textarea = document.getElementById('noteContent');
+            const tagsInput = document.getElementById('noteTags');
+            const folderInput = document.getElementById('noteFolder');
             const saveBtn = document.getElementById('saveBtn');
             const saveHint = document.getElementById('saveHint');
             const saveStatus = document.getElementById('saveStatus');
@@ -257,6 +353,95 @@
                     updatePreview();
                 }
             });
+
+            // 图床上传：粘贴 / 拖拽图片 → 上传到当前用户名下 → 光标处插入 Markdown 引用
+            const IMAGES_API = {{ (note_images_api or '')|tojson }};
+            function uploadImage(file) {
+                if (!IMAGES_API) return;
+                showStatus(L10N.imgUploading, 'saving');
+                const fd = new FormData();
+                fd.append('file', file, file.name || 'image');
+                fd.append(CSRF_FIELD, form.querySelector('input[name="' + CSRF_FIELD + '"]').value);
+                fetch(IMAGES_API, { method: 'POST', body: fd })
+                    .then(r => r.json().then(j => {
+                        if (!r.ok) throw new Error(j.error || ('HTTP ' + r.status));
+                        return j;
+                    }))
+                    .then(data => {
+                        insertAtCursor('![' + altName(file) + '](' + data.url + ')');
+                        showStatus(L10N.imgDone, '');
+                        showHint(L10N.imgDone);
+                    })
+                    .catch(err => {
+                        showStatus(L10N.imgFailed, 'error');
+                        showHint(err.message);
+                    });
+            }
+            function altName(file) {
+                return (file && file.name ? file.name : 'image')
+                    .replace(/\.(png|jpe?g|gif|webp)$/i, '')
+                    .replace(/[\[\]]/g, '').slice(0, 60) || 'image';
+            }
+            function insertAtCursor(text) {
+                const start = textarea.selectionStart;
+                const end = textarea.selectionEnd;
+                const before = textarea.value.slice(0, start);
+                const after = textarea.value.slice(end);
+                const pad = before && !before.endsWith('\n') ? '\n\n' : '';
+                textarea.value = before + pad + text + '\n' + after;
+                const caret = (before + pad + text).length;
+                textarea.focus();
+                textarea.selectionStart = textarea.selectionEnd = caret;
+                textarea.dispatchEvent(new Event('input', { bubbles: true }));
+            }
+            function pickImage(files) {
+                if (!files || !files.length) return null;
+                for (let i = 0; i < files.length; i++) {
+                    if (files[i].type && files[i].type.indexOf('image/') === 0) return files[i];
+                }
+                return null;
+            }
+            textarea.addEventListener('paste', function(e) {
+                if (!IMAGES_API) return;
+                const img = pickImage(e.clipboardData && e.clipboardData.files);
+                if (!img) return;
+                e.preventDefault();
+                uploadImage(img);
+            });
+            ['dragover', 'dragenter'].forEach(function(evt) {
+                textarea.addEventListener(evt, function(e) { e.preventDefault(); });
+            });
+            textarea.addEventListener('drop', function(e) {
+                if (!IMAGES_API) return;
+                const img = pickImage(e.dataTransfer && e.dataTransfer.files);
+                if (!img) return;
+                e.preventDefault();
+                uploadImage(img);
+            });
+
+            // 附件上传：选择文件 → 上传到当前用户名下 → 光标处插入 Markdown 链接
+            const ATTACHMENTS_API = {{ (note_attachments_api or '')|tojson }};
+            function uploadAttachment(file) {
+                if (!ATTACHMENTS_API) return;
+                showStatus(L10N.attUploading, 'saving');
+                const fd = new FormData();
+                fd.append('file', file, file.name || 'file');
+                fd.append(CSRF_FIELD, form.querySelector('input[name="' + CSRF_FIELD + '"]').value);
+                fetch(ATTACHMENTS_API, { method: 'POST', body: fd })
+                    .then(r => r.json().then(j => {
+                        if (!r.ok) throw new Error(j.error || ('HTTP ' + r.status));
+                        return j;
+                    }))
+                    .then(data => {
+                        insertAtCursor('[' + data.name + '](' + data.url + ')');
+                        showStatus(L10N.attDone, '');
+                        showHint(L10N.attDone);
+                    })
+                    .catch(err => {
+                        showStatus(L10N.attFailed, 'error');
+                        showHint(err.message);
+                    });
+            }
 
             function showHint(message) {
                 if (message) saveHint.innerHTML = message;
@@ -298,6 +483,24 @@
                 }
             });
 
+            // 附件上传按钮
+            var attachmentBtn = document.getElementById('attachmentBtn');
+            var attachmentInput = document.getElementById('attachmentInput');
+            if (attachmentBtn && attachmentInput) {
+                attachmentBtn.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    attachmentInput.click();
+                });
+                attachmentInput.addEventListener('change', function(e) {
+                    var files = e.target.files;
+                    if (!files || !files.length) return;
+                    for (var i = 0; i < files.length; i++) {
+                        uploadAttachment(files[i]);
+                    }
+                    attachmentInput.value = '';
+                });
+            }
+
             saveBtn.addEventListener('click', function(e) {
                 e.preventDefault();
                 saveNote();
@@ -309,10 +512,13 @@
                 showStatus(L10N.saving, 'saving');
                 const content = textarea.value;
                 const csrfValue = form.querySelector('input[name="' + CSRF_FIELD + '"]').value;
+                let body = 'content=' + encodeURIComponent(content) + '&' + CSRF_FIELD + '=' + encodeURIComponent(csrfValue);
+                if (tagsInput) body += '&tags=' + encodeURIComponent(tagsInput.value);
+                if (folderInput) body += '&folder=' + encodeURIComponent(folderInput.value);
                 fetch(window.location.href, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                    body: 'content=' + encodeURIComponent(content) + '&' + CSRF_FIELD + '=' + encodeURIComponent(csrfValue)
+                    body: body
                 })
                 .then(response => {
                     isSaving = false;
@@ -337,6 +543,7 @@
                 const raw = textarea.value;
                 if (!raw.trim()) {
                     previewBody.innerHTML = '';
+                    if (window.NoteOutline) window.NoteOutline.refresh();
                     return;
                 }
                 let html = '';
@@ -349,7 +556,9 @@
                     });
                 }
                 previewBody.innerHTML = html;
+                if (window.NoteRefs) window.NoteRefs.linkify(previewBody);
                 if (window.CodeHighlight) window.CodeHighlight.apply(previewBody);
+                if (window.HeadingAnchors) window.HeadingAnchors.apply(previewBody);
                 if (window.renderMathInElement) {
                     window.renderMathInElement(previewBody, {
                         delimiters: [
@@ -361,6 +570,7 @@
                         throwOnError: false
                     });
                 }
+                if (window.NoteOutline) window.NoteOutline.refresh();
             }
 
             function applyPreviewState() {
@@ -418,6 +628,375 @@
             }
             setTimeout(autoResize, 100);
             textarea.addEventListener('input', autoResize);
+
+            // ---------- 图片上传（粘贴/拖拽） ----------
+            const MAX_UPLOAD_SIZE = 200 * 1024; // 200KB
+
+            function insertAtCursor(text) {
+                const start = textarea.selectionStart;
+                const end = textarea.selectionEnd;
+                const before = textarea.value.slice(0, start);
+                const after = textarea.value.slice(end);
+                textarea.value = before + text + after;
+                textarea.selectionStart = textarea.selectionEnd = start + text.length;
+                textarea.dispatchEvent(new Event('input'));
+            }
+
+            async function uploadImage(file) {
+                if (!file) return;
+                if (file.size > MAX_UPLOAD_SIZE) {
+                    showHint('图片大小不能超过 200KB');
+                    return;
+                }
+                const formData = new FormData();
+                formData.append('file', file);
+                formData.append('csrf_token', form.querySelector('[name="csrf_token"]').value);
+                try {
+                    showStatus('上传中…', 'saving');
+                    const resp = await fetch('/upload', { method: 'POST', body: formData });
+                    if (!resp.ok) {
+                        showStatus('上传失败', 'error');
+                        showHint('图片上传失败，请重试');
+                        return;
+                    }
+                    const data = await resp.json();
+                    if (data.error) {
+                        showStatus('上传失败', 'error');
+                        showHint(data.error);
+                        return;
+                    }
+                    insertAtCursor('![](' + data.url + ')');
+                    showStatus('已上传', '');
+                } catch (e) {
+                    showStatus('上传失败', 'error');
+                    showHint('网络错误，请重试');
+                }
+            }
+
+            // 粘贴上传
+            textarea.addEventListener('paste', async (e) => {
+                const items = [...e.clipboardData.items];
+                for (const item of items) {
+                    if (item.type.startsWith('image/')) {
+                        e.preventDefault();
+                        await uploadImage(item.getAsFile());
+                        return;
+                    }
+                }
+            });
+
+            // 拖拽上传
+            textarea.addEventListener('dragover', (e) => {
+                const hasImage = [...e.dataTransfer.items].some(i => i.type.startsWith('image/'));
+                if (hasImage) {
+                    e.preventDefault();
+                    textarea.style.caretColor = 'transparent';
+                }
+            });
+            textarea.addEventListener('dragleave', () => {
+                textarea.style.caretColor = '';
+            });
+            textarea.addEventListener('drop', async (e) => {
+                const items = [...e.dataTransfer.items];
+                for (const item of items) {
+                    if (item.type.startsWith('image/')) {
+                        e.preventDefault();
+                        textarea.style.caretColor = '';
+                        await uploadImage(item.getAsFile());
+                        return;
+                    }
+                }
+            });
+        })();
+    </script>
+    <script>
+        /* 笔记快捷引用（#87）：编辑器中输入 # 弹出自己笔记的自动补全，
+           实时预览中把已存在笔记的 #id 渲染为链接（与服务端渲染规则一致）。 */
+        (function() {
+            const REFS = {{ (note_refs or none)|tojson }};
+            const L10N = {{ l10n|tojson }};
+            const textarea = document.getElementById('noteContent');
+            const popover = document.getElementById('refPopover');
+
+            // 与服务端 utils.expand_note_refs 相同的排除集（JS 用分组替代 lookbehind）
+            const REF_TEXT_RE = /(^|[^\w#"'\(\[\/\\])#([A-Za-z0-9][A-Za-z0-9_\-]*)/g;
+            const refIds = new Set((REFS && REFS.ids) || []);
+
+            function linkify(root) {
+                if (!REFS || refIds.size === 0) return;
+                const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+                    acceptNode: function(node) {
+                        const p = node.parentNode;
+                        if (!p) return NodeFilter.FILTER_REJECT;
+                        const tag = p.nodeName;
+                        if (tag === 'CODE' || tag === 'PRE' || tag === 'A' || tag === 'SCRIPT' || tag === 'STYLE')
+                            return NodeFilter.FILTER_REJECT;
+                        return node.nodeValue.indexOf('#') === -1
+                            ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT;
+                    }
+                });
+                const targets = [];
+                while (walker.nextNode()) targets.push(walker.currentNode);
+                targets.forEach(function(node) {
+                    const text = node.nodeValue;
+                    let m, last = 0, found = false;
+                    const frag = document.createDocumentFragment();
+                    REF_TEXT_RE.lastIndex = 0;
+                    while ((m = REF_TEXT_RE.exec(text)) !== null) {
+                        const id = m[2];
+                        if (id.length > 250 || !refIds.has(id)) continue;
+                        found = true;
+                        const at = m.index + m[1].length;
+                        frag.appendChild(document.createTextNode(text.slice(last, at)));
+                        const a = document.createElement('a');
+                        a.href = REFS.prefix + '/' + id;
+                        a.textContent = '#' + id;
+                        frag.appendChild(a);
+                        last = at + 1 + id.length;
+                    }
+                    if (found) {
+                        frag.appendChild(document.createTextNode(text.slice(last)));
+                        node.parentNode.replaceChild(frag, node);
+                    }
+                });
+            }
+            window.NoteRefs = { linkify: linkify };
+
+            if (!REFS || !popover) return;
+
+            // ---------- 自动补全下拉框 ----------
+            // 光标前紧邻的未闭合 #token（前面须是行首/空白/括号等分隔符）
+            const TOKEN_RE = /(?:^|[\s*_~>（(「【\[<"'，。；：、！？])(#[A-Za-z0-9_\-]*)$/;
+            let items = [];
+            let activeIndex = 0;
+            let tokenStart = -1;
+            let fetchTimer = null;
+            let fetchSeq = 0;
+            let lastTokenKey = null;   // 当前已渲染的 token（未变化则不重渲染，避免方向键导航被 keyup 重置）
+            let suppressedStart = -2;  // Esc 关闭后记录 token 位置，token 变化/点击前不再弹出
+            const queryCache = new Map();
+
+            function currentToken() {
+                const pos = textarea.selectionStart;
+                if (pos !== textarea.selectionEnd) return null;
+                const m = TOKEN_RE.exec(textarea.value.slice(0, pos));
+                if (!m) return null;
+                return { start: pos - m[1].length, query: m[1].slice(1) };
+            }
+
+            let mirror = null;
+            function caretCoords() {
+                if (!mirror) {
+                    mirror = document.createElement('div');
+                    mirror.className = 'ref-caret-mirror';
+                    document.body.appendChild(mirror);
+                    const cs = getComputedStyle(textarea);
+                    ['fontFamily', 'fontSize', 'fontWeight', 'lineHeight', 'letterSpacing',
+                     'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft',
+                     'borderTopWidth', 'borderRightWidth', 'borderBottomWidth', 'borderLeftWidth',
+                     'boxSizing', 'width', 'textIndent'].forEach(function(p) {
+                        mirror.style[p] = cs[p];
+                    });
+                }
+                mirror.textContent = textarea.value.slice(0, textarea.selectionStart);
+                const marker = document.createElement('span');
+                marker.textContent = '\u200b';
+                mirror.appendChild(marker);
+                const base = mirror.getBoundingClientRect();
+                const mRect = marker.getBoundingClientRect();
+                const taRect = textarea.getBoundingClientRect();
+                const top = taRect.top + (mRect.top - base.top) - textarea.scrollTop;
+                const left = taRect.left + (mRect.left - base.left) - textarea.scrollLeft;
+                return { top: top, left: left };
+            }
+
+            function positionPopover() {
+                const c = caretCoords();
+                const pw = popover.offsetWidth || 300;
+                let left = Math.max(8, Math.min(c.left, window.innerWidth - pw - 8));
+                let top = c.top + 22;
+                if (top + 280 > window.innerHeight) top = Math.max(8, c.top - 258);
+                popover.style.left = left + 'px';
+                popover.style.top = top + 'px';
+            }
+
+            function highlight() {
+                const rows = popover.querySelectorAll('.ref-item');
+                rows.forEach(function(el, i) { el.classList.toggle('active', i === activeIndex); });
+                if (rows[activeIndex]) rows[activeIndex].scrollIntoView({ block: 'nearest' });
+            }
+
+            function renderItems(list, query) {
+                items = list;
+                activeIndex = 0;
+                document.getElementById('refScope').textContent = query ? '#' + query : L10N.refRecent;
+                const box = document.getElementById('refList');
+                box.textContent = '';
+                if (!list.length) {
+                    const d = document.createElement('div');
+                    d.className = 'ref-empty';
+                    d.textContent = L10N.refNoMatch;
+                    box.appendChild(d);
+                    return;
+                }
+                list.forEach(function(it, i) {
+                    const row = document.createElement('div');
+                    row.className = 'ref-item';
+                    row.setAttribute('role', 'option');
+                    const id = document.createElement('span');
+                    id.className = 'ref-id';
+                    id.textContent = '#' + it.id;
+                    const title = document.createElement('span');
+                    title.className = 'ref-title' + (it.title ? '' : ' empty');
+                    title.textContent = it.title || '—';
+                    const time = document.createElement('span');
+                    time.className = 'ref-time';
+                    time.textContent = it.mtime ? new Date(it.mtime * 1000).toLocaleDateString() : '';
+                    row.appendChild(id); row.appendChild(title); row.appendChild(time);
+                    row.addEventListener('mousedown', function(e) { e.preventDefault(); choose(i); });
+                    box.appendChild(row);
+                });
+                highlight();
+            }
+
+            function loadQuery(q) {
+                if (queryCache.has(q)) { renderItems(queryCache.get(q), q); return; }
+                clearTimeout(fetchTimer);
+                fetchTimer = setTimeout(function() {
+                    const seq = ++fetchSeq;
+                    fetch(REFS.api + '?q=' + encodeURIComponent(q), { headers: { 'Accept': 'application/json' } })
+                        .then(function(r) { if (!r.ok) throw new Error(r.status); return r.json(); })
+                        .then(function(data) {
+                            if (seq !== fetchSeq) return;
+                            const list = (data && data.items) || [];
+                            if (queryCache.size > 60) queryCache.clear();
+                            queryCache.set(q, list);
+                            renderItems(list, q);
+                        })
+                        .catch(function() {});
+                }, 200);
+            }
+
+            function update(fromInput) {
+                const tok = currentToken();
+                if (!tok) { hide(); return; }
+                // Esc 挂起：token 未变（如方向键的 keyup）不重新弹出
+                if (suppressedStart === tok.start && !fromInput) return;
+                const key = tok.start + ':' + tok.query;
+                if (isOpen() && key === lastTokenKey) return;  // 未变化，保持当前列表与选中项
+                suppressedStart = -2;
+                lastTokenKey = key;
+                tokenStart = tok.start;
+                popover.classList.add('show');
+                positionPopover();
+                loadQuery(tok.query);
+            }
+
+            function hide() {
+                popover.classList.remove('show');
+                clearTimeout(fetchTimer);
+                fetchSeq++;
+                lastTokenKey = null;
+            }
+
+            function isOpen() { return popover.classList.contains('show'); }
+
+            function choose(i) {
+                const it = items[i];
+                if (!it) return;
+                const end = textarea.selectionStart;
+                const rest = /^[A-Za-z0-9_\-]*/.exec(textarea.value.slice(end));
+                const insert = '#' + it.id + ' ';
+                textarea.value = textarea.value.slice(0, tokenStart) + insert
+                    + textarea.value.slice(end + (rest ? rest[0].length : 0));
+                const caret = tokenStart + insert.length;
+                textarea.focus();
+                textarea.selectionStart = textarea.selectionEnd = caret;
+                hide();
+                textarea.dispatchEvent(new Event('input', { bubbles: true }));
+            }
+
+            // 键盘导航用捕获阶段拦截，避免触发 Tab 插入空格等既有编辑器快捷键
+            document.addEventListener('keydown', function(e) {
+                if (!isOpen() || document.activeElement !== textarea || e.isComposing) return;
+                if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+                    e.preventDefault(); e.stopPropagation();
+                    if (!items.length) return;
+                    activeIndex = (activeIndex + (e.key === 'ArrowDown' ? 1 : items.length - 1)) % items.length;
+                    highlight();
+                } else if (e.key === 'Enter' || e.key === 'Tab') {
+                    if (!items.length) return;  // 无候选项：放行默认行为（换行 / 既有 Tab 处理）
+                    e.preventDefault(); e.stopPropagation();
+                    choose(activeIndex);
+                } else if (e.key === 'Escape') {
+                    e.preventDefault(); e.stopPropagation();
+                    suppressedStart = tokenStart;
+                    hide();
+                }
+            }, true);
+
+            ['input', 'click', 'keyup'].forEach(function(evt) {
+                textarea.addEventListener(evt, function() { update(evt !== 'keyup'); });
+            });
+            textarea.addEventListener('focus', update);
+            textarea.addEventListener('blur', hide);
+            textarea.addEventListener('scroll', hide);
+        })();
+    </script>
+    <script>
+        /* 大纲预览：实时预览栏的标题目录。每次预览渲染后由 updatePreview 调用
+           refresh() 重建列表，点击条目滚动预览区定位到对应章节。 */
+        (function() {
+            const btn = document.getElementById('outlineBtn');
+            const pop = document.getElementById('outlinePopover');
+            const previewBody = document.getElementById('previewBody');
+            if (!btn || !pop || !previewBody) return;
+
+            let headings = [];
+
+            function refresh() {
+                headings = [];
+                let minLevel = 7;
+                previewBody.querySelectorAll('h1,h2,h3,h4,h5,h6').forEach(function(h) {
+                    const l = parseInt(h.tagName.charAt(1), 10);
+                    if (l >= 1 && l <= 6) {
+                        minLevel = Math.min(minLevel, l);
+                        headings.push({ el: h, level: l });
+                    }
+                });
+                btn.style.display = headings.length ? '' : 'none';
+                if (!headings.length) { hide(); pop.textContent = ''; return; }
+                pop.textContent = '';
+                headings.forEach(function(h, i) {
+                    if (!h.el.id) h.el.id = 'pv-outline-' + i;
+                    const a = document.createElement('a');
+                    a.href = '#' + h.el.id;
+                    // 缩进相对最浅标题计算，与服务端只读页大纲规则一致
+                    a.className = 'ol-l' + Math.min(h.level - minLevel + 1, 6);
+                    a.textContent = h.el.textContent;
+                    a.addEventListener('click', function(e) {
+                        e.preventDefault();
+                        hide();
+                        h.el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    });
+                    pop.appendChild(a);
+                });
+            }
+
+            function isOpen() { return pop.classList.contains('show'); }
+            function hide() { pop.classList.remove('show'); btn.setAttribute('aria-expanded', 'false'); }
+            btn.addEventListener('click', function() {
+                pop.classList.toggle('show');
+                btn.setAttribute('aria-expanded', isOpen() ? 'true' : 'false');
+            });
+            document.addEventListener('click', function(e) {
+                if (isOpen() && !pop.contains(e.target) && !btn.contains(e.target)) hide();
+            });
+            document.addEventListener('keydown', function(e) {
+                if (e.key === 'Escape' && isOpen()) hide();
+            });
+
+            window.NoteOutline = { refresh: refresh };
         })();
     </script>
 </body>

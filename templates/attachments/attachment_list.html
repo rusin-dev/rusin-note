@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+{% block extra_head %}
+<style>
+    .attachment-usage { color: var(--muted); font-size: 14px; margin: 12px 0 20px; }
+    .attachment-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; }
+    .attachment-card {
+        background: var(--card-bg); border: 1px solid var(--card-border);
+        border-radius: 10px; padding: 12px; display: flex; flex-direction: column; gap: 8px;
+    }
+    .attachment-icon {
+        height: 80px; display: flex; align-items: center; justify-content: center;
+        background: var(--code-bg); border-radius: 6px; overflow: hidden;
+        font-size: 32px; color: var(--muted);
+    }
+    .attachment-name { font-family: Consolas, monospace; font-size: 12px; word-break: break-all; }
+    .attachment-name a { color: var(--link); text-decoration: none; }
+    .attachment-name a:hover { text-decoration: underline; }
+    .attachment-meta { color: var(--muted); font-size: 12px; display: flex; justify-content: space-between; gap: 8px; }
+    .attachment-card form { margin-top: auto; }
+    .btn-sm { width: auto; padding: 4px 14px; font-size: 13px; }
+    .upload-zone {
+        border: 2px dashed var(--card-border); border-radius: 10px; padding: 24px;
+        text-align: center; margin-bottom: 20px; cursor: pointer; transition: all 0.2s;
+    }
+    .upload-zone:hover { border-color: var(--link); background: var(--card-bg); }
+    .upload-zone.dragover { border-color: var(--link); background: var(--card-bg); }
+    .upload-zone input[type="file"] { display: none; }
+    .upload-zone p { margin: 0; color: var(--muted); font-size: 14px; }
+    .upload-zone i { font-size: 24px; margin-bottom: 8px; color: var(--muted); }
+    .upload-status { margin-top: 12px; font-size: 13px; color: var(--muted); }
+    .upload-status.error { color: #e74c3c; }
+    .upload-status.success { color: #27ae60; }
+</style>
+{% endblock %}
+{% block content %}
+<h1>{{ t('attachments_title') }}</h1>
+{% if error %}<p class="error">{{ error }}</p>{% endif %}
+<p class="attachment-usage">{{ usage_text }}</p>
+
+<div class="upload-zone" id="uploadZone">
+    <i class="fa-solid fa-cloud-arrow-up"></i>
+    <p>{{ t('attachments_upload_hint') }}</p>
+    <p style="font-size: 12px; margin-top: 8px;">{{ t('attachments_upload_limit', max=max_size_kb) }}</p>
+    <input type="file" id="attachmentFileInput" multiple>
+</div>
+<div class="upload-status" id="uploadStatus"></div>
+
+<div class="attachment-grid">
+    {% for row in rows %}
+    <div class="attachment-card">
+        <div class="attachment-icon"><i class="fa-solid fa-file"></i></div>
+        <div class="attachment-name"><a href="{{ row.url }}" target="_blank" rel="noopener noreferrer">{{ row.filename|e }}</a></div>
+        <div class="attachment-meta"><span>{{ row.size }}</span><span>{{ row.mtime }}</span></div>
+        <form method="POST" action="/user/{{ username|e }}/attachments/delete"
+              onsubmit="return confirm('{{ t('attachments_delete_confirm') }}');">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="attachment_id" value="{{ row.id|e }}">
+            <button type="submit" class="btn-sm">{{ t('attachments_delete') }}</button>
+        </form>
+    </div>
+    {% else %}
+    <p class="empty">{{ t('attachments_empty') }}</p>
+    {% endfor %}
+</div>
+<p style="margin-top: 24px;"><a href="/user/{{ username|e }}/">{{ t('attachments_back') }}</a></p>
+
+<script>
+(function() {
+    var zone = document.getElementById('uploadZone');
+    var input = document.getElementById('attachmentFileInput');
+    var status = document.getElementById('uploadStatus');
+    var csrfToken = '{{ csrf_token() }}';
+    var uploadApi = '/user/{{ username|e }}/attachments';
+
+    zone.addEventListener('click', function() { input.click(); });
+    zone.addEventListener('dragover', function(e) { e.preventDefault(); zone.classList.add('dragover'); });
+    zone.addEventListener('dragleave', function() { zone.classList.remove('dragover'); });
+    zone.addEventListener('drop', function(e) {
+        e.preventDefault();
+        zone.classList.remove('dragover');
+        uploadFiles(e.dataTransfer.files);
+    });
+    input.addEventListener('change', function() {
+        uploadFiles(input.files);
+        input.value = '';
+    });
+
+    function uploadFiles(files) {
+        if (!files || !files.length) return;
+        for (var i = 0; i < files.length; i++) {
+            uploadFile(files[i]);
+        }
+    }
+
+    function uploadFile(file) {
+        status.textContent = '{{ t("note_attachments_uploading") }} ' + file.name;
+        status.className = 'upload-status';
+        var fd = new FormData();
+        fd.append('file', file, file.name);
+        fd.append('csrf_token', csrfToken);
+        fetch(uploadApi, { method: 'POST', body: fd })
+            .then(function(r) { return r.json().then(function(j) { return { ok: r.ok, data: j }; }); })
+            .then(function(res) {
+                if (!res.ok) throw new Error(res.data.error || 'HTTP error');
+                status.textContent = '{{ t("note_attachments_done") }}: ' + res.data.name;
+                status.className = 'upload-status success';
+                setTimeout(function() { location.reload(); }, 1000);
+            })
+            .catch(function(err) {
+                status.textContent = '{{ t("note_attachments_failed") }}: ' + err.message;
+                status.className = 'upload-status error';
+            });
+    }
+})();
+</script>
+{% endblock %}

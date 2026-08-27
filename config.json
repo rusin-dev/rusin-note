@@ -71,12 +71,65 @@
     "live_preview_default": false,
     "markdown_manual_url": "https://markdown.com.cn"
   },
+  "note_refs": {
+    "enabled": true,
+    "search_limit": 8,
+    "scan_limit": 100
+  },
   "avatar": {
     "enabled": true,
     "url_template": "https://cn.cravatar.com/avatar/{hash}?d=identicon&f=y",
     "size": 24
   },
+  "images": {
+    "enabled": true,
+    "max_size_kb": 2048,
+    "max_total_kb": 51200
+  },
+  "attachments": {
+    "enabled": true,
+    "max_size_kb": 10240,
+    "max_total_kb": 10240,
+    "blocked_extensions": [
+      "exe", "bat", "cmd", "com", "msi", "scr", "pif",
+      "vbs", "vbe", "js", "jse", "ws", "wsf", "wsc", "wsh",
+      "ps1", "psm1", "psd1", "psc1", "psc2",
+      "reg", "inf", "hta", "cpl", "lnk", "url",
+      "sh", "bash", "csh", "ksh", "zsh", "fish",
+      "command", "app", "workflow", "scpt", "applescript",
+      "dylib", "so", "dll", "class", "jar",
+      "py", "pyc", "pyo", "pyd", "rb", "pl", "pm", "tcl", "tk",
+      "zip", "zipx", "rar", "7z", "cab", "lzh", "ace", "arc", "arj",
+      "tar", "tar.gz", "tgz", "tpz", "gz", "bz2", "xz", "z",
+      "deb", "rpm", "dmg", "iso", "img", "bin"
+    ]
+  },
+  "comments": {
+    "enabled": true,
+    "max_length": 1024,
+    "max_comments": 200,
+    "cooldown_seconds": 3,
+    "page_size": 50,
+    "max_height_px": 1000
+  },
+  "features": {
+    "world_notes": true,
+    "benben": true,
+    "share_links": true,
+    "open_register": true,
+    "note_tags": true,
+    "note_folders": true,
+    "note_pins": true,
+    "heading_anchors": true,
+    "note_images": true,
+    "note_attachments": true,
+    "comments": true
+  },
+  "admin_users": [],
   "max_note_id_length": 250,
+  "max_note_tags": 10,
+  "max_tag_length": 24,
+  "max_folder_name_length": 32,
   "logger": {
     "max_size": 4294967296,
     "path_pattern": "log/{timestamp}.log"

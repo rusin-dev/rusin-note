@@ -13,16 +13,17 @@
             <a href="https://github.com/rusin-dev/rusin-note">Github</a>
             <a href="/user/{{ current_user|e }}/"><i class="fa-solid fa-file-lines" aria-hidden="true"></i>{{ t('nav_my_notes') }}</a>
             <a href="/user/{{ current_user|e }}/new"><i class="fa-solid fa-square-plus" aria-hidden="true"></i>{{ t('nav_new_note') }}</a>
-            <a href="/user/{{ current_user|e }}/shares/"><i class="fa-solid fa-share-nodes" aria-hidden="true"></i>{{ t('nav_share_mgmt') }}</a>
-            <a href="/benben"><i class="fa-solid fa-sticky-note" aria-hidden="true"></i>{{ t('nav_benben') }}</a>
+            {% if feature_enabled('share_links') %}<a href="/user/{{ current_user|e }}/shares/"><i class="fa-solid fa-share-nodes" aria-hidden="true"></i>{{ t('nav_share_mgmt') }}</a>{% endif %}
+            {% if feature_enabled('benben') %}<a href="/benben"><i class="fa-solid fa-sticky-note" aria-hidden="true"></i>{{ t('nav_benben') }}</a>{% endif %}
+            {% if feature_enabled('orgs') %}<a href="/org/mine"><i class="fa-solid fa-users" aria-hidden="true"></i>{{ t('nav_orgs') }}</a>{% endif %}
             <a href="/logout"><i class="fa-solid fa-right-from-bracket" aria-hidden="true"></i>{{ t('nav_logout') }}</a>
         </span>
     {% else %}
         <span class="user-info">{{ t('nav_anonymous') }}</span>
         <span class="nav-links">
-            <a href="/register"><i class="fa-solid fa-user-plus" aria-hidden="true"></i>{{ t('nav_register') }}</a>
+            {% if feature_enabled('open_register') %}<a href="/register"><i class="fa-solid fa-user-plus" aria-hidden="true"></i>{{ t('nav_register') }}</a>{% endif %}
             <a href="/login"><i class="fa-solid fa-right-to-bracket" aria-hidden="true"></i>{{ t('nav_login') }}</a>
-            <a href="/benben"><i class="fa-solid fa-sticky-note" aria-hidden="true"></i>{{ t('nav_benben') }}</a>
+            {% if feature_enabled('benben') %}<a href="/benben"><i class="fa-solid fa-sticky-note" aria-hidden="true"></i>{{ t('nav_benben') }}</a>{% endif %}
             <a href="/count"><i class="fa-solid fa-chart-simple" aria-hidden="true"></i>{{ t('nav_stats') }}</a>
             <a href="/disclaimer"><i class="fa-solid fa-circle-info" aria-hidden="true"></i>{{ t('nav_disclaimer') }}</a>
         </span>

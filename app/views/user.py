@@ -1,10 +1,37 @@
 """私有笔记与分享管理：/user/<u>、/user/<u>/<id>、/user/<u>/shares/*"""
 import re
-from flask import Blueprint, abort, g, redirect, render_template, request, url_for
+from flask import Blueprint, abort, g, jsonify, redirect, render_template, request, url_for
 
 from .. import config
 from ..extensions import cache, limiter
 from ..i18n import t
+from ..feature_flags import feature_enabled, require_feature
+from ..images import (
+    delete_image,
+    generate_image_id,
+    get_image_mtime,
+    get_image_size,
+    image_url,
+    list_user_images,
+    sniff_image_format,
+    user_image_usage,
+    validate_image_id,
+    write_image,
+)
+from ..attachments import (
+    attachment_content_type,
+    attachment_url,
+    delete_attachment,
+    generate_attachment_id,
+    get_attachment_mtime,
+    get_attachment_size,
+    list_user_attachments,
+    read_attachment_meta,
+    user_attachment_usage,
+    validate_attachment_id,
+    validate_attachment_type,
+    write_attachment,
+)
 from ..middleware import get_current_user
 from ..notes import (
     generate_random_id,
@@ -13,17 +40,33 @@ from ..notes import (
     list_user_notes,
     note_exists,
     read_note,
+    search_user_notes,
     validate_note_id,
     validate_username,
     write_note,
 )
+from ..folders import (
+    get_note_folder,
+    get_user_note_folders,
+    list_user_folders,
+    parse_folder_input,
+    set_note_folder,
+)
+from ..pins import get_user_pins, toggle_note_pin
 from ..store import (
     create_share,
     delete_share,
     list_user_shares,
 )
+from ..tags import (
+    count_user_tags,
+    get_note_tags,
+    get_user_note_tags,
+    parse_tag_input,
+    set_note_tags,
+)
 from ..utils import format_note_time, format_size, render_latex_head, render_markdown_html
-from ._helpers import build_note_context, check_note_id
+from ._helpers import build_note_context, check_note_id, page_cache_key, purge_page_cache
 
 
 bp = Blueprint("user", __name__)
@@ -34,25 +77,67 @@ def _require_auth(username: str):
         abort(401)
 
 
+def _list_view_filtered() -> bool:
+    """?tag= / ?folder= 筛选视图不缓存：置顶切换、标签/文件夹保存等写操作
+    只清理未过滤的基础缓存键，筛选变体若参与缓存会向刚操作完的用户展示
+    过期内容（写后立即可见优先于这部分缓存收益；未过滤列表仍正常缓存）。"""
+    return bool((request.args.get("tag") or "").strip()
+                or (request.args.get("folder") or "").strip())
+
+
 @bp.route("/user/<username>", methods=["GET"])
 @bp.route("/user/<username>/", methods=["GET"])
 @limiter.limit(lambda: f"{config.GET_RATE_MAX} per {config.GET_RATE_WINDOW} second")
-@cache.cached(timeout=config.CACHE_TIMEOUT_NOTES)
+@cache.cached(timeout=config.CACHE_TIMEOUT_NOTES, make_cache_key=page_cache_key,
+              unless=_list_view_filtered)
 def user_root(username):
     if not validate_username(username):
         abort(400)
     _require_auth(username)
     notes = list_user_notes(username)
-    items = []
+    # 笔记标签 / 文件夹 / 置顶（仅私有笔记）：筛选云 + ?tag= / ?folder= 组合筛选
+    tags_enabled = feature_enabled("note_tags")
+    folders_enabled = feature_enabled("note_folders")
+    pins_enabled = feature_enabled("note_pins")
+    user_tags = get_user_note_tags(username) if tags_enabled else {}
+    user_folders = get_user_note_folders(username) if folders_enabled else {}
+    user_pins = get_user_pins(username) if pins_enabled else {}
+    tag_cloud = count_user_tags(username, note_ids=set(notes)) if tags_enabled else []
+    folder_cloud = list_user_folders(username, note_ids=set(notes)) if folders_enabled else []
+    active_tag = (request.args.get("tag") or "").strip()[:config.MAX_TAG_LENGTH] if tags_enabled else ""
+    active_folder = (request.args.get("folder") or "").strip()[:config.MAX_FOLDER_NAME_LENGTH] if folders_enabled else ""
+    # 排序：置顶笔记在前（组内按置顶时间倒序），其余按修改时间倒序
+    rows = []
     for nid in notes:
-        mtime = get_note_mtime(username, nid)
-        size = get_note_size(username, nid)
+        if active_tag and active_tag not in user_tags.get(nid, []):
+            continue
+        if active_folder and user_folders.get(nid) != active_folder:
+            continue
+        rows.append((nid, get_note_mtime(username, nid) or 0, get_note_size(username, nid)))
+    rows.sort(key=lambda r: (1, user_pins.get(r[0], 0)) if r[0] in user_pins else (0, r[1]),
+              reverse=True)
+    items = []
+    for nid, mtime, size in rows:
         items.append({
             "id": nid,
             "mtime": format_note_time(mtime) if mtime else "",
             "size": format_size(size) if size is not None else "",
+            "tags": user_tags.get(nid, []),
+            "folder": user_folders.get(nid, "") if folders_enabled else "",
+            "pinned": nid in user_pins,
         })
-    return render_template("notes/user_list.html", username=username, items=items)
+    return render_template(
+        "notes/user_list.html",
+        username=username,
+        items=items,
+        tags_enabled=tags_enabled,
+        tag_cloud=tag_cloud,
+        active_tag=active_tag,
+        folders_enabled=folders_enabled,
+        folder_cloud=folder_cloud,
+        active_folder=active_folder,
+        pins_enabled=pins_enabled,
+    )
 
 
 @bp.route("/user/<username>/new", methods=["GET"])
@@ -65,6 +150,214 @@ def user_new(username):
     return redirect(url_for("user.user_note_get", username=username, note_id=new_id))
 
 
+@bp.route("/user/<username>/refs", methods=["GET"])
+@limiter.limit(lambda: f"{config.GET_RATE_MAX} per {config.GET_RATE_WINDOW} second")
+def user_refs_search(username):
+    """快捷引用搜索 API（#87）：返回当前用户笔记中 ID / 首行标题匹配 q 的笔记。
+
+    必须注册在 /user/<username>/<note_id> 之前，否则 refs 会被当作笔记 ID。
+    结果含笔记标题，不缓存（按查询词与登录用户隔离）。
+    """
+    if not validate_username(username):
+        abort(400)
+    _require_auth(username)
+    if not feature_enabled("note_refs"):
+        abort(404)
+    q = (request.args.get("q") or "").strip()[:64]
+    return jsonify({"items": search_user_notes(username, q)})
+
+
+# ---------- 笔记图床：/user/<u>/images（管理页 + 编辑器上传 API） ----------
+# 必须注册在 /user/<username>/<note_id> 之前，否则 images 会被当作笔记 ID
+@bp.route("/user/<username>/images", methods=["GET"])
+@require_feature("note_images")
+@limiter.limit(lambda: f"{config.GET_RATE_MAX} per {config.GET_RATE_WINDOW} second")
+def images_page(username):
+    if not validate_username(username):
+        abort(400)
+    _require_auth(username)
+    return _render_images(username, error="")
+
+
+@bp.route("/user/<username>/images", methods=["POST"])
+@require_feature("note_images")
+@limiter.limit(lambda: f"{config.RATE_MAX} per {config.RATE_WINDOW} second")
+def images_upload(username):
+    """编辑器粘贴/拖拽上传（multipart，file 字段 + csrf_token）：
+    校验链 魔数 → 单图大小 → 用户配额，成功返回 JSON {url, name}。"""
+    if not validate_username(username):
+        abort(400)
+    _require_auth(username)
+    lang = getattr(g, "lang", "zh")
+    file = request.files.get("file")
+    data = file.read() if file is not None else b""
+    ext = sniff_image_format(data)
+    if ext is None:
+        return jsonify({"error": t(lang, "err_image_format")}), 400
+    if len(data) > config.MAX_IMAGE_SIZE_BYTES:
+        return jsonify({"error": t(lang, "err_image_too_large",
+                                   max=config.MAX_IMAGE_SIZE_KB)}), 400
+    if user_image_usage(username) + len(data) > config.MAX_IMAGE_TOTAL_BYTES:
+        return jsonify({"error": t(lang, "err_image_quota",
+                                   total=f"{config.MAX_IMAGE_TOTAL_KB} KB")}), 400
+    image_id = generate_image_id(ext)
+    if not write_image(username, image_id, data):
+        return jsonify({"error": t(lang, "err_image_upload")}), 500
+    return jsonify({"url": image_url(username, image_id), "name": image_id})
+
+
+@bp.route("/user/<username>/images/delete", methods=["POST"])
+@require_feature("note_images")
+@limiter.limit(lambda: f"{config.RATE_MAX} per {config.RATE_WINDOW} second")
+def images_delete(username):
+    if not validate_username(username):
+        abort(400)
+    _require_auth(username)
+    image_id = request.form.get("image_id", "").strip()
+    if not validate_image_id(image_id):
+        abort(400)
+    if not delete_image(username, image_id):
+        return _render_images(username, error=t(getattr(g, "lang", "zh"),
+                                                "err_image_upload")), 400
+    return redirect(url_for("user.images_page", username=username))
+
+
+def _render_images(username, error):
+    lang = getattr(g, "lang", "zh")
+    rows = []
+    for image_id in list_user_images(username):
+        mtime = get_image_mtime(username, image_id)
+        size = get_image_size(username, image_id)
+        rows.append({
+            "id": image_id,
+            "url": image_url(username, image_id),
+            "mtime": format_note_time(mtime) if mtime else "",
+            "size": format_size(size) if size is not None else "",
+        })
+    rows.sort(key=lambda r: r["id"])
+    usage_text = t(lang, "images_usage",
+                   used=format_size(user_image_usage(username)),
+                   total=format_size(config.MAX_IMAGE_TOTAL_BYTES),
+                   count=len(rows))
+    return render_template(
+        "images/image_list.html",
+        username=username,
+        rows=rows,
+        usage_text=usage_text,
+        error=error,
+    )
+
+
+# ---------- 笔记附件：/user/<u>/attachments（管理页 + 编辑器上传 API） ----------
+# 必须注册在 /user/<username>/<note_id> 之前，否则 attachments 会被当作笔记 ID
+@bp.route("/user/<username>/attachments", methods=["GET"])
+@require_feature("note_attachments")
+@limiter.limit(lambda: f"{config.GET_RATE_MAX} per {config.GET_RATE_WINDOW} second")
+def attachments_page(username):
+    if not validate_username(username):
+        abort(400)
+    _require_auth(username)
+    return _render_attachments(username, error="")
+
+
+@bp.route("/user/<username>/attachments", methods=["POST"])
+@require_feature("note_attachments")
+@limiter.limit(lambda: f"{config.RATE_MAX} per {config.RATE_WINDOW} second")
+def attachments_upload(username):
+    """编辑器上传附件（multipart，file 字段 + csrf_token）：
+    校验链 类型黑名单 → 单文件大小 → 用户配额，成功返回 JSON {url, name, id}。"""
+    if not validate_username(username):
+        abort(400)
+    _require_auth(username)
+    lang = getattr(g, "lang", "zh")
+    file = request.files.get("file")
+    if not file or not file.filename:
+        return jsonify({"error": t(lang, "err_attachment_no_file")}), 400
+    
+    from werkzeug.utils import secure_filename
+    filename = secure_filename(file.filename) or "unnamed"
+    
+    # 类型校验（黑名单）
+    is_valid, error_key = validate_attachment_type(filename)
+    if not is_valid:
+        return jsonify({"error": t(lang, error_key)}), 400
+    
+    # 读取数据
+    data = file.read()
+    if not data:
+        return jsonify({"error": t(lang, "err_attachment_empty")}), 400
+    
+    # 大小校验（单个文件）
+    if len(data) > config.MAX_ATTACHMENT_SIZE_BYTES:
+        return jsonify({"error": t(lang, "err_attachment_too_large",
+                                   max=config.MAX_ATTACHMENT_SIZE_KB)}), 400
+    
+    # 配额校验（用户总量）
+    if user_attachment_usage(username) + len(data) > config.MAX_ATTACHMENT_TOTAL_BYTES:
+        return jsonify({"error": t(lang, "err_attachment_quota",
+                                   total=f"{config.MAX_ATTACHMENT_TOTAL_KB} KB")}), 400
+    
+    # 生成 ID
+    attachment_id = generate_attachment_id(filename)
+    
+    # 写入存储
+    content_type = attachment_content_type(filename)
+    if not write_attachment(username, attachment_id, data, filename, content_type):
+        return jsonify({"error": t(lang, "err_attachment_upload")}), 500
+    
+    return jsonify({
+        "url": attachment_url(username, attachment_id),
+        "name": filename,
+        "id": attachment_id,
+    })
+
+
+@bp.route("/user/<username>/attachments/delete", methods=["POST"])
+@require_feature("note_attachments")
+@limiter.limit(lambda: f"{config.RATE_MAX} per {config.RATE_WINDOW} second")
+def attachments_delete(username):
+    if not validate_username(username):
+        abort(400)
+    _require_auth(username)
+    attachment_id = request.form.get("attachment_id", "").strip()
+    if not validate_attachment_id(attachment_id):
+        abort(400)
+    if not delete_attachment(username, attachment_id):
+        return _render_attachments(username, error=t(getattr(g, "lang", "zh"),
+                                                     "err_attachment_upload")), 400
+    return redirect(url_for("user.attachments_page", username=username))
+
+
+def _render_attachments(username, error):
+    lang = getattr(g, "lang", "zh")
+    rows = []
+    for attachment_id in list_user_attachments(username):
+        meta = read_attachment_meta(username, attachment_id)
+        mtime = get_attachment_mtime(username, attachment_id)
+        size = get_attachment_size(username, attachment_id)
+        rows.append({
+            "id": attachment_id,
+            "url": attachment_url(username, attachment_id),
+            "filename": meta.get("filename", attachment_id) if meta else attachment_id,
+            "content_type": meta.get("content_type", "application/octet-stream") if meta else "application/octet-stream",
+            "mtime": format_note_time(mtime) if mtime else "",
+            "size": format_size(size) if size is not None else "",
+        })
+    rows.sort(key=lambda r: r["filename"])
+    usage_text = t(lang, "attachments_usage",
+                   used=format_size(user_attachment_usage(username)),
+                   total=format_size(config.MAX_ATTACHMENT_TOTAL_BYTES),
+                   count=len(rows))
+    return render_template(
+        "attachments/attachment_list.html",
+        username=username,
+        rows=rows,
+        usage_text=usage_text,
+        error=error,
+        max_size_kb=config.MAX_ATTACHMENT_SIZE_KB,
+    )
+
+
 @bp.route("/user/<username>/<note_id>", methods=["GET"])
 @bp.route("/user/<username>/<note_id>/", methods=["GET"])
 @limiter.limit(lambda: f"{config.GET_RATE_MAX} per {config.GET_RATE_WINDOW} second")
@@ -75,6 +368,27 @@ def user_note_get(username, note_id):
     _require_auth(username)
     content = read_note(username, note_id)
     ctx = build_note_context(note_id, username=username, mtime=get_note_mtime(username, note_id))
+    # 快捷引用（#87）：仅在自己的笔记编辑页启用 # 自动补全与预览链接化
+    note_refs = None
+    if feature_enabled("note_refs"):
+        note_refs = {
+            "api": url_for("user.user_refs_search", username=username),
+            "ids": list_user_notes(username),
+            "prefix": f"/user/{username}",
+        }
+    # 笔记标签 / 文件夹（仅私有笔记编辑页；world/share 复用本模板但不启用）
+    note_tags_enabled = feature_enabled("note_tags")
+    note_tags_value = ", ".join(get_note_tags(username, note_id)) if note_tags_enabled else ""
+    note_folders_enabled = feature_enabled("note_folders")
+    note_folder_value = get_note_folder(username, note_id) if note_folders_enabled else ""
+    folder_options = sorted({f for f in get_user_note_folders(username).values() if f}) \
+        if note_folders_enabled else []
+    # 图床上传 API（编辑器粘贴/拖拽上传用；world/share 页不启用）
+    note_images_api = url_for("user.images_upload", username=username) \
+        if feature_enabled("note_images") else None
+    # 附件上传 API（编辑器上传附件用；world/share 页不启用）
+    note_attachments_api = url_for("user.attachments_upload", username=username) \
+        if feature_enabled("note_attachments") else None
     return render_template(
         "notes/note_edit.html",
         note_id=note_id,
@@ -82,6 +396,14 @@ def user_note_get(username, note_id):
         content=content,
         is_world=False,
         action_url=url_for("user.user_note_post", username=username, note_id=note_id),
+        note_refs=note_refs,
+        note_tags_enabled=note_tags_enabled,
+        note_tags_value=note_tags_value,
+        note_folders_enabled=note_folders_enabled,
+        note_folder_value=note_folder_value,
+        folder_options=folder_options,
+        note_images_api=note_images_api,
+        note_attachments_api=note_attachments_api,
         **ctx,
     )
 
@@ -97,16 +419,49 @@ def user_note_post(username, note_id):
     content = request.form.get("content", "")
     if not write_note(username, note_id, content):
         abort(500)
-    cache.delete(f"/user/{username}/{note_id}")
-    cache.delete(f"/user/{username}/{note_id}/md")
-    cache.delete(f"/user/{username}/{note_id}.md")
+    # 标签与文件夹随内容一起保存；内容为空即删除笔记，两者已由 write_note
+    # 的删除钩子清理，这里只更新仍存在笔记的归属
+    if content:
+        if feature_enabled("note_tags"):
+            set_note_tags(username, note_id, parse_tag_input(request.form.get("tags", "")))
+        if feature_enabled("note_folders"):
+            set_note_folder(username, note_id, parse_folder_input(request.form.get("folder", "")))
+    # 私有页缓存键按访问者隔离，且只有所有者能写入 200 缓存，清理即精确命中；
+    # /user/<username> 笔记列表也依赖笔记内容（mtime/size），一并刷新
+    purge_page_cache(
+        [f"/user/{username}", f"/user/{username}/",
+         f"/user/{username}/{note_id}", f"/user/{username}/{note_id}/",
+         f"/user/{username}/{note_id}.md", f"/user/{username}/{note_id}/md"],
+        viewers=(username,),
+    )
     return redirect(url_for("user.user_note_get", username=username, note_id=note_id))
+
+
+@bp.route("/user/<username>/<note_id>/pin", methods=["POST"])
+@require_feature("note_pins")
+@limiter.limit(lambda: f"{config.RATE_MAX} per {config.RATE_WINDOW} second")
+def user_note_pin(username, note_id):
+    """列表页图钉开关：切换置顶状态后回到列表页（保留 tag/folder 筛选）。"""
+    if not validate_username(username):
+        abort(400)
+    check_note_id(note_id)
+    _require_auth(username)
+    if not note_exists(username, note_id):
+        abort(404)
+    toggle_note_pin(username, note_id)
+    purge_page_cache([f"/user/{username}", f"/user/{username}/"], viewers=(username,))
+    args = {}
+    for param in ("tag", "folder"):
+        value = (request.form.get(param) or "").strip()
+        if value:
+            args[param] = value
+    return redirect(url_for("user.user_root", username=username, **args))
 
 
 @bp.route("/user/<username>/<note_id>/md", methods=["GET"])
 @bp.route("/user/<username>/<note_id>.md", methods=["GET"])
 @limiter.limit(lambda: f"{config.GET_RATE_MAX} per {config.GET_RATE_WINDOW} second")
-@cache.cached(timeout=config.CACHE_TIMEOUT_NOTES)
+@cache.cached(timeout=config.CACHE_TIMEOUT_NOTES, make_cache_key=page_cache_key)
 def user_md(username, note_id):
     if not validate_username(username):
         abort(400)
@@ -117,7 +472,8 @@ def user_md(username, note_id):
     return render_template(
         "notes/note_md.html",
         note_id=note_id,
-        html_content=render_markdown_html(content),
+        html_content=render_markdown_html(
+            content, ref_namespace=username, ref_url_prefix=f"/user/{username}"),
         title_label=t(lang, "note_private_prefix"),
         back_url=url_for("user.user_note_get", username=username, note_id=note_id),
         back_label=t(lang, "md_back_edit"),
@@ -128,6 +484,7 @@ def user_md(username, note_id):
 
 @bp.route("/user/<username>/shares", methods=["GET"])
 @bp.route("/user/<username>/shares/", methods=["GET"])
+@require_feature("share_links")
 @limiter.limit(lambda: f"{config.GET_RATE_MAX} per {config.GET_RATE_WINDOW} second")
 def shares_get(username):
     if not validate_username(username):
@@ -138,6 +495,7 @@ def shares_get(username):
 
 @bp.route("/user/<username>/shares", methods=["POST"])
 @bp.route("/user/<username>/shares/", methods=["POST"])
+@require_feature("share_links")
 @limiter.limit(lambda: f"{config.RATE_MAX} per {config.RATE_WINDOW} second")
 def shares_post(username):
     if not validate_username(username):
@@ -152,11 +510,13 @@ def shares_post(username):
     if not note_exists(username, note_id):
         return _render_shares(username, error=t(getattr(g, "lang", "zh"), "err_share_note_missing")), 400
     create_share(username, note_id, editable)
-    cache.delete(f"/user/{username}/shares")
+    purge_page_cache([f"/user/{username}/shares", f"/user/{username}/shares/"],
+                     viewers=(username,))
     return redirect(url_for("user.shares_get", username=username))
 
 
 @bp.route("/user/<username>/shares/delete", methods=["POST"])
+@require_feature("share_links")
 @limiter.limit(lambda: f"{config.RATE_MAX} per {config.RATE_WINDOW} second")
 def shares_delete(username):
     if not validate_username(username):
@@ -167,7 +527,8 @@ def shares_delete(username):
         abort(400)
     if not delete_share(username, token):
         return _render_shares(username, error=t(getattr(g, "lang", "zh"), "err_share_delete")), 400
-    cache.delete(f"/user/{username}/shares")
+    purge_page_cache([f"/user/{username}/shares", f"/user/{username}/shares/"],
+                     viewers=(username,))
     return redirect(url_for("user.shares_get", username=username))
 
 

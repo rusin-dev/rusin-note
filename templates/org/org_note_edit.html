@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="org-header">
+    <h1>{% if is_new %}{{ t('org_note_new') }}{% else %}{{ t('org_note_edit') }}{% endif %} - {{ org.name|e }}</h1>
+    <a href="{% if is_new %}{{ url_for('org.org_notes', org_name=org_name) }}{% else %}{{ url_for('org.org_note_view', org_name=org_name, note_id=note_id) }}{% endif %}">
+        &larr; {% if is_new %}{{ t('org_notes') }}{% else %}{{ t('org_note_view') }}{% endif %}
+    </a>
+</div>
+
+<form method="post" class="note-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="form-group">
+        <textarea name="content" rows="20" placeholder="{{ t('note_content_placeholder') }}">{{ content|e }}</textarea>
+    </div>
+    <div class="form-actions">
+        <button type="submit" class="btn btn-primary">{{ t('note_save') }}</button>
+    </div>
+</form>
+{% endblock %}

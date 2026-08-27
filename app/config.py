@@ -100,17 +100,81 @@ DEFAULT_CONFIG = {
         "live_preview_default": False,
         "markdown_manual_url": "https://markdown.com.cn"
     },
+    "note_refs": {
+        "enabled": True,
+        "search_limit": 8,
+        "scan_limit": 100
+    },
     "avatar": {
         "enabled": True,
         "url_template": "https://cn.cravatar.com/avatar/{hash}?d=identicon&f=y",
         "size": 24
     },
+    "images": {                                # 笔记图床：编辑器粘贴/拖拽上传，/image/<u>/<id> 公开访问
+        "enabled": True,
+        "max_size_kb": 2048,                   # 单张图片上限（KB）
+        "max_total_kb": 51200                  # 每用户配额（KB）
+    },
+    "attachments": {                          # 笔记附件：编辑器上传，/attachment/<u>/<id> 公开访问
+        "enabled": True,
+        "max_size_kb": 10240,                  # 单个附件上限（KB），默认 10 MB
+        "max_total_kb": 10240,                 # 每用户配额（KB），默认 10 MB
+        "blocked_extensions": [                # 黑名单扩展名（不含点），可执行文件
+            "exe", "bat", "cmd", "com", "msi", "scr", "pif",
+            "vbs", "vbe", "js", "jse", "ws", "wsf", "wsc", "wsh",
+            "ps1", "psm1", "psd1", "psc1", "psc2",
+            "reg", "inf", "hta", "cpl", "lnk", "url",
+            "sh", "bash", "csh", "ksh", "zsh", "fish",
+            "command", "app", "workflow", "scpt", "applescript",
+            "dylib", "so", "dll", "class", "jar",
+            "py", "pyc", "pyo", "pyd", "rb", "pl", "pm", "tcl", "tk",
+            "zip", "zipx", "rar", "7z", "cab", "lzh", "ace", "arc", "arj",
+            "tar", "tar.gz", "tgz", "tpz", "gz", "bz2", "xz", "z",
+            "deb", "rpm", "dmg", "iso", "img", "bin",
+        ]
+    },
+    "comments": {                            # 评论系统：笔记/分享页面的评论功能
+        "enabled": True,
+        "max_length": 1024,                  # 单条评论最大长度（字符）
+        "max_comments": 200,                 # 每个目标（笔记/分享）最多评论数
+        "cooldown_seconds": 3,               # 单用户发布评论冷却时间（秒）
+        "page_size": 50,                     # 每页显示评论数
+        "max_height_px": 1000,               # 评论内容渲染后最大显示高度（px）
+    },
+    "features": {                             # 功能开关默认值（#90）：运行时可由管理员在 /admin/features 切换
+        "world_notes": True,
+        "benben": True,
+        "share_links": True,
+        "open_register": True,
+        "note_tags": True,
+        "note_folders": True,
+        "note_pins": True,
+        "heading_anchors": True,
+        "note_images": True,
+        "note_attachments": True,
+        "comments": True,
+        "image_upload": False
+    },
+    "admin_users": [],                        # 功能开关管理员用户名（也可用环境变量 RUSIN_ADMIN 指定，逗号分隔）
     "max_note_id_length": 250,
+    "max_note_tags": 10,                      # 笔记标签：每篇笔记最多标签数
+    "max_tag_length": 24,                     # 笔记标签：单个标签最大长度（字符）
+    "max_folder_name_length": 32,             # 笔记文件夹：文件夹名最大长度（字符）
     "logger": {
         "max_size": 4294967296,
         "path": "log/"
     },
-    "debug": False
+    "plugins": {
+        "enabled": True,
+        "update_interval_hours": 6,
+        "update_stale_days": 3
+    },
+    "debug": False,
+    "max_upload_size_kb": 200,                # 单张图片最大 200KB
+    "upload_rate_limit": {                     # 上传接口独立限流
+        "window_seconds": 60,
+        "max_requests": 30
+    }
 }
 
 
@@ -147,6 +211,14 @@ def data_path(*parts: str) -> str:
 
 SITE_NAME = config.get("sitename", "")
 MAX_CONTENT_BYTES = config.get("max_note_size_kb", 5120) * 1024
+
+# ---------- 图片上传配置 ----------
+UPLOAD_DIR = data_path("uploads")
+MAX_UPLOAD_BYTES = config.get("max_upload_size_kb", 200) * 1024
+UPLOAD_RATE_CFG = config.get("upload_rate_limit", {"window_seconds": 60, "max_requests": 30})
+UPLOAD_RATE_WINDOW = UPLOAD_RATE_CFG.get("window_seconds", 60)
+UPLOAD_RATE_MAX = UPLOAD_RATE_CFG.get("max_requests", 30)
+
 RATE_WINDOW = config.get("rate_limit", {}).get("window_seconds", 60)
 RATE_MAX = config.get("rate_limit", {}).get("max_requests", 30)
 
@@ -190,6 +262,13 @@ NOTE_CLEANUP_INTERVAL = 1800
 
 # 剪贴板名称（笔记 ID）最大长度：超过该长度的 URL 视为不合法
 MAX_NOTE_ID_LENGTH = config.get("max_note_id_length", 250)
+
+# 笔记标签限制：每篇笔记最多标签数 / 单个标签最大长度（字符）
+MAX_NOTE_TAGS = config.get("max_note_tags", 10)
+MAX_TAG_LENGTH = config.get("max_tag_length", 24)
+
+# 笔记文件夹限制：文件夹名最大长度（字符），每篇笔记至多归属一个文件夹
+MAX_FOLDER_NAME_LENGTH = config.get("max_folder_name_length", 32)
 
 # LaTeX 公式渲染配置（客户端 KaTeX 渲染，洛谷同款，仅影响 Markdown 只读页面）
 # 全局 CDN：KaTeX / FontAwesome / marked 等前端静态资源统一从该地址拼接加载，
@@ -319,6 +398,24 @@ LIVE_PREVIEW_DEFAULT = bool(NOTE_EDITOR_CFG.get("live_preview_default", False))
 MARKDOWN_MANUAL_URL = NOTE_EDITOR_CFG.get(
     "markdown_manual_url", "https://markdown.com.cn")
 
+# ---------- 笔记快捷引用配置（#87：GitHub Issues 风格的 # 引用） ----------
+# enabled=False 时：编辑器不弹引用补全框，Markdown 渲染不把 #id 转为链接
+NOTE_REFS_CFG = config.get("note_refs", DEFAULT_CONFIG["note_refs"])
+NOTE_REFS_ENABLED = bool(NOTE_REFS_CFG.get("enabled", True))
+# 引用搜索接口单次返回的最多条数
+NOTE_REF_SEARCH_LIMIT = NOTE_REFS_CFG.get("search_limit", 8)
+# 引用搜索最多扫描的笔记数（按修改时间倒序，防止大量笔记时读取过慢；
+# upstash/postgres 等远程后端可调低）
+NOTE_REF_SCAN_LIMIT = NOTE_REFS_CFG.get("scan_limit", 100)
+try:
+    NOTE_REF_SEARCH_LIMIT = max(1, int(NOTE_REF_SEARCH_LIMIT))
+except (TypeError, ValueError):
+    NOTE_REF_SEARCH_LIMIT = 8
+try:
+    NOTE_REF_SCAN_LIMIT = max(1, int(NOTE_REF_SCAN_LIMIT))
+except (TypeError, ValueError):
+    NOTE_REF_SCAN_LIMIT = 100
+
 # ---------- 用户头像配置 ----------
 # 头像通过第三方服务生成。由于本站用户没有邮箱，默认用 md5(用户名) 作为哈希（
 # Gravatar 系 API 的默认参数 d=identicon 会为每个哈希生成确定性的几何头像）。
@@ -329,10 +426,66 @@ AVATAR_URL_TEMPLATE = AVATAR_CFG.get(
     "url_template", "https://cn.cravatar.com/avatar/{hash}?d=identicon&f=y")
 AVATAR_SIZE = int(AVATAR_CFG.get("size", 24))
 
+# ---------- 笔记图床配置 ----------
+IMAGES_CFG = config.get("images", DEFAULT_CONFIG["images"])
+IMAGES_ENABLED = bool(IMAGES_CFG.get("enabled", True))
+MAX_IMAGE_SIZE_KB = IMAGES_CFG.get("max_size_kb", 2048)
+MAX_IMAGE_TOTAL_KB = IMAGES_CFG.get("max_total_kb", 51200)
+MAX_IMAGE_SIZE_BYTES = MAX_IMAGE_SIZE_KB * 1024
+MAX_IMAGE_TOTAL_BYTES = MAX_IMAGE_TOTAL_KB * 1024
+
+# ---------- 笔记附件配置 ----------
+ATTACHMENTS_CFG = config.get("attachments", DEFAULT_CONFIG["attachments"])
+ATTACHMENTS_ENABLED = bool(ATTACHMENTS_CFG.get("enabled", True))
+MAX_ATTACHMENT_SIZE_KB = ATTACHMENTS_CFG.get("max_size_kb", 10240)
+MAX_ATTACHMENT_TOTAL_KB = ATTACHMENTS_CFG.get("max_total_kb", 10240)
+MAX_ATTACHMENT_SIZE_BYTES = MAX_ATTACHMENT_SIZE_KB * 1024
+MAX_ATTACHMENT_TOTAL_BYTES = MAX_ATTACHMENT_TOTAL_KB * 1024
+ATTACHMENT_BLOCKED_EXTENSIONS = ATTACHMENTS_CFG.get("blocked_extensions", DEFAULT_CONFIG["attachments"]["blocked_extensions"])
+
+# ---------- 评论系统配置 ----------
+COMMENTS_CFG = config.get("comments", DEFAULT_CONFIG["comments"])
+COMMENTS_ENABLED = bool(COMMENTS_CFG.get("enabled", True))
+COMMENTS_MAX_LENGTH = COMMENTS_CFG.get("max_length", 1024)
+COMMENTS_MAX_POSTS = COMMENTS_CFG.get("max_comments", 200)
+COMMENTS_COOLDOWN_SECONDS = COMMENTS_CFG.get("cooldown_seconds", 3)
+COMMENTS_PAGE_SIZE = COMMENTS_CFG.get("page_size", 50)
+COMMENTS_MAX_HEIGHT_PX = COMMENTS_CFG.get("max_height_px", 1000)
+try:
+    COMMENTS_MAX_HEIGHT_PX = int(COMMENTS_MAX_HEIGHT_PX)
+    if COMMENTS_MAX_HEIGHT_PX <= 0:
+        COMMENTS_MAX_HEIGHT_PX = 1000
+except (TypeError, ValueError):
+    COMMENTS_MAX_HEIGHT_PX = 1000
+
+# ---------- 功能开关管理员（#90：/admin/features 的访问者） ----------
+# config.json 的 admin_users 与环境变量 RUSIN_ADMIN（逗号分隔用户名）取并集
+_admin_cfg = config.get("admin_users", [])
+if not isinstance(_admin_cfg, list):
+    _admin_cfg = []
+_admin_env = [u.strip() for u in os.environ.get("RUSIN_ADMIN", "").split(",") if u.strip()]
+ADMIN_USERS = frozenset(_admin_cfg + _admin_env)
+
 # ---------- 日志功能 ----------
 LOGGER_CFG = config.get("logger", DEFAULT_CONFIG["logger"])
 LOGGER_MAX_SIZE = LOGGER_CFG.get("max_size", 4294967296)
 LOGGER_PATH = data_path(LOGGER_CFG.get("path_pattern", "log/{timestamp}.log"))
+
+# ---------- 插件系统配置 ----------
+# 插件包（*.plugin.zip）投放到运行时目录（RUSIN_DATA_DIR）即可自动安装，
+# 详见 app/plugins.py。无服务器环境（只读盘）自动禁用。
+PLUGINS_CFG = config.get("plugins", DEFAULT_CONFIG["plugins"])
+PLUGINS_ENABLED = bool(PLUGINS_CFG.get("enabled", True))
+# Phase 2 更新检查：距 last_update 超过该天数才请求 upstream_repo
+try:
+    PLUGIN_UPDATE_STALE_SECONDS = int(PLUGINS_CFG.get("update_stale_days", 3)) * 86400
+except (TypeError, ValueError):
+    PLUGIN_UPDATE_STALE_SECONDS = 3 * 86400
+# 后台更新检查线程的轮询周期（小时）
+try:
+    PLUGIN_UPDATE_CHECK_INTERVAL = int(PLUGINS_CFG.get("update_interval_hours", 6)) * 3600
+except (TypeError, ValueError):
+    PLUGIN_UPDATE_CHECK_INTERVAL = 6 * 3600
 
 DEBUG = config.get("debug", False)
 

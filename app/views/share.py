@@ -4,10 +4,12 @@ from flask import Blueprint, abort, g, redirect, render_template, request, url_f
 from .. import config
 from ..extensions import cache, limiter
 from ..i18n import t
+from ..feature_flags import require_feature
+from ..middleware import get_current_user
 from ..notes import read_note, write_note
 from ..store import get_share, increment_share_views
 from ..utils import render_latex_head, render_markdown_html
-from ._helpers import build_note_context
+from ._helpers import build_note_context, page_cache_key, purge_page_cache
 
 
 bp = Blueprint("share", __name__)
@@ -22,6 +24,7 @@ def _resolve_share(token):
 
 @bp.route("/share/<token>", methods=["GET"])
 @bp.route("/share/<token>/", methods=["GET"])
+@require_feature("share_links")
 @limiter.limit(lambda: f"{config.GET_RATE_MAX} per {config.GET_RATE_WINDOW} second")
 def share_view_get(token):
     share = _resolve_share(token)
@@ -41,6 +44,7 @@ def share_view_get(token):
             is_world=False,
             action_url=url_for("share.share_view_post", token=token),
             is_share=True,
+            comment_url=f"/comments/share/{token}",
             **ctx,
         )
     lang = getattr(g, "lang", "zh")
@@ -57,6 +61,7 @@ def share_view_get(token):
 
 @bp.route("/share/<token>", methods=["POST"])
 @bp.route("/share/<token>/", methods=["POST"])
+@require_feature("share_links")
 @limiter.limit(lambda: f"{config.SAVE_RATE_MAX} per {config.SAVE_RATE_WINDOW} second")
 def share_view_post(token):
     share = _resolve_share(token)
@@ -65,16 +70,18 @@ def share_view_post(token):
     content = request.form.get("content", "")
     if not write_note(share.get("owner", ""), share.get("note_id", ""), content):
         abort(500)
-    cache.delete(f"/share/{token}")
-    cache.delete(f"/share/{token}/md")
-    cache.delete(f"/share/{token}.md")
+    purge_page_cache(
+        [f"/share/{token}", f"/share/{token}.md", f"/share/{token}/md"],
+        viewers=(None, get_current_user()),
+    )
     return redirect(url_for("share.share_view_get", token=token))
 
 
 @bp.route("/share/<token>/md", methods=["GET"])
 @bp.route("/share/<token>.md", methods=["GET"])
+@require_feature("share_links")
 @limiter.limit(lambda: f"{config.GET_RATE_MAX} per {config.GET_RATE_WINDOW} second")
-@cache.cached(timeout=config.CACHE_TIMEOUT_NOTES)
+@cache.cached(timeout=config.CACHE_TIMEOUT_NOTES, make_cache_key=page_cache_key)
 def share_md(token):
     share = _resolve_share(token)
     increment_share_views(token)

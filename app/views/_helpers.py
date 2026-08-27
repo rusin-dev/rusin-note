@@ -1,8 +1,9 @@
-"""视图层共享的工具：note 上下文构建等"""
-from flask import abort, g
+"""视图层共享的工具：note 上下文构建、页面缓存键等"""
+from flask import abort, g, request
 
 from .. import config
-from ..i18n import t
+from ..extensions import cache
+from ..i18n import LANGS, t
 from ..notes import validate_note_id
 from ..theme import get_theme_script, THEME_VARS
 from ..utils import format_note_time, render_latex_head
@@ -21,6 +22,45 @@ def check_note_id(note_id: str) -> None:
     if "." in note_id:
         abort(404)
     abort(400)
+
+
+def page_cache_key(*_args, **_kwargs) -> str:
+    """页面缓存键：请求路径 + 访问者 + 语言。
+
+    Flask-Caching 调用 make_cache_key 时会透传视图参数，签名须兼容
+    （*_args/**_kwargs），否则键构造抛异常、缓存被静默禁用。
+
+    缓存页面的内容同时依赖三者：
+    - 语言（g.lang）：zh/en 两套文案不同，不区分会把首个访问者的语言
+      发给所有人（首页缓存长达 30 分钟）；
+    - 访问者（g.current_user）：导航栏按登录用户渲染，且私有笔记页的
+      登录校验在视图内部——Flask-Caching 命中缓存时不会执行视图，键不
+      按访问者隔离的话，命中即绕过校验把缓存里的私有内容发给任何人。
+    """
+    user = getattr(g, "current_user", None) or "anon"
+    lang = getattr(g, "lang", "zh")
+    return f"page:{request.path}:{user}:{lang}"
+
+
+def delete_cache_keys(keys) -> None:
+    """逐键删除缓存。不用 delete_many：SimpleCache 的 delete_many 在遇到
+    首个不存在的键时中断（ignore_errors=False 默认值），会漏删后面的键。"""
+    for key in keys:
+        cache.delete(key)
+
+
+def purge_page_cache(paths, viewers=(None,)) -> None:
+    """删除 paths × viewers × 全部语言的页面缓存键（配合 page_cache_key）。
+
+    viewers 只需覆盖会产生对应键的访问者：私有页只有笔记所有者能写入
+    200 缓存，公开页传 (None, 操作者) 即可，其余访问者的旧键靠 TTL 过期。
+    """
+    delete_cache_keys([
+        f"page:{path}:{viewer or 'anon'}:{lang}"
+        for path in paths
+        for viewer in viewers
+        for lang in LANGS
+    ])
 
 
 def build_note_context(
@@ -65,6 +105,15 @@ def build_note_context(
         "previewOffHint": t(lang, "note_live_preview_hint"),
         "previewShow": t(lang, "preview_show"),
         "previewEdit": t(lang, "preview_edit"),
+        "refLabel": t(lang, "note_refs_label"),
+        "refRecent": t(lang, "note_refs_recent"),
+        "refNoMatch": t(lang, "note_refs_no_match"),
+        "imgUploading": t(lang, "note_images_uploading"),
+        "imgDone": t(lang, "note_images_done"),
+        "imgFailed": t(lang, "note_images_failed"),
+        "attUploading": t(lang, "note_attachments_uploading"),
+        "attDone": t(lang, "note_attachments_done"),
+        "attFailed": t(lang, "note_attachments_failed"),
     }
 
     return {

@@ -96,13 +96,19 @@ def create_app() -> Flask:
         static_folder=None,
     )
 
+    # 注册 Jinja filter：format_note_time（将 Unix 时间戳格式化为可读时间）
+    from .utils import format_note_time
+    app.jinja_env.filters["format_note_time"] = format_note_time
+
     secret = os.environ.get("RUSIN_SECRET_KEY")
     if not secret:
         secret = _load_or_create_secret_key()
 
     app.config.update(
         SECRET_KEY=secret,
-        MAX_CONTENT_LENGTH=config.MAX_CONTENT_BYTES,
+        # 全局请求体上限：笔记保存与图片上传共用，取两者较大值
+        #（笔记写入路径本就依赖该全局值拦超量请求）
+        MAX_CONTENT_LENGTH=max(config.MAX_CONTENT_BYTES, config.MAX_IMAGE_SIZE_BYTES),
         SESSION_COOKIE_SECURE=config.SECURE_COOKIES,
         SESSION_COOKIE_HTTPONLY=True,
         SESSION_COOKIE_SAMESITE="Lax",
@@ -124,6 +130,9 @@ def create_app() -> Flask:
 
     if not app.config.get("TESTING") and not config.SERVERLESS:
         start_background_threads()
+        # 插件 Phase 2：定期检查上游更新（Phase 1 安装在 register_blueprints 内完成）
+        from . import plugins
+        plugins.start_update_thread(app)
 
     return app
 

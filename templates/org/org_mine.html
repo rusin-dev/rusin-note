@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>{{ t('org_mine_title') }}</h1>
+
+<div class="org-mine-actions">
+    <a href="{{ url_for('org.org_create') }}" class="btn btn-primary">
+        <i class="fa-solid fa-plus"></i> {{ t('org_create_title') }}
+    </a>
+</div>
+
+{% if orgs %}
+<table class="orgs-table">
+    <thead>
+        <tr>
+            <th>{{ t('org_mine_name') }}</th>
+            <th>{{ t('org_mine_display_name') }}</th>
+            <th>{{ t('org_mine_role') }}</th>
+            <th>{{ t('org_mine_actions') }}</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for item in orgs %}
+        <tr>
+            <td><a href="{{ url_for('org.org_home', org_name=item.name) }}">{{ item.name|e }}</a></td>
+            <td>{{ item.info.name|e }}</td>
+            <td><span class="role-badge role-{{ item.role }}">{{ t('org_role_' ~ item.role) }}</span></td>
+            <td>
+                <a href="{{ url_for('org.org_home', org_name=item.name) }}">{{ t('org_view') }}</a>
+                {% if item.role != 'owner' %}
+                <form method="post" action="{{ url_for('org.org_leave', org_name=item.name) }}" style="display: inline;" onsubmit="return confirm('{{ t('confirm_leave_org') }}');">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit" class="btn-link">{{ t('org_leave') }}</button>
+                </form>
+                {% endif %}
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<p class="empty">{{ t('org_mine_empty') }}</p>
+{% endif %}
+{% endblock %}

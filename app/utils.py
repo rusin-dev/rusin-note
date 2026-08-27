@@ -35,24 +35,135 @@ def get_avatar_url(username: str) -> str:
     url_template 支持 {hash}（md5(用户名)）与 {username}（URL 编码）占位符。
     """
     from . import config
-    if not config.AVATAR_ENABLED or not username:
+    from .feature_flags import feature_enabled
+    if not feature_enabled("avatar") or not username:
         return ""
     h = hashlib.md5(username.encode("utf-8")).hexdigest()
     name = urllib.parse.quote(username, safe="")
     return config.AVATAR_URL_TEMPLATE.format(hash=h, username=name)
 
 
-def render_markdown_html(content: str) -> str:
+# ---------- 笔记快捷引用（#87：GitHub Issues 风格的 # 引用） ----------
+# 匹配 #<笔记ID> 形式的快捷引用。# 前面出现以下字符时不算引用：
+#   ASCII 字母数字下划线 —— abc#def 中间的井号（普通文本 / hashtag 的一部分）；
+#   注意用显式 [0-9A-Za-z_] 而非 \w：Python 的 \w 含中文，会把「参见#笔记」
+#   误判为排除（JS 端 \w 本就只匹配 ASCII，改后两端行为一致）
+#   #  —— ##Heading、##id（多级标题或转义后的井号）
+#   "' —— HTML 属性 href="#x"、'#x' 中的锚点
+#   ([ —— Markdown 链接 [text](#a) / 引用式链接 [text][#b] 的目标
+#   /  —— URL 路径片段 /path#frag
+#   \  —— 被反斜杠转义的 \#foo
+_NOTE_REF_RE = re.compile(r'(?<![0-9A-Za-z_#"\'\(\[/\\])#([A-Za-z0-9][A-Za-z0-9_\-]*)')
+# Markdown 链接定义行（[label]: url），井号是 URL 一部分，整行跳过
+_NOTE_REF_LINK_DEF_RE = re.compile(r'^\s{0,3}\[[^\]]*\]:')
+# 围栏代码块的开头（``` 或 ~~~，允许最多 3 个前导空格）
+_FENCE_RE = re.compile(r'^\s{0,3}(`{3,}|~{3,})')
+# 行内代码 span（`code` / ``code``），替换时跳过
+_BACKTICK_SPAN_RE = re.compile(r'`+[^`]+?`+')
+
+
+def expand_note_refs(content: str, namespace: str, url_prefix: str,
+                     resolver) -> str:
+    """把 Markdown 原文中代码区域之外的 ``#<笔记ID>`` 展开为 Markdown 链接。
+
+    在 markdown 解析前对原文逐行扫描：跳过围栏代码块（``` / ~~~）、缩进
+    代码块（空行后 4 空格缩进）、链接定义行，行内再跳过反引号代码 span，
+    其余位置的 ``#id`` 若 resolver(id) 返回非 None（笔记存在）则替换为
+    ``[#id](<url_prefix>/<id> "标题")``。这样行首的 ``#id`` 也不会被
+    Python-Markdown 误判为 ATX 标题，且与编辑器实时预览行为一致。
+    """
+    if "#" not in content:
+        return content
+
+    def repl(m: re.Match) -> str:
+        note_id = m.group(1)
+        from . import config
+        if len(note_id) > config.MAX_NOTE_ID_LENGTH:
+            return m.group(0)
+        title = resolver(note_id)
+        if title is None:
+            return m.group(0)
+        # 标题进入 Markdown 链接的 title 部分，去掉会破坏语法的字符
+        title = title.replace('"', "'").replace("(", "（").replace(")", "）").strip()
+        suffix = f' "{title}"' if title else ""
+        return f"[{m.group(0)}]({url_prefix}/{note_id}{suffix})"
+
+    fence = ""          # 当前所处围栏代码块的围栏串（空 = 不在代码块内）
+    prev_blank = True   # 上一行是否为空行（判断缩进代码块起始）
+    out_lines: list[str] = []
+    for line in content.split("\n"):
+        m = _FENCE_RE.match(line)
+        if fence:
+            out_lines.append(line)
+            # 同字符且长度不少于开栏围栏的行视为闭栏
+            if m and m.group(1)[0] == fence[0] and len(m.group(1)) >= len(fence):
+                fence = ""
+            continue
+        if m:
+            fence = m.group(1)
+            out_lines.append(line)
+            continue
+        if not line.strip():
+            prev_blank = True
+            out_lines.append(line)
+            continue
+        is_indented_code = prev_blank and (line.startswith("    ") or line.startswith("\t"))
+        prev_blank = False
+        if is_indented_code or _NOTE_REF_LINK_DEF_RE.match(line):
+            out_lines.append(line)
+            continue
+        if "#" in line:
+            parts: list[str] = []
+            last = 0
+            for span in _BACKTICK_SPAN_RE.finditer(line):
+                parts.append(_NOTE_REF_RE.sub(repl, line[last:span.start()]))
+                parts.append(span.group(0))  # 行内代码保持原样
+                last = span.end()
+            parts.append(_NOTE_REF_RE.sub(repl, line[last:]))
+            line = "".join(parts)
+        out_lines.append(line)
+    return "\n".join(out_lines)
+
+
+def _note_ref_resolver(namespace: str):
+    """构造引用解析函数：返回目标笔记的标题（存在）或 None（不存在），
+    同一次渲染内对相同 ID 只读一次存储。"""
+    from .notes import read_note, title_from_content
+    cache: dict[str, str | None] = {}
+
+    def resolve(note_id: str) -> str | None:
+        if note_id in cache:
+            return cache[note_id]
+        content = read_note(namespace, note_id)  # 空内容等价于不存在
+        title = title_from_content(content) if content else None
+        cache[note_id] = title
+        return title
+
+    return resolve
+
+
+def render_markdown_html(content: str, ref_namespace: str | None = None,
+                         ref_url_prefix: str | None = None) -> str:
     """将 Markdown 安全渲染为 HTML（依赖 bleach 清洗防 XSS）
 
     使用 extra 扩展（含 fenced_code）：代码块经 Pygments 分词后输出带
     ``<span class="nc">`` / ``<span class="nf">`` / ``<span class="nv">`` 等
     token 类的 HTML，使标识符着色规则（类名、函数名、变量名、装饰器、常量）生效。
     无法识别语言时回退到客户端 highlight.js。
+
+    传入 ref_namespace（笔记所属命名空间：用户名或 "public"）与
+    ref_url_prefix（引用链接前缀，如 "/user/alice" 或 "/world"）时，
+    原文中的 ``#<笔记ID>`` 快捷引用会被展开为指向该笔记的链接（#87）。
     """
     from . import config
+    from .feature_flags import feature_enabled
     if config.MARKDOWN_AVAILABLE and config.BLEACH_AVAILABLE:
         try:
+            if ref_namespace and ref_url_prefix and feature_enabled("note_refs"):
+                content = expand_note_refs(
+                    content, ref_namespace, ref_url_prefix,
+                    _note_ref_resolver(ref_namespace),
+                )
             raw_html = config.markdown.markdown(
                 content, extensions=['extra']
             )
@@ -62,11 +173,12 @@ def render_markdown_html(content: str) -> str:
                 'ul', 'ol', 'li', 'blockquote', 'pre', 'code',
                 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'hr',
                 'table', 'thead', 'tbody', 'tr', 'th', 'td',
-                'div', 'span',
+                'div', 'span', 'img',
             ]
             allowed_attrs = {
                 '*': ['class'],
                 'a': ['href', 'title', 'target'],
+                'img': ['src', 'alt', 'title', 'width', 'height'],
             }
             return config.bleach.clean(
                 raw_html, tags=allowed_tags, attributes=allowed_attrs, strip=True
@@ -238,7 +350,8 @@ def render_pygments_head() -> str:
 def render_latex_head() -> str:
     """返回启用 LaTeX 渲染所需的 <head> 内容（KaTeX）"""
     from . import config
-    if not config.LATEX_RENDER_ENABLED:
+    from .feature_flags import feature_enabled
+    if not feature_enabled("latex_render"):
         return ""
     return (
         f'<link rel="stylesheet" href="{config.LATEX_CDN}/katex.min.css">\n'
@@ -267,7 +380,8 @@ def render_code_highlight_head() -> str:
     暴露 window.CodeHighlight.apply(root) 供动态渲染的预览调用。
     """
     from . import config
-    if not config.CODE_HIGHLIGHT_ENABLED:
+    from .feature_flags import feature_enabled
+    if not feature_enabled("code_highlight"):
         return ""
     cdn = config.CODE_HIGHLIGHT_CDN.rstrip("/")
     return (
@@ -358,6 +472,108 @@ def render_code_highlight_head() -> str:
         "    return { apply: apply };\n"
         "})();\n"
         "</script>\n"
+    )
+
+
+def render_heading_anchors_head() -> str:
+    """启用 Markdown 标题锚点所需的 <head> 内容（纯客户端实现）。
+
+    window.HeadingAnchors.apply(root) 为渲染结果中的 h1-h6 按标题文本生成
+    稳定 slug id（支持中日韩文字，重复标题自动加 -1/-2 后缀），并在标题上
+    挂悬浮锚点链接；同时把正文里用户手写的页内 ``[链接](#标题)`` 重写到
+    实际分配的 id。jumpToHash() 在页面加载时按 location.hash 定位（直接
+    命中 id 或按 slug 兜底）。不放宽服务端 bleach 的属性白名单，缓存页面
+    同样生效；编辑器实时预览在每次渲染后调用 apply()。
+
+    暴露 window.HeadingAnchors = { apply, jumpToHash }。
+    """
+    from . import config
+    from .feature_flags import feature_enabled
+    if not feature_enabled("heading_anchors"):
+        return ""
+    from flask import g
+    from .i18n import t
+    title = t(getattr(g, "lang", "zh"), "note_anchor_title")
+    title = title.replace("\\", "\\\\").replace('"', '\\"')
+    return (
+        "<style>\n"
+        ".heading-anchor { opacity: 0; margin-left: 8px; font-size: 0.8em;"
+        " color: var(--muted); text-decoration: none; transition: opacity 0.15s ease;"
+        " outline-offset: 2px; border-radius: 3px; }\n"
+        "h1:hover > .heading-anchor, h2:hover > .heading-anchor,"
+        " h3:hover > .heading-anchor, h4:hover > .heading-anchor,"
+        " h5:hover > .heading-anchor, h6:hover > .heading-anchor,"
+        " .heading-anchor:focus-visible { opacity: 1; }\n"
+        ".heading-anchor:hover { color: var(--link); text-decoration: none; }\n"
+        ".heading-anchor:focus-visible { outline: 2px solid var(--link); }\n"
+        "@media (hover: none) { .heading-anchor { opacity: 0.55; } }\n"
+        "</style>\n"
+        "<script>\n"
+        "window.HeadingAnchors = (function() {\n"
+        "    var ANCHOR_TITLE = \"" + title + "\";\n"
+        "    var lastMap = {};   // 基础 slug -> 实际 id，jumpToHash 兜底用\n"
+        "    function slugify(text) {\n"
+        "        return String(text || '').trim().toLowerCase()\n"
+        "            .replace(/[^\\p{L}\\p{N}_\\- ]+/gu, '')\n"
+        "            .replace(/ +/g, '-')\n"
+        "            .replace(/-{2,}/g, '-')\n"
+        "            .replace(/^-+|-+$/g, '');\n"
+        "    }\n"
+        "    function apply(root) {\n"
+        "        var scope = root || document;\n"
+        "        var bySlug = {};\n"
+        "        var headings = scope.querySelectorAll('h1,h2,h3,h4,h5,h6');\n"
+        "        for (var i = 0; i < headings.length; i++) {\n"
+        "            var h = headings[i];\n"
+        "            var base = slugify(h.textContent) || 'section';\n"
+        "            var id = base, n = 1;\n"
+        "            while (true) {\n"
+        "                var hit = document.getElementById(id);\n"
+        "                if (!hit || hit === h) break;\n"
+        "                id = base + '-' + n; n++;\n"
+        "            }\n"
+        "            h.id = id;\n"
+        "            if (!(base in bySlug)) bySlug[base] = id;\n"
+        "            if (!h.querySelector('.heading-anchor')) {\n"
+        "                var a = document.createElement('a');\n"
+        "                a.className = 'heading-anchor';\n"
+        "                a.href = '#' + id;\n"
+        "                a.title = ANCHOR_TITLE;\n"
+        "                a.setAttribute('aria-label', ANCHOR_TITLE);\n"
+        "                a.innerHTML = '<i class=\"fa-solid fa-link\" aria-hidden=\"true\"></i>';\n"
+        "                h.appendChild(a);\n"
+        "            }\n"
+        "        }\n"
+        "        // 解析正文里的页内 #链接：命中已分配 id 或标题 slug 则重写\n"
+        "        var links = scope.querySelectorAll('a[href^=\"#\"]');\n"
+        "        for (var j = 0; j < links.length; j++) {\n"
+        "            var a2 = links[j];\n"
+        "            if (a2.classList.contains('heading-anchor')) continue;\n"
+        "            var raw = a2.getAttribute('href');\n"
+        "            if (raw.length <= 1) continue;\n"
+        "            var frag = '';\n"
+        "            try { frag = decodeURIComponent(raw.slice(1)).trim(); } catch (e) { continue; }\n"
+        "            if (!frag || document.getElementById(frag)) continue;\n"
+        "            var mapped = bySlug[slugify(frag)];\n"
+        "            if (mapped) a2.setAttribute('href', '#' + mapped);\n"
+        "        }\n"
+        "        lastMap = bySlug;\n"
+        "    }\n"
+        "    function jumpToHash() {\n"
+        "        var raw = window.location.hash;\n"
+        "        if (!raw || raw.length <= 1) return false;\n"
+        "        var frag = '';\n"
+        "        try { frag = decodeURIComponent(raw.slice(1)).trim(); } catch (e) { return false; }\n"
+        "        if (!frag) return false;\n"
+        "        var target = document.getElementById(frag)\n"
+        "            || document.getElementById(lastMap[slugify(frag)] || '');\n"
+        "        if (!target) return false;\n"
+        "        target.scrollIntoView({ behavior: 'smooth', block: 'start' });\n"
+        "        return true;\n"
+        "    }\n"
+        "    return { apply: apply, jumpToHash: jumpToHash, slugify: slugify };\n"
+        "})();\n"
+        "</script>"
     )
 
 

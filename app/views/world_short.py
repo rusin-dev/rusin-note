@@ -6,15 +6,17 @@ from flask import Blueprint, redirect, render_template, url_for
 
 from .. import config
 from ..extensions import cache, limiter
+from ..feature_flags import require_feature
 from ..notes import read_note
 from ..utils import render_latex_head, render_markdown_html
-from ._helpers import check_note_id
+from ._helpers import check_note_id, page_cache_key
 
 
 bp = Blueprint("world_short", __name__)
 
 
 @bp.route("/<note_id>", methods=["GET"])
+@require_feature("world_notes")
 @limiter.limit(lambda: f"{config.GET_RATE_MAX} per {config.GET_RATE_WINDOW} second")
 def short_link(note_id):
     check_note_id(note_id)
@@ -22,8 +24,9 @@ def short_link(note_id):
 
 
 @bp.route("/<note_id>.md", methods=["GET"])
+@require_feature("world_notes")
 @limiter.limit(lambda: f"{config.GET_RATE_MAX} per {config.GET_RATE_WINDOW} second")
-@cache.cached(timeout=config.CACHE_TIMEOUT_NOTES)
+@cache.cached(timeout=config.CACHE_TIMEOUT_NOTES, make_cache_key=page_cache_key)
 def short_link_md(note_id):
     check_note_id(note_id)
     content = read_note("public", note_id)

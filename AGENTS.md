@@ -42,8 +42,10 @@
 
 ## 架构要点
 - 入口：`app/__main__.py`（waitress）或 `app/wsgi.py`（gunicorn）；无服务器：`api/index.py`（Vercel）、`lambda_handler.py`（Lambda）
-- 核心模块：`storage.py`（存储后端抽象）、`store.py`（数据存储业务）、`auth.py`（认证）、`notes.py`（笔记操作）、`middleware.py`（请求上下文）
-- 路由蓝图：home, auth, benben, static_routes, world, user, share, world_short（注意最后注册 catch-all）
+- 核心模块：`storage.py`（存储后端抽象）、`store.py`（数据存储业务）、`auth.py`（认证）、`notes.py`（笔记操作）、`middleware.py`（请求上下文）、`plugins.py`（插件系统：zip 解压安装 / auth_token 校验 / 命名空间冲突检查 / 蓝图加载 / 上游更新线程）、`feature_flags.py`（功能开关：注册表 + 存储持久化 + `require_feature` 装饰器）
+- 路由蓝图：home, auth, benben, static_routes, world, user, share, admin（`/admin/features` 功能开关管理）, **插件蓝图（在 views.register_blueprints 内注册）**, world_short（注意最后注册 catch-all）
+- 功能开关（`app/feature_flags.py`，#90）：管理员（`RUSIN_ADMIN` 环境变量或 config.json `admin_users`）在 `/admin/features` 用滑块切换；运行时状态存 KV 键 `feature_flags`（file 后端即 `feature_flags.json`），进程内 5s TTL 缓存；停用功能路由 404、导航/首页入口隐藏，状态呈现于 `/count`。新增可开关功能：在 `FEATURES` 注册表登记 + 视图加 `@require_feature(key)`（必须放 `@bp.route` 之后、`@cache.cached`/`@limiter.limit` 之前）。端到端测试：`python flags_test.py`
+- 插件系统（`app/plugins.py`；无服务器只读盘环境自动禁用）：`*.plugin.zip` 投放到 `RUSIN_DATA_DIR` 自动解压安装到 `plugins/<namespace>/` 并删除包；desc.json 缺 `auth_token` 须 `--skip-auth`（或 `RUSIN_PLUGIN_SKIP_AUTH=1`）放行；命名空间冲突非同源且未声明 OVERRIDE 拒绝；后台线程每 `plugins.update_interval_hours`（默认 6h）检查，`last_update` 超过 `update_stale_days`（默认 3 天）则请求 `upstream_repo`（3s 超时）后重跑安装。端到端测试：`python plugin_test.py`
 - 模板：Jinja2，支持 `{{ t('key') }}` 多语言
 - 无服务器默认存储：Vercel 绑定 Neon 后 `DATABASE_URL` 自动注入 → 自动切到 postgres 后端
 
