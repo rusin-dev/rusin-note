@@ -82,31 +82,40 @@ python 版本 $\geq$ 3.10。
 
 ### 线上部署
 
-#### 方式一：Vercel（无服务器，推荐）
+#### 获取 SECRET_KEY
+
+Windows：`win+x i` powershell 运行 `$bytes=New-Object byte[] 48;[System.Security.Cryptography.RNGCryptoServiceProvider]::Create().GetBytes($bytes);[Convert]::ToBase64String($bytes)`，复制生成的密钥。
+
+Linux / macOS：打开终端，运行 `openssl rand -base64 48`，复制生成的密钥。
+
+Python 通用：`python -c "import secrets; print(secrets.token_hex(32))"` 或 `python3 -c "import secrets; print(secrets.token_hex(32))"`
+
+#### 方式一：Vercel（无服务器推荐方式）
+
+[Vercel Demo](https://rusin-note.vercel.app)
 
 [![Deploy to Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Frusin-dev%2Frusin-note&&env=RUSIN_SECRET_KEY)
 
-项目已内置 Vercel 配置（`vercel.json` + `api/index.py`），零配置即可部署：
-
-1. 在 [Vercel](https://vercel.com) 导入本仓库（Framework Preset 选择 **Other** 即可，Python 运行时自动识别）。
-2. 存储后端二选一：
-   - **Neon（PostgreSQL）（推荐）**：在 Vercel 的 Storage / Marketplace 绑定 [Neon](https://vercel.com/marketplace/neon)，Vercel 会自动注入 `DATABASE_URL` 环境变量（Vercel KV 已停服，这是目前 Vercel 官方推荐的持久化方案）；
-   - **Upstash Redis**：在 Vercel Marketplace 安装 Upstash Redis，手动把 `KV_REST_API_URL` 与 `KV_REST_API_TOKEN` 填入项目环境变量。
-   - 两者都设置时优先用 Upstash。
-3. 在项目设置中新增环境变量 `RUSIN_SECRET_KEY`（任意随机长字符串，用于会话/CSRF 签名，**必填**；不设置则每次冷启动随机，登录态会失效）。
-4. 部署完成后，数据（笔记、用户、会话、分享、犇犇）全部存于 Neon/Upstash，多实例共享、冷启动不丢。
+1. 点击以上按钮，框架等不用更改，保持默认即可。然后给仓库起个名，点击 `Create`。
+2. 到 `Add Environment Variables` 这项时在 `Value` 一栏粘贴刚刚的 `SECRET_KEY`，然后点击下面的 `Deploy`，等待首次部署完成。
+3. 半分钟后 Vercel 显示 `Congratulations!` 时下滑，点击 `Continue to Dashboard`。
+4. 存储后端 **Neon（PostgreSQL）**：在 Vercel 项目面板左侧导航栏的 `Storage`，点右上角 `Create Database`，在 `Marketplace Database Providers` 下找到 `Neon` 并点击，然后点右下角 `Continue`，再下滑点击 `Continue`，然后点击 `Create`，接着点击 `Connect`；
+5. 点击 在 Vercel 项目面板左侧导航栏的 `Deployments`，切换到 Deployments 页面后点击右上角三个点，然后 `Create Deployment`，点击 `main` 分支的图标，最后点 `Deploy to Production` 即可。
+6. 部署完成后，你可以绑定自己的域名避免 Vercel 默认域名无法访问的问题。
 
 可选：设置 `REDIS_URL`（Redis 连接串，如 Upstash 或自建 Redis）后，页面缓存切换为共享 Redis、限流计数也在多实例间共享；不设置时页面缓存用进程内 SimpleCache、限流按实例内存计数（Zeabur 上的用法见下方章节）。
 
 > 提示：无服务器平台默认 `trust_proxy_headers: true`、`secure_cookies: true`（已写入 `config.json`）。本地开发如需关闭请自行修改。
 
-#### 方式二：AWS Lambda（无服务器）
+#### 方式二：AWS Lambda
+
+需要信用卡，不推荐。
 
 项目根目录提供 `lambda_handler.py`（基于 Mangum 适配 WSGI）：
 
 1. 打包仓库上传（包含 `templates/`、`config.json` 等）；
 2. 处理程序设为 `lambda_handler.handler`，配 API Gateway 代理集成；
-3. 环境变量与 Vercel 相同（`KV_REST_API_URL` / `KV_REST_API_TOKEN` / `RUSIN_SECRET_KEY`）；
+3. 环境变量与 Vercel 相同（`RUSIN_SECRET_KEY`，`DATABASE_URL`）；
 4. 内存建议 ≥ 512MB（Markdown 渲染需要）。
 
 #### 方式三：VPS / 传统服务器

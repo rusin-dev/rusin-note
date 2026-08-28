@@ -42,9 +42,25 @@
             transition: background 0.2s ease, border-color 0.2s ease;
         }
         .theme-toggle:hover, .nav-menu-btn:hover { background: var(--card-bg); }
+        .lang-toggle {
+            display: inline-flex; align-items: center; gap: 6px;
+            height: 36px; padding: 0 10px;
+            border-radius: 8px;
+            background: var(--bg);
+            border: 1px solid var(--navbar-border);
+            color: var(--text);
+            text-decoration: none;
+            cursor: pointer;
+            flex-shrink: 0;
+            font-size: 15px;
+            transition: background 0.2s ease, border-color 0.2s ease;
+        }
+        .lang-toggle:hover { background: var(--card-bg); }
+        .lang-toggle .fa-globe { font-size: 15px; }
         .nav-menu-btn { display: none; }
         .navbar.menu-collapsed { flex-wrap: wrap; }
         .navbar.menu-collapsed .nav-menu-btn { display: inline-flex; }
+        .navbar.menu-collapsed .theme-toggle { display: none; }
         .navbar.menu-collapsed .nav-links {
             order: 10;
             flex-basis: 100%;
@@ -271,6 +287,7 @@
                 var brand = document.querySelector('.navbar-brand');
                 var user = document.querySelector('.user-info');
                 var theme = document.querySelector('.theme-toggle');
+                var lang = document.querySelector('.lang-toggle');
                 if (!navbar || !links || !menuBtn || !brand) return;
                 var wasOpen = navbar.classList.contains('menu-open');
                 navbar.classList.remove('menu-collapsed', 'menu-open');
@@ -284,8 +301,9 @@
                 var linksW = links.scrollWidth;
                 var userW = user ? user.scrollWidth : 0;
                 var themeW = theme ? theme.offsetWidth : 0;
+                var langW = lang ? lang.offsetWidth : 0;
                 var menuW = menuBtn.offsetWidth;
-                var total = brand.offsetWidth + userW + linksW + themeW + menuW + GAP * 3;
+                var total = brand.offsetWidth + userW + linksW + themeW + langW + menuW + GAP * 3;
                 [links, user, theme].forEach(function (el) {
                     if (!el) return;
                     el.style.position = '';
@@ -629,84 +647,7 @@
             setTimeout(autoResize, 100);
             textarea.addEventListener('input', autoResize);
 
-            // ---------- 图片上传（粘贴/拖拽） ----------
-            const MAX_UPLOAD_SIZE = 200 * 1024; // 200KB
 
-            function insertAtCursor(text) {
-                const start = textarea.selectionStart;
-                const end = textarea.selectionEnd;
-                const before = textarea.value.slice(0, start);
-                const after = textarea.value.slice(end);
-                textarea.value = before + text + after;
-                textarea.selectionStart = textarea.selectionEnd = start + text.length;
-                textarea.dispatchEvent(new Event('input'));
-            }
-
-            async function uploadImage(file) {
-                if (!file) return;
-                if (file.size > MAX_UPLOAD_SIZE) {
-                    showHint('图片大小不能超过 200KB');
-                    return;
-                }
-                const formData = new FormData();
-                formData.append('file', file);
-                formData.append('csrf_token', form.querySelector('[name="csrf_token"]').value);
-                try {
-                    showStatus('上传中…', 'saving');
-                    const resp = await fetch('/upload', { method: 'POST', body: formData });
-                    if (!resp.ok) {
-                        showStatus('上传失败', 'error');
-                        showHint('图片上传失败，请重试');
-                        return;
-                    }
-                    const data = await resp.json();
-                    if (data.error) {
-                        showStatus('上传失败', 'error');
-                        showHint(data.error);
-                        return;
-                    }
-                    insertAtCursor('![](' + data.url + ')');
-                    showStatus('已上传', '');
-                } catch (e) {
-                    showStatus('上传失败', 'error');
-                    showHint('网络错误，请重试');
-                }
-            }
-
-            // 粘贴上传
-            textarea.addEventListener('paste', async (e) => {
-                const items = [...e.clipboardData.items];
-                for (const item of items) {
-                    if (item.type.startsWith('image/')) {
-                        e.preventDefault();
-                        await uploadImage(item.getAsFile());
-                        return;
-                    }
-                }
-            });
-
-            // 拖拽上传
-            textarea.addEventListener('dragover', (e) => {
-                const hasImage = [...e.dataTransfer.items].some(i => i.type.startsWith('image/'));
-                if (hasImage) {
-                    e.preventDefault();
-                    textarea.style.caretColor = 'transparent';
-                }
-            });
-            textarea.addEventListener('dragleave', () => {
-                textarea.style.caretColor = '';
-            });
-            textarea.addEventListener('drop', async (e) => {
-                const items = [...e.dataTransfer.items];
-                for (const item of items) {
-                    if (item.type.startsWith('image/')) {
-                        e.preventDefault();
-                        textarea.style.caretColor = '';
-                        await uploadImage(item.getAsFile());
-                        return;
-                    }
-                }
-            });
         })();
     </script>
     <script>

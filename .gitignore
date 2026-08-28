@@ -22,6 +22,7 @@ env/
 log/
 *.tmp
 *.lock
+attachments/
 
 # 本地运行时数据
 ./notes/

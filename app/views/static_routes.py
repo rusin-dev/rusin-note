@@ -1,15 +1,12 @@
-"""静态资源路由：/favicon.ico、/image/、/upload"""
-import io
+"""静态资源路由：/favicon.ico、/image/<name>（内置静态资源）、/image/<username>/<id>（用户图床）"""
 import os
-import random
 import re
 import stat
 
-from flask import Blueprint, abort, request, Response, jsonify
+from flask import Blueprint, abort, request, Response
 
 from .. import config
-from ..extensions import limiter
-from ..feature_flags import require_feature
+from ..images import read_image, validate_image_id
 from ..theme import get_favicon
 
 bp = Blueprint("static_routes", __name__)
@@ -23,32 +20,14 @@ def favicon():
     return Response(data, mimetype="image/x-icon")
 
 
-_IMAGE_NAME_RE = re.compile(r"^[a-zA-Z0-9_\-]+\.(png|jpg|jpeg|gif|svg|ico|webp)$")
+_STATIC_NAME_RE = re.compile(r"^[a-zA-Z0-9_\-]+\.(png|jpg|jpeg|gif|svg|ico|webp)$")
 
 
 @bp.route("/image/<name>")
-def image(name):
-    if not _IMAGE_NAME_RE.match(name):
+def image_static(name):
+    """服务仓库 image/ 目录下的静态资源（logo 等）"""
+    if not _STATIC_NAME_RE.match(name):
         abort(404)
-    # 先查 uploads/（用户上传）：realpath 规范化后用 startswith 前缀校验，
-    # 防止 ../ 穿越；O_NOFOLLOW 内核级拒绝跟随符号链接（Windows 不支持时忽略）。
-    upload_root = os.path.realpath(config.UPLOAD_DIR)
-    upload_path = os.path.realpath(os.path.join(upload_root, name))
-    if upload_path.startswith(upload_root + os.sep):
-        fd = None
-        try:
-            fd = os.open(upload_path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
-            stat_info = os.fstat(fd)
-            if not stat.S_ISREG(stat_info.st_mode):
-                abort(404)
-            return Response(os.read(fd, stat_info.st_size), mimetype="image/gif")
-        except OSError:
-            # 不在 uploads/，继续尝试静态 image/
-            pass
-        finally:
-            if fd is not None:
-                os.close(fd)
-    # 回退仓库内置 image/：同样先规范化再校验前缀
     static_root = os.path.realpath(
         os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "image")
     )
@@ -70,76 +49,17 @@ def image(name):
     abort(404)
 
 
-# ---------- 图片上传路由 ----------
-_ALLOWED_IMAGE_TYPES = {"image/png", "image/jpeg", "image/gif", "image/webp", "image/bmp"}
-_ID_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+@bp.route("/image/<username>/<image_id>")
+def image_user(username, image_id):
+    """服务用户图床图片（/image/<username>/<id>）"""
+    if not re.match(r"^[a-zA-Z0-9_\-]+$", username):
+        abort(404)
+    if not validate_image_id(image_id):
+        abort(404)
+    data = read_image(username, image_id)
+    if data is None:
+        abort(404)
+    from ..images import image_mimetype
+    return Response(data, mimetype=image_mimetype(image_id))
 
 
-def _generate_upload_id() -> str:
-    """生成 10 位图片 ID：前缀 i_ + 8 位随机字符"""
-    return "i_" + "".join(random.choices(_ID_CHARS, k=8))
-
-
-def _convert_to_compressed_gif(data: bytes) -> bytes:
-    """将图片数据转换为高压缩 GIF（最小体积策略）"""
-    from PIL import Image
-    img = Image.open(io.BytesIO(data))
-    # 转为 RGB（去掉 alpha 通道）
-    if img.mode in ("RGBA", "P", "LA"):
-        background = Image.new("RGB", img.size, (255, 255, 255))
-        if img.mode == "P":
-            img = img.convert("RGBA")
-        background.paste(img, mask=img.split()[-1] if img.mode == "RGBA" else None)
-        img = background
-    elif img.mode != "RGB":
-        img = img.convert("RGB")
-    # 缩小到最大 800px（保持比例）
-    max_size = 800
-    if max(img.size) > max_size:
-        ratio = max_size / max(img.size)
-        new_size = (int(img.size[0] * ratio), int(img.size[1] * ratio))
-        img = img.resize(new_size, Image.LANCZOS)
-    # 量化降色（256 色调色板，大幅压缩）
-    img = img.quantize(colors=256, method=Image.Quantize.MEDIANCUT)
-    # 输出 GIF
-    buf = io.BytesIO()
-    img.save(buf, format="GIF", optimize=True)
-    return buf.getvalue()
-
-
-@bp.route("/upload", methods=["POST"])
-@limiter.limit(lambda: f"{config.UPLOAD_RATE_MAX} per {config.UPLOAD_RATE_WINDOW} second")
-@require_feature("image_upload")
-def upload_image():
-    """接收图片上传，转换为压缩 GIF，返回访问 URL"""
-    if "file" not in request.files:
-        return jsonify({"error": "no file provided"}), 400
-    file = request.files["file"]
-    if not file.filename:
-        return jsonify({"error": "empty filename"}), 400
-    # 大小校验
-    content_length = request.content_length
-    if content_length is not None and content_length > config.MAX_UPLOAD_BYTES:
-        return jsonify({"error": "file too large"}), 413
-    # MIME 类型校验
-    mime = file.content_type or ""
-    if mime not in _ALLOWED_IMAGE_TYPES:
-        return jsonify({"error": "unsupported image type"}), 400
-    # 读取数据
-    data = file.read()
-    if len(data) > config.MAX_UPLOAD_BYTES:
-        return jsonify({"error": "file too large"}), 413
-    # 转换并压缩为 GIF
-    try:
-        gif_data = _convert_to_compressed_gif(data)
-    except Exception:
-        return jsonify({"error": "failed to process image"}), 400
-    # 生成唯一 ID
-    upload_id = _generate_upload_id()
-    filename = upload_id + ".gif"
-    # 确保 uploads/ 目录存在
-    os.makedirs(config.UPLOAD_DIR, exist_ok=True)
-    dest_path = os.path.join(config.UPLOAD_DIR, filename)
-    with open(dest_path, "wb") as f:
-        f.write(gif_data)
-    return jsonify({"url": f"/image/{filename}"})
