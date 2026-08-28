@@ -51,6 +51,7 @@ def benben_get():
             "username": post.get("username", ""),
             "time": ts,
             "time_str": time_str,
+            "content": post.get("content", ""),
             "content_html": render_markdown_html(post.get("content", "")),
         })
     return render_template(
@@ -96,6 +97,7 @@ def benben_post():
                 "username": p.get("username", ""),
                 "time": ts,
                 "time_str": time_str,
+                "content": p.get("content", ""),
                 "content_html": render_markdown_html(p.get("content", "")),
             })
         err_msg = t(lang, msg_key, **kw)
