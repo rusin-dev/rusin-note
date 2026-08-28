@@ -102,6 +102,46 @@ def get_theme_toggle_btn(lang: str, theme: str = None) -> str:
     icon = "fa-sun" if theme == "dark" else "fa-moon"
     return (f'<button type="button" id="themeBtn" class="theme-toggle" '
             f'onclick="toggleTheme()"><i class="fa-solid {icon}" aria-hidden="true"></i></button>')
+
+
+# ---------- 简易模式（客户端切换，隐藏高级功能） ----------
+def get_simple_mode_script() -> str:
+    return """
+<script>
+(function() {
+    var SIMPLE_KEY = 'rusin-simple';
+    function setCookie(v) {
+        document.cookie = SIMPLE_KEY + '=' + v + '; Path=/; Max-Age=31536000; SameSite=Lax';
+    }
+    function apply(simple) {
+        document.documentElement.classList.toggle('simple-mode', simple);
+        var b = document.getElementById('simpleBtn');
+        if (b) {
+            b.innerHTML = '<i class="fa-solid ' + (simple ? 'fa-expand' : 'fa-compress') + '" aria-hidden="true"></i>';
+            b.title = simple ? '切换正常模式' : '切换简易模式';
+        }
+        try { localStorage.setItem(SIMPLE_KEY, simple ? '1' : '0'); } catch (e) {}
+        setCookie(simple ? '1' : '0');
+    }
+    window.toggleSimpleMode = function() {
+        apply(document.documentElement.classList.contains('simple-mode') ? false : true);
+    };
+    var saved = null;
+    try { saved = localStorage.getItem(SIMPLE_KEY); } catch (e) {}
+    var serverSimple = document.documentElement.classList.contains('simple-mode');
+    if (serverSimple) saved = '1';
+    apply(saved === '1');
+    document.addEventListener('DOMContentLoaded', function() {
+        apply(document.documentElement.classList.contains('simple-mode') || saved === '1');
+    });
+})();
+</script>
+"""
+
+
+def get_simple_mode_toggle_btn(lang: str) -> str:
+    return ('<button type="button" id="simpleBtn" class="simple-toggle" '
+            'onclick="toggleSimpleMode()" title="简易模式"><i class="fa-solid fa-compress" aria-hidden="true"></i></button>')
 # ---------- favicon 缓存（BUG-16：避免每次请求读磁盘） ----------
 _FAVICON_CACHE = None
 

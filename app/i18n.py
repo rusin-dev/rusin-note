@@ -739,7 +739,7 @@ def register_i18n(app: Flask) -> None:
     """注册 Jinja2 全局上下文，使模板可直接用 {{ t('key') }} / {{ lang }} / {{ theme }} / {{ theme_script }} / {{ theme_vars }} / {{ current_user }} / {{ site_name }}"""
     from . import config as _cfg
     from .feature_flags import feature_enabled
-    from .theme import THEME_VARS, get_theme_script
+    from .theme import THEME_VARS, get_theme_script, get_simple_mode_script, get_simple_mode_toggle_btn
     from .utils import (
         get_avatar_url, render_code_highlight_head, render_heading_anchors_head,
         render_pygments_head,
@@ -755,6 +755,8 @@ def register_i18n(app: Flask) -> None:
             "theme": getattr(g, "theme", None),
             "theme_script": get_theme_script(lang),
             "theme_vars": THEME_VARS,
+            "simple_mode_script": get_simple_mode_script(),
+            "simple_mode_toggle_btn": get_simple_mode_toggle_btn(lang),
             "pygments_head": render_pygments_head(),
             "current_user": getattr(g, "current_user", None),
             "site_name": _cfg.SITE_NAME,

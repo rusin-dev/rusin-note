@@ -38,4 +38,5 @@
     <button type="button" id="themeBtn" class="theme-toggle" onclick="toggleTheme()" title="Theme">
         <i class="fa-solid {% if theme == 'dark' %}fa-sun{% else %}fa-moon{% endif %}" aria-hidden="true"></i>
     </button>
+    {{ simple_mode_toggle_btn|safe }}
 </div>

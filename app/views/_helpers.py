@@ -5,7 +5,7 @@ from .. import config
 from ..extensions import cache
 from ..i18n import LANGS, t
 from ..notes import validate_note_id
-from ..theme import get_theme_script, THEME_VARS
+from ..theme import get_theme_script, get_simple_mode_script, get_simple_mode_toggle_btn, THEME_VARS
 from ..utils import format_note_time, render_latex_head
 
 
@@ -119,6 +119,8 @@ def build_note_context(
     return {
         "theme_vars": THEME_VARS,
         "theme_script": get_theme_script(lang),
+        "simple_mode_script": get_simple_mode_script(),
+        "simple_mode_toggle_btn": get_simple_mode_toggle_btn(lang),
         "site_name": config.SITE_NAME,
         "title_prefix": title_prefix,
         "full_title": full_title,
