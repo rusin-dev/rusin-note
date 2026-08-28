@@ -76,6 +76,7 @@
         .nav-menu-btn { display: none; }
         .navbar.menu-collapsed { flex-wrap: wrap; }
         .navbar.menu-collapsed .nav-menu-btn { display: inline-flex; }
+        .navbar.menu-collapsed .theme-toggle { display: none; }
         .navbar.menu-collapsed .nav-links {
             order: 10;
             flex-basis: 100%;
@@ -215,6 +216,7 @@
             var brand = document.querySelector('.navbar-brand');
             var user = document.querySelector('.user-info');
             var theme = document.querySelector('.theme-toggle');
+            var lang = document.querySelector('.lang-toggle');
             if (!navbar || !links || !menuBtn || !brand) return;
             var wasOpen = navbar.classList.contains('menu-open');
             navbar.classList.remove('menu-collapsed', 'menu-open');
@@ -228,8 +230,9 @@
             var linksW = links.scrollWidth;
             var userW = user ? user.scrollWidth : 0;
             var themeW = theme ? theme.offsetWidth : 0;
+            var langW = lang ? lang.offsetWidth : 0;
             var menuW = menuBtn.offsetWidth;
-            var total = brand.offsetWidth + userW + linksW + themeW + menuW + GAP * 3;
+            var total = brand.offsetWidth + userW + linksW + themeW + langW + menuW + GAP * 3;
             [links, user, theme].forEach(function (el) {
                 if (!el) return;
                 el.style.position = '';

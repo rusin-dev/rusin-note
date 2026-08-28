@@ -153,7 +153,6 @@ DEFAULT_CONFIG = {
         "note_images": True,
         "note_attachments": True,
         "comments": True,
-        "image_upload": False
     },
     "admin_users": [],                        # 功能开关管理员用户名（也可用环境变量 RUSIN_ADMIN 指定，逗号分隔）
     "max_note_id_length": 250,
@@ -170,11 +169,6 @@ DEFAULT_CONFIG = {
         "update_stale_days": 3
     },
     "debug": False,
-    "max_upload_size_kb": 200,                # 单张图片最大 200KB
-    "upload_rate_limit": {                     # 上传接口独立限流
-        "window_seconds": 60,
-        "max_requests": 30
-    }
 }
 
 
@@ -211,13 +205,6 @@ def data_path(*parts: str) -> str:
 
 SITE_NAME = config.get("sitename", "")
 MAX_CONTENT_BYTES = config.get("max_note_size_kb", 5120) * 1024
-
-# ---------- 图片上传配置 ----------
-UPLOAD_DIR = data_path("uploads")
-MAX_UPLOAD_BYTES = config.get("max_upload_size_kb", 200) * 1024
-UPLOAD_RATE_CFG = config.get("upload_rate_limit", {"window_seconds": 60, "max_requests": 30})
-UPLOAD_RATE_WINDOW = UPLOAD_RATE_CFG.get("window_seconds", 60)
-UPLOAD_RATE_MAX = UPLOAD_RATE_CFG.get("max_requests", 30)
 
 RATE_WINDOW = config.get("rate_limit", {}).get("window_seconds", 60)
 RATE_MAX = config.get("rate_limit", {}).get("max_requests", 30)

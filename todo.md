@@ -9,6 +9,14 @@
 - [#88 Avator 用户头像](https://github.com/rusin-dev/rusin-note/issues/88)
 - [#89 加入快捷编辑栏](https://github.com/rusin-dev/rusin-note/issues/89)
 - [#115 添加 CDN 缓存到本地](https://github.com/rusin-dev/rusin-note/issues/115)
+- [#127 添加犇犇的 '@' 功能](https://github.com/rusin-dev/rusin-note/issues/127)
+- [#134 修改主页面样式](https://github.com/rusin-dev/rusin-note/issues/134)
+- [#152 简易模式与正常模式切换 *实现较慢](https://github.com/rusin-dev/rusin-note/issues/152)
+
+## 待讨论
+
+- [#122 加入笔记内画图功能](https://github.com/rusin-dev/rusin-note/issues/122)
+- [#128 添加消息队列](https://github.com/rusin-dev/rusin-note/issues/128)
 
 ## 另开项目
 

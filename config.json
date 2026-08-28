@@ -125,7 +125,7 @@
     "note_attachments": true,
     "comments": true
   },
-  "admin_users": [],
+  "admin_users": ["admin"],
   "max_note_id_length": 250,
   "max_note_tags": 10,
   "max_tag_length": 24,
