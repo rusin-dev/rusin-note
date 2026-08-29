@@ -180,7 +180,8 @@ def main():
     r = client.post(f"/user/{USER}/zzzz/pin", data={"csrf_token": csrf})
     check("置顶不存在的笔记 -> 404", r.status_code == 404)
 
-    client.get("/logout")
+    csrf = csrf_of(client.get("/").get_data(as_text=True))
+    client.post("/logout", data={"csrf_token": csrf})
     register_and_login(client, OTHER)
     own = create_note(client, OTHER, "别人的笔记")
     r = pin(client, OTHER, own)

@@ -44,6 +44,20 @@
         .navbar .nav-links a:hover { background: var(--card-bg); color: var(--text); text-decoration: none; }
         .navbar .nav-links a:active { transform: scale(0.96); }
         .navbar .nav-links i { font-size: 13px; }
+        .nav-link-btn {
+            display: inline-flex; align-items: center; gap: 6px;
+            padding: 6px 12px;
+            border-radius: 999px;
+            color: var(--link);
+            text-decoration: none;
+            background: none;
+            border: none;
+            cursor: pointer;
+            font: inherit;
+            transition: background 0.2s ease, color 0.2s ease, transform 0.1s ease;
+        }
+        .nav-link-btn:hover { background: var(--card-bg); color: var(--text); text-decoration: none; }
+        .nav-link-btn:active { transform: scale(0.96); }
         .avatar { width: 20px; height: 20px; border-radius: 50%; object-fit: cover; vertical-align: middle; flex-shrink: 0; }
         .navbar .user-info .avatar { margin-right: 6px; }
         .theme-toggle, .nav-menu-btn {

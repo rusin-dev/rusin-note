@@ -51,7 +51,7 @@ def login_get():
     return render_template("auth/login.html", error="")
 
 
-@bp.route("/logout", methods=["GET"])
+@bp.route("/logout", methods=["POST"])
 def logout():
     token = get_session_token()
     if token:
