@@ -1,0 +1,17 @@
+{
+  "world_notes": true,
+  "benben": true,
+  "share_links": true,
+  "open_register": true,
+  "note_refs": true,
+  "latex_render": true,
+  "code_highlight": true,
+  "avatar": true,
+  "note_tags": true,
+  "note_folders": true,
+  "note_pins": true,
+  "heading_anchors": true,
+  "note_images": true,
+  "note_attachments": true,
+  "comments": true
+}
