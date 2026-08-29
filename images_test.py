@@ -192,7 +192,8 @@ def main():
 
     # ===== H. 用户隔离 =====
     print("[H] 用户隔离")
-    client.get("/logout")
+    csrf = csrf_of(client.get("/").get_data(as_text=True))
+    client.post("/logout", data={"csrf_token": csrf})
     register_and_login(client, OTHER)
     _, other_csrf = create_note(client, OTHER)
     r = upload(client, OTHER, other_csrf, WEBP, filename="d.webp", mime="image/webp")

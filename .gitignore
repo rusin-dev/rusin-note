@@ -2,6 +2,7 @@
 __pycache__/
 *.pyc
 *.pyo
+.pytest_cache/
 
 # 虚拟环境
 venv/
@@ -30,6 +31,16 @@ sessions.json
 users.json
 shares.json
 benben.json
+note_folders.json
+note_tags.json
+feature_flags.json
+orgs.json
+org_members.json
+org_invites.json
+org_join_requests.json
+comments.json
+note_pins.json
+note_titles.json
 .env
 
 # 其他
