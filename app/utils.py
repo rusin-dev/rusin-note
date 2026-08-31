@@ -165,11 +165,11 @@ def render_markdown_html(content: str, ref_namespace: str | None = None,
                     _note_ref_resolver(ref_namespace),
                 )
             raw_html = config.markdown.markdown(
-                content, extensions=['extra']
+                content, extensions=['extra', 'pymdownx.tilde']
             )
             raw_html = _highlight_code_blocks(raw_html)
             allowed_tags = [
-                'p', 'br', 'strong', 'em', 'u', 'strike', 'a',
+                'p', 'br', 'strong', 'em', 'u', 'del', 'strike', 'a',
                 'ul', 'ol', 'li', 'blockquote', 'pre', 'code',
                 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'hr',
                 'table', 'thead', 'tbody', 'tr', 'th', 'td',
