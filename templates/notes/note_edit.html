@@ -601,7 +601,7 @@
                 catch (e) { previewBody.innerHTML = '<p class="error">渲染失败</p>'; return; }
                 if (window.DOMPurify) {
                     html = window.DOMPurify.sanitize(html, {
-                        ALLOWED_TAGS: ['p','br','strong','em','u','strike','a','ul','ol','li','blockquote','pre','code','h1','h2','h3','h4','h5','h6','hr','table','thead','tbody','tr','th','td','div','span','img','input','dl','dt','dd','details','summary','abbr','sup','sub'],
+                        ALLOWED_TAGS: ['p','br','strong','em','u','del','strike','a','ul','ol','li','blockquote','pre','code','h1','h2','h3','h4','h5','h6','hr','table','thead','tbody','tr','th','td','div','span','img','input','dl','dt','dd','details','summary','abbr','sup','sub'],
                         ALLOWED_ATTR: ['href','title','target','class','src','alt','rel','type','checked','disabled','id']
                     });
                 }

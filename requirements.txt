@@ -4,6 +4,7 @@ Flask-Limiter>=3.5,<4.0
 Flask-Caching>=2.0,<3.0
 waitress>=3.0,<4.0
 markdown>=3.6,<4.0
+pymdown-extensions>=10.0,<12.0
 pygments>=2.15,<3.0
 bleach>=6.0,<6.3
 redis>=5.0,<7.0
