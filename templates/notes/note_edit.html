@@ -212,11 +212,16 @@
             .save-status { bottom: 70px; right: 16px; font-size: 12px; padding: 4px 14px; }
             .note-mtime { bottom: 16px; font-size: 11px; }
         }
-        /* 简易模式：隐藏标签栏和预览 */
+        /* 简易模式：只保留读写保存，隐藏标签栏、预览窗格、附件、评论 */
         .simple-mode .tag-bar { display: none !important; }
         .simple-mode .pane.preview-pane { display: none !important; }
         .simple-mode .pane.editor-pane { border-right: none !important; }
         .simple-mode .editor-header .switch { display: none !important; }
+        .simple-mode .attachment-btn { display: none !important; }
+        .simple-mode #commentBtn { display: none !important; }
+        /* 简易模式：隐藏导航栏多余链接，只保留免责声明 */
+        .simple-mode .nav-links a:not([href*="disclaimer"]) { display: none !important; }
+        .simple-mode .nav-links form { display: none !important; }
         .simple-mode .simple-toggle { color: var(--link); border-color: var(--link); }
         .simple-toggle {
             width: 36px; height: 36px;

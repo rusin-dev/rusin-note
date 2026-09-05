@@ -213,15 +213,14 @@
         [data-theme="dark"] .ff-switch input:checked ~ .ff-track { background: #2ea043; }
         .ff-switch input:checked ~ .ff-track::before { transform: translateX(20px); }
         .ff-switch input:focus-visible ~ .ff-track { outline: 2px solid var(--link); outline-offset: 2px; }
-        /* 简易模式：隐藏高级功能 */
+        /* 简易模式：隐藏高级功能，只保留读写保存、md预览URL、中英文、免责声明 */
         .simple-mode .tag-cloud { display: none !important; }
         .simple-mode .note-tags { display: none !important; }
         .simple-mode .pin-form { display: none !important; }
         .simple-mode .benben-list { display: none !important; }
         .simple-mode .benben-form { display: none !important; }
-        .simple-mode .nav-links a[href*="benben"],
-        .simple-mode .nav-links a[href*="shares"],
-        .simple-mode .nav-links a[href*="org"] { display: none !important; }
+        .simple-mode .nav-links a:not([href*="disclaimer"]) { display: none !important; }
+        .simple-mode .nav-links form { display: none !important; }
         .simple-toggle {
             width: 36px; height: 36px;
             display: inline-flex; align-items: center; justify-content: center;
