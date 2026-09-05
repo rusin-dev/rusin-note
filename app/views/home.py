@@ -1,5 +1,5 @@
 """首页、统计、免责声明"""
-from flask import Blueprint, g, render_template
+from flask import Blueprint, g, redirect, render_template, request
 
 from .. import config
 from ..extensions import cache
@@ -13,8 +13,11 @@ bp = Blueprint("home", __name__)
 
 
 @bp.route("/")
-@cache.cached(timeout=config.CACHE_TIMEOUT_INDEX, make_cache_key=page_cache_key)
+@cache.cached(timeout=config.CACHE_TIMEOUT_INDEX, make_cache_key=page_cache_key,
+              unless=lambda: request.cookies.get("rusin-simple") == "1")
 def index():
+    if request.cookies.get("rusin-simple") == "1":
+        return redirect("/world/", code=302)
     lang = getattr(g, "lang", "zh")
     current_user = getattr(g, "current_user", None)
     # 首页卡片按功能开关过滤（#90）：停用的功能不再展示入口
