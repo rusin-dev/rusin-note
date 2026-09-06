@@ -58,8 +58,9 @@ def world_note_post(note_id):
     if not write_note("public", note_id, content):
         abort(500)
     # /world/<id> 编辑页虽未缓存，一并清理保持对称；/<id>.md 是短链渲染入口
+    # 首页显示最近编辑的笔记，也需要刷新
     purge_page_cache(
-        [f"/world/{note_id}", f"/world/{note_id}.md", f"/world/{note_id}/md",
+        ["/", f"/world/{note_id}", f"/world/{note_id}.md", f"/world/{note_id}/md",
          f"/{note_id}.md"],
         viewers=(None, get_current_user()),
     )
