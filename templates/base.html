@@ -180,14 +180,15 @@
         .home-recent h2 { font-size: 18px; font-weight: 600; margin-bottom: 14px; }
         .home-recent-list { display: flex; flex-direction: column; gap: 8px; }
         .home-recent-item {
-            display: flex; align-items: center; justify-content: space-between;
+            display: flex; align-items: center; gap: 8px;
             padding: 12px 16px; background: var(--card-bg); border: 1px solid var(--card-border);
             border-radius: 10px; text-decoration: none; color: var(--text);
             transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
         }
         .home-recent-item:hover { transform: translateY(-2px); border-color: var(--hover); box-shadow: var(--card-shadow); }
-        .home-recent-title { font-size: 14px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 50%; }
-        .home-recent-time { font-size: 12px; color: var(--muted); white-space: nowrap; margin-left: 12px; }
+        .home-recent-id { font-size: 14px; font-weight: 600; color: var(--link); flex-shrink: 0; }
+        .home-recent-preview { font-size: 13px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; min-width: 0; }
+        .home-recent-time { font-size: 12px; color: var(--muted); white-space: nowrap; margin-left: auto; flex-shrink: 0; }
         .home-recent-meta { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
         .home-recent-views { font-size: 12px; color: var(--muted); white-space: nowrap; }
         .home-recent-badge { font-size: 11px; padding: 2px 8px; border-radius: 999px; background: var(--card-icon-bg); color: var(--link); white-space: nowrap; }

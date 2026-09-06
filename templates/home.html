@@ -32,7 +32,8 @@
         <div class="home-recent-list">
             {% for note in recent_notes %}
             <a class="home-recent-item" href="/user/{{ current_user }}/{{ note.id }}">
-                <span class="home-recent-title">{{ note.title or note.id }}</span>
+                <span class="home-recent-id">{{ note.id }}</span>
+                <span class="home-recent-preview">{{ note.title[:10] }}{% if note.title|length > 10 %}...{% endif %}</span>
                 <span class="home-recent-time">{{ note.mtime|format_note_time }}</span>
             </a>
             {% endfor %}
