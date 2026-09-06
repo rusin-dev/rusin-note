@@ -1,11 +1,11 @@
 """首页、统计、免责声明"""
-from flask import Blueprint, g, redirect, render_template, request
+from flask import Blueprint, g, redirect, render_template, request, url_for
 
 from .. import config
 from ..extensions import cache
 from ..feature_flags import feature_enabled, get_all_features, is_admin
 from ..i18n import t
-from ..notes import get_stats, search_user_notes
+from ..notes import generate_random_id, get_stats, search_user_notes
 from ..store import list_user_shares
 from ..utils import format_size, format_note_time, read_disclaimer
 from ._helpers import page_cache_key
@@ -18,6 +18,10 @@ bp = Blueprint("home", __name__)
               unless=lambda: request.cookies.get("rusin-simple") == "1")
 def index():
     if request.cookies.get("rusin-simple") == "1":
+        current_user = getattr(g, "current_user", None)
+        if current_user:
+            note_id = generate_random_id()
+            return redirect(f"/user/{current_user}/{note_id}", code=302)
         return redirect("/world/", code=302)
     lang = getattr(g, "lang", "zh")
     current_user = getattr(g, "current_user", None)
