@@ -6,6 +6,7 @@ from ..extensions import cache
 from ..feature_flags import feature_enabled, get_all_features, is_admin
 from ..i18n import t
 from ..notes import get_stats, search_user_notes
+from ..store import list_user_shares
 from ..utils import format_size, format_note_time, read_disclaimer
 from ._helpers import page_cache_key
 
@@ -31,9 +32,20 @@ def index():
         if feature_enabled("benben"):
             cards.append(("/benben", "fa-sticky-note", t(lang, "home_benben"), t(lang, "home_benben_desc")))
         cards.append(("/count", "fa-chart-simple", t(lang, "home_stats"), t(lang, "home_stats_desc")))
-        # 获取用户最近编辑的笔记（最多 5 条）
-        recent_notes = search_user_notes(current_user, "")
-        recent_notes = recent_notes[:5]
+        # 获取用户最近编辑的笔记
+        recent_notes = search_user_notes(current_user, "")[:config.RECENT_NOTES_LIMIT]
+        # 获取用户最近分享的笔记
+        my_shares = list_user_shares(current_user)
+        my_shares.sort(key=lambda x: x[1].get("created_at", 0), reverse=True)
+        recent_shares = []
+        for token, share in my_shares[:config.RECENT_SHARES_LIMIT]:
+            note_id = share.get("note_id", "")
+            recent_shares.append({
+                "token": token,
+                "note_id": note_id,
+                "views": share.get("views", 0),
+                "editable": share.get("editable", False),
+            })
     else:
         cards = []
         if feature_enabled("world_notes"):
@@ -45,8 +57,10 @@ def index():
             cards.append(("/benben", "fa-sticky-note", t(lang, "home_benben"), t(lang, "home_benben_desc")))
         cards.append(("/count", "fa-chart-simple", t(lang, "home_stats"), t(lang, "home_stats_desc")))
         recent_notes = []
+        recent_shares = []
     return render_template("home.html", site_name=config.SITE_NAME or "如形の笔记", cards=cards,
-                           recent_notes=recent_notes, current_user=current_user)
+                           recent_notes=recent_notes, recent_shares=recent_shares,
+                           current_user=current_user)
 
 
 @bp.route("/count")

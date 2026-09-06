@@ -403,6 +403,19 @@ try:
 except (TypeError, ValueError):
     NOTE_REF_SCAN_LIMIT = 100
 
+# ---------- 首页显示配置 ----------
+HOME_PAGE_CFG = config.get("home_page", {})
+RECENT_NOTES_LIMIT = HOME_PAGE_CFG.get("recent_notes_limit", 5)
+RECENT_SHARES_LIMIT = HOME_PAGE_CFG.get("recent_shares_limit", 5)
+try:
+    RECENT_NOTES_LIMIT = max(0, int(RECENT_NOTES_LIMIT))
+except (TypeError, ValueError):
+    RECENT_NOTES_LIMIT = 5
+try:
+    RECENT_SHARES_LIMIT = max(0, int(RECENT_SHARES_LIMIT))
+except (TypeError, ValueError):
+    RECENT_SHARES_LIMIT = 5
+
 # ---------- 用户头像配置 ----------
 # 头像通过第三方服务生成。由于本站用户没有邮箱，默认用 md5(用户名) 作为哈希（
 # Gravatar 系 API 的默认参数 d=identicon 会为每个哈希生成确定性的几何头像）。

@@ -76,6 +76,10 @@
     "search_limit": 8,
     "scan_limit": 100
   },
+  "home_page": {
+    "recent_notes_limit": 5,
+    "recent_shares_limit": 5
+  },
   "avatar": {
     "enabled": true,
     "url_template": "https://cn.cravatar.com/avatar/{hash}?d=identicon&f=y",
