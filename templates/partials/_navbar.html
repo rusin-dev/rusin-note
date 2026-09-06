@@ -21,6 +21,10 @@
                 <button type="submit" class="nav-link-btn"><i class="fa-solid fa-right-from-bracket" aria-hidden="true"></i>{{ t('nav_logout') }}</button>
             </form>
         </span>
+        <form action="/logout" method="POST" class="simple-auth-btn">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="simple-auth-btn-inner"><i class="fa-solid fa-right-from-bracket" aria-hidden="true"></i></button>
+        </form>
     {% else %}
         <span class="user-info">{{ t('nav_anonymous') }}</span>
         <span class="nav-links">
@@ -30,6 +34,7 @@
             <a href="/count"><i class="fa-solid fa-chart-simple" aria-hidden="true"></i>{{ t('nav_stats') }}</a>
             <a href="/disclaimer"><i class="fa-solid fa-circle-info" aria-hidden="true"></i>{{ t('nav_disclaimer') }}</a>
         </span>
+        <a href="/login" class="simple-auth-btn"><span class="simple-auth-btn-inner"><i class="fa-solid fa-right-to-bracket" aria-hidden="true"></i></span></a>
     {% endif %}
     <button type="button" id="navMenuBtn" class="nav-menu-btn" onclick="toggleMenu()" title="Menu" aria-label="Menu">
         <i class="fa-solid fa-bars" aria-hidden="true"></i>
