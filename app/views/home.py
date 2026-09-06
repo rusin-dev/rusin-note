@@ -1,12 +1,13 @@
 """首页、统计、免责声明"""
-from flask import Blueprint, g, redirect, render_template, request
+from flask import Blueprint, g, redirect, render_template, request, url_for
 
 from .. import config
 from ..extensions import cache
 from ..feature_flags import feature_enabled, get_all_features, is_admin
 from ..i18n import t
-from ..notes import get_stats
-from ..utils import format_size, read_disclaimer
+from ..notes import generate_random_id, get_stats, search_user_notes
+from ..store import list_user_shares
+from ..utils import format_size, format_note_time, read_disclaimer
 from ._helpers import page_cache_key
 
 bp = Blueprint("home", __name__)
@@ -17,6 +18,10 @@ bp = Blueprint("home", __name__)
               unless=lambda: request.cookies.get("rusin-simple") == "1")
 def index():
     if request.cookies.get("rusin-simple") == "1":
+        current_user = getattr(g, "current_user", None)
+        if current_user:
+            note_id = generate_random_id()
+            return redirect(f"/user/{current_user}/{note_id}", code=302)
         return redirect("/world/", code=302)
     lang = getattr(g, "lang", "zh")
     current_user = getattr(g, "current_user", None)
@@ -31,6 +36,20 @@ def index():
         if feature_enabled("benben"):
             cards.append(("/benben", "fa-sticky-note", t(lang, "home_benben"), t(lang, "home_benben_desc")))
         cards.append(("/count", "fa-chart-simple", t(lang, "home_stats"), t(lang, "home_stats_desc")))
+        # 获取用户最近编辑的笔记
+        recent_notes = search_user_notes(current_user, "")[:config.RECENT_NOTES_LIMIT]
+        # 获取用户最近分享的笔记
+        my_shares = list_user_shares(current_user)
+        my_shares.sort(key=lambda x: x[1].get("created_at", 0), reverse=True)
+        recent_shares = []
+        for token, share in my_shares[:config.RECENT_SHARES_LIMIT]:
+            note_id = share.get("note_id", "")
+            recent_shares.append({
+                "token": token,
+                "note_id": note_id,
+                "views": share.get("views", 0),
+                "editable": share.get("editable", False),
+            })
     else:
         cards = []
         if feature_enabled("world_notes"):
@@ -41,7 +60,11 @@ def index():
         if feature_enabled("benben"):
             cards.append(("/benben", "fa-sticky-note", t(lang, "home_benben"), t(lang, "home_benben_desc")))
         cards.append(("/count", "fa-chart-simple", t(lang, "home_stats"), t(lang, "home_stats_desc")))
-    return render_template("home.html", site_name=config.SITE_NAME or "如形の笔记", cards=cards)
+        recent_notes = []
+        recent_shares = []
+    return render_template("home.html", site_name=config.SITE_NAME or "如形の笔记", cards=cards,
+                           recent_notes=recent_notes, recent_shares=recent_shares,
+                           current_user=current_user)
 
 
 @bp.route("/count")

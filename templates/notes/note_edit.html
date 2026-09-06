@@ -226,6 +226,23 @@
         .simple-mode .note-mtime { display: none !important; }
         .simple-mode .navbar { padding: 7px 24px; }
         .simple-mode .simple-toggle { color: var(--link); border-color: var(--link); }
+        .simple-mode .simple-auth-btn { display: inline-flex !important; }
+        .simple-auth-btn {
+            display: none;
+        }
+        .simple-auth-btn-inner {
+            width: 36px; height: 36px;
+            display: inline-flex; align-items: center; justify-content: center;
+            padding: 0; font-size: 15px;
+            border-radius: 8px;
+            background: var(--bg);
+            border: 1px solid var(--navbar-border);
+            color: var(--link);
+            cursor: pointer;
+            text-decoration: none;
+            transition: background 0.2s ease, border-color 0.2s ease;
+        }
+        .simple-auth-btn-inner:hover { background: var(--card-bg); }
         .simple-toggle {
             width: 36px; height: 36px;
             display: inline-flex; align-items: center; justify-content: center;

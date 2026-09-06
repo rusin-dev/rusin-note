@@ -106,9 +106,8 @@ def create_app() -> Flask:
 
     app.config.update(
         SECRET_KEY=secret,
-        # 全局请求体上限：笔记保存与图片上传共用，取两者较大值
-        #（笔记写入路径本就依赖该全局值拦超量请求）
-        MAX_CONTENT_LENGTH=max(config.MAX_CONTENT_BYTES, config.MAX_IMAGE_SIZE_BYTES),
+        # 全局请求体上限：笔记保存、图片上传与附件上传共用，取三者较大值
+        MAX_CONTENT_LENGTH=max(config.MAX_CONTENT_BYTES, config.MAX_IMAGE_SIZE_BYTES, config.MAX_ATTACHMENT_SIZE_BYTES),
         SESSION_COOKIE_SECURE=config.SECURE_COOKIES,
         SESSION_COOKIE_HTTPONLY=True,
         SESSION_COOKIE_SAMESITE="Lax",
@@ -138,7 +137,18 @@ def create_app() -> Flask:
 
 
 def register_error_handlers(app: Flask) -> None:
-    from flask import abort, g
+    from flask import abort, g, jsonify, request
+
+    from flask_wtf.csrf import CSRFError
+
+    @app.errorhandler(CSRFError)
+    def err_csrf(e):
+        if request.path.startswith("/user/") and request.method == "POST":
+            lang = getattr(g, "lang", "zh")
+            from .i18n import t
+            return jsonify({"error": t(lang, "err_csrf")}), 400
+        return render_template("errors/400.html",
+                               message=str(getattr(e, "description", "Bad Request"))), 400
 
     @app.errorhandler(400)
     def err_400(e):
@@ -164,6 +174,11 @@ def register_error_handlers(app: Flask) -> None:
 
     @app.errorhandler(413)
     def err_413(e):
+        if request.path.startswith("/user/") and request.method == "POST":
+            lang = getattr(g, "lang", "zh")
+            from .i18n import t
+            from . import config as app_config
+            return jsonify({"error": t(lang, "err_file_too_large", max=app_config.MAX_ATTACHMENT_SIZE_KB)}), 413
         return render_template("errors/400.html", message="Request body too large"), 413
 
     @app.errorhandler(429)

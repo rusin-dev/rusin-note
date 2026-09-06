@@ -427,9 +427,10 @@ def user_note_post(username, note_id):
         if feature_enabled("note_folders"):
             set_note_folder(username, note_id, parse_folder_input(request.form.get("folder", "")))
     # 私有页缓存键按访问者隔离，且只有所有者能写入 200 缓存，清理即精确命中；
-    # /user/<username> 笔记列表也依赖笔记内容（mtime/size），一并刷新
+    # /user/<username> 笔记列表也依赖笔记内容（mtime/size），一并刷新；
+    # 首页显示最近编辑的笔记，也需要刷新
     purge_page_cache(
-        [f"/user/{username}", f"/user/{username}/",
+        ["/", f"/user/{username}", f"/user/{username}/",
          f"/user/{username}/{note_id}", f"/user/{username}/{note_id}/",
          f"/user/{username}/{note_id}.md", f"/user/{username}/{note_id}/md"],
         viewers=(username,),

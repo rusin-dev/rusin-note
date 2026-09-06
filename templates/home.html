@@ -2,7 +2,6 @@
 {% block content %}
 <div class="home-hero">
     <h1>{{ site_name|e }}</h1>
-    <img class="home-logo" src="/image/logo.png" alt="{{ site_name|e }}">
     <p>{{ t('home_tagline') }}</p>
 </div>
 <div class="home-grid">
@@ -25,4 +24,40 @@
         <span class="home-card-arrow"><i class="fa-solid fa-arrow-right" aria-hidden="true"></i></span>
     </a>
 </div>
+{% if current_user and (recent_notes or recent_shares) %}
+<div class="home-recent-row">
+    {% if recent_notes %}
+    <div class="home-recent">
+        <h2>{{ t('home_recent_notes') }}</h2>
+        <div class="home-recent-list">
+            {% for note in recent_notes %}
+            <a class="home-recent-item" href="/user/{{ current_user }}/{{ note.id }}">
+                <span class="home-recent-id">{{ note.id }}</span>
+                <span class="home-recent-preview">{{ note.title[:10] }}{% if note.title|length > 10 %}...{% endif %}</span>
+                <span class="home-recent-time">{{ note.mtime|format_note_time }}</span>
+            </a>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+    {% if recent_shares %}
+    <div class="home-recent">
+        <h2>{{ t('home_recent_shares') }}</h2>
+        <div class="home-recent-list">
+            {% for share in recent_shares %}
+            <a class="home-recent-item" href="/user/{{ current_user }}/{{ share.note_id }}">
+                <span class="home-recent-title">{{ share.note_id }}</span>
+                <span class="home-recent-meta">
+                    <span class="home-recent-views"><i class="fa-solid fa-eye" aria-hidden="true"></i> {{ share.views }}</span>
+                    {% if share.editable %}
+                    <span class="home-recent-badge">{{ t('shares_editable') }}</span>
+                    {% endif %}
+                </span>
+            </a>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endif %}
 {% endblock %}

@@ -70,8 +70,9 @@ def share_view_post(token):
     content = request.form.get("content", "")
     if not write_note(share.get("owner", ""), share.get("note_id", ""), content):
         abort(500)
+    # 首页显示最近编辑的笔记，也需要刷新
     purge_page_cache(
-        [f"/share/{token}", f"/share/{token}.md", f"/share/{token}/md"],
+        ["/", f"/share/{token}", f"/share/{token}.md", f"/share/{token}/md"],
         viewers=(None, get_current_user()),
     )
     return redirect(url_for("share.share_view_get", token=token))
