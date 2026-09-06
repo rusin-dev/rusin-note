@@ -61,6 +61,7 @@ STRINGS = {
         "err_username_reserved": "禁止使用该用户名，请更换其他用户名",
         "err_username_invalid": "用户名只能包含字母、数字、下划线、连字符",
         "err_password_mismatch": "两次密码不一致",
+        "err_csrf": "CSRF 验证失败，请刷新页面后重试",
         "err_password_weak": "密码不符合要求：{req}",
         "err_username_taken": "用户名不可用",
         # 登录
@@ -190,6 +191,7 @@ STRINGS = {
         "images_delete_confirm": "确定删除这张图片？引用它的笔记将无法显示",
         "images_back": "返回我的笔记",
         "err_image_too_large": "图片超出大小限制（最多 {max} KB）",
+        "err_file_too_large": "文件超出大小限制（最多 {max} KB）",
         "err_image_format": "仅支持 PNG / JPEG / GIF / WebP 格式的图片",
         "err_image_quota": "图床空间不足（配额 {total}），请先删除旧图片",
         "err_image_upload": "上传失败，请重试",
@@ -405,6 +407,7 @@ STRINGS = {
         "err_username_reserved": "This username is reserved, please choose another",
         "err_username_invalid": "Username may only contain letters, digits, underscores and hyphens",
         "err_password_mismatch": "Passwords do not match",
+        "err_csrf": "CSRF verification failed, please refresh and try again",
         "err_password_weak": "Password does not meet requirements: {req}",
         "err_username_taken": "Username unavailable",
         # Login
@@ -534,6 +537,7 @@ STRINGS = {
         "images_delete_confirm": "Delete this image? Notes referencing it will lose it",
         "images_back": "Back to My Notes",
         "err_image_too_large": "Image exceeds the size limit (max {max} KB)",
+        "err_file_too_large": "File exceeds the size limit (max {max} KB)",
         "err_image_format": "Only PNG / JPEG / GIF / WebP images are supported",
         "err_image_quota": "Image hosting quota exceeded ({total}); delete old images first",
         "err_image_upload": "Upload failed, please retry",
