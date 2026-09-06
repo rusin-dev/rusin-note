@@ -49,6 +49,7 @@ STRINGS = {
         "home_share_mgmt_desc": "管理你发布的分享链接",
         "home_github": "开源仓库",
         "home_github_desc": "本项目完全开源，欢迎 Star 与贡献",
+        "home_recent_notes": "最近编辑的笔记",
         # 注册
         "register_title": "注册",
         "reg_username_label": "用户名",
@@ -391,6 +392,7 @@ STRINGS = {
         "home_share_mgmt_desc": "Manage the share links you publish",
         "home_github": "Open Source",
         "home_github_desc": "Fully open source. Star it and contribute!",
+        "home_recent_notes": "Recently Edited Notes",
         # Register
         "register_title": "Register",
         "reg_username_label": "Username",

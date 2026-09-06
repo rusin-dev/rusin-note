@@ -174,7 +174,18 @@
             padding-bottom: 0;
         }
         .home-hero p { color: var(--muted); margin-top: 10px; font-size: 15px; }
-        .home-logo { width: 420px; height: 320px; background: #b1aaaa; border-radius: 12px; padding: 12px; margin-top: 8px; }
+        .home-recent { margin-top: 32px; }
+        .home-recent h2 { font-size: 20px; font-weight: 600; margin-bottom: 16px; }
+        .home-recent-list { display: flex; flex-direction: column; gap: 8px; }
+        .home-recent-item {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 12px 16px; background: var(--card-bg); border: 1px solid var(--card-border);
+            border-radius: 10px; text-decoration: none; color: var(--text);
+            transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+        }
+        .home-recent-item:hover { transform: translateY(-2px); border-color: var(--hover); box-shadow: var(--card-shadow); }
+        .home-recent-title { font-size: 14px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 70%; }
+        .home-recent-time { font-size: 12px; color: var(--muted); white-space: nowrap; margin-left: 12px; }
         .home-grid { list-style: none; padding: 0; margin-top: 28px; display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 16px; }
         .home-card {
             display: flex; align-items: center; gap: 14px; padding: 18px 20px;
