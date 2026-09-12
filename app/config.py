@@ -158,7 +158,8 @@ DEFAULT_CONFIG = {
     "max_note_id_length": 250,
     "max_note_tags": 10,                      # 笔记标签：每篇笔记最多标签数
     "max_tag_length": 24,                     # 笔记标签：单个标签最大长度（字符）
-    "max_folder_name_length": 32,             # 笔记文件夹：文件夹名最大长度（字符）
+    "max_folder_name_length": 64,             # 笔记文件夹：文件夹路径最大长度（字符）
+    "max_folder_depth": 8,                    # 笔记文件夹：最大层级数（/ 分隔）
     "logger": {
         "max_size": 4294967296,
         "path": "log/"
@@ -254,8 +255,10 @@ MAX_NOTE_ID_LENGTH = config.get("max_note_id_length", 250)
 MAX_NOTE_TAGS = config.get("max_note_tags", 10)
 MAX_TAG_LENGTH = config.get("max_tag_length", 24)
 
-# 笔记文件夹限制：文件夹名最大长度（字符），每篇笔记至多归属一个文件夹
-MAX_FOLDER_NAME_LENGTH = config.get("max_folder_name_length", 32)
+# 笔记文件夹限制：文件夹路径最大长度（字符）与最大层级数（用 / 分隔的多级），
+# 每篇笔记至多归属一个文件夹
+MAX_FOLDER_NAME_LENGTH = config.get("max_folder_name_length", 64)
+MAX_FOLDER_DEPTH = config.get("max_folder_depth", 8)
 
 # LaTeX 公式渲染配置（客户端 KaTeX 渲染，洛谷同款，仅影响 Markdown 只读页面）
 # 全局 CDN：KaTeX / FontAwesome / marked 等前端静态资源统一从该地址拼接加载，

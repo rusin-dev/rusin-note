@@ -133,7 +133,8 @@
   "max_note_id_length": 250,
   "max_note_tags": 10,
   "max_tag_length": 24,
-  "max_folder_name_length": 32,
+  "max_folder_name_length": 64,
+  "max_folder_depth": 8,
   "logger": {
     "max_size": 4294967296,
     "path_pattern": "log/{timestamp}.log"

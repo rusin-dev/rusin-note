@@ -46,9 +46,10 @@ from ..notes import (
     write_note,
 )
 from ..folders import (
+    build_folder_tree,
+    folder_in_subtree,
     get_note_folder,
     get_user_note_folders,
-    list_user_folders,
     parse_folder_input,
     set_note_folder,
 )
@@ -95,7 +96,8 @@ def user_root(username):
         abort(400)
     _require_auth(username)
     notes = list_user_notes(username)
-    # 笔记标签 / 文件夹 / 置顶（仅私有笔记）：筛选云 + ?tag= / ?folder= 组合筛选
+    # 笔记标签 / 文件夹 / 置顶（仅私有笔记）：标签云 + ?tag= 筛选；
+    # 文件夹以树状图呈现，?folder= 按子树筛选
     tags_enabled = feature_enabled("note_tags")
     folders_enabled = feature_enabled("note_folders")
     pins_enabled = feature_enabled("note_pins")
@@ -103,7 +105,6 @@ def user_root(username):
     user_folders = get_user_note_folders(username) if folders_enabled else {}
     user_pins = get_user_pins(username) if pins_enabled else {}
     tag_cloud = count_user_tags(username, note_ids=set(notes)) if tags_enabled else []
-    folder_cloud = list_user_folders(username, note_ids=set(notes)) if folders_enabled else []
     active_tag = (request.args.get("tag") or "").strip()[:config.MAX_TAG_LENGTH] if tags_enabled else ""
     active_folder = (request.args.get("folder") or "").strip()[:config.MAX_FOLDER_NAME_LENGTH] if folders_enabled else ""
     # 排序：置顶笔记在前（组内按置顶时间倒序），其余按修改时间倒序
@@ -111,7 +112,7 @@ def user_root(username):
     for nid in notes:
         if active_tag and active_tag not in user_tags.get(nid, []):
             continue
-        if active_folder and user_folders.get(nid) != active_folder:
+        if active_folder and not folder_in_subtree(user_folders.get(nid, ""), active_folder):
             continue
         rows.append((nid, get_note_mtime(username, nid) or 0, get_note_size(username, nid)))
     rows.sort(key=lambda r: (1, user_pins.get(r[0], 0)) if r[0] in user_pins else (0, r[1]),
@@ -126,15 +127,16 @@ def user_root(username):
             "folder": user_folders.get(nid, "") if folders_enabled else "",
             "pinned": nid in user_pins,
         })
+    folder_tree = build_folder_tree(items) if folders_enabled else None
     return render_template(
         "notes/user_list.html",
         username=username,
         items=items,
+        folder_tree=folder_tree,
         tags_enabled=tags_enabled,
         tag_cloud=tag_cloud,
         active_tag=active_tag,
         folders_enabled=folders_enabled,
-        folder_cloud=folder_cloud,
         active_folder=active_folder,
         pins_enabled=pins_enabled,
     )
