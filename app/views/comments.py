@@ -35,12 +35,13 @@ bp = Blueprint("comments", __name__)
 
 
 def _comments_cache_key(**kwargs):
-    """分页 + 访问者 + 语言 + 目标：页面文案依赖语言、导航栏依赖登录用户"""
+    """分页 + 访问者 + 语言 + 目标 + 简洁模式：页面文案依赖语言、导航栏依赖登录用户"""
     user = getattr(g, "current_user", None) or "anon"
     lang = getattr(g, "lang", "zh")
+    simple = "1" if getattr(g, "simple_mode", False) else "0"
     target_type = kwargs.get("target_type", request.view_args.get("target_type", ""))
     target_id = kwargs.get("target_id", request.view_args.get("target_id", ""))
-    return f"comments:{target_type}:{target_id}:page:{request.args.get('page', '1')}:{user}:{lang}"
+    return f"comments:{target_type}:{target_id}:page:{request.args.get('page', '1')}:{user}:{lang}:{simple}"
 
 
 @bp.route("/comments/<target_type>/<path:target_id>", methods=["GET"])
@@ -221,9 +222,10 @@ def comments_post(target_type: str, target_id: str):
     # 清除缓存
     lang = getattr(g, "lang", "zh")
     delete_cache_keys([
-        f"comments:{target_type}:{target_id}:page:1:{viewer}:{lang}"
+        f"comments:{target_type}:{target_id}:page:1:{viewer}:{lang}:{simple}"
         for viewer in ("anon", username or "anon")
         for lang in LANGS
+        for simple in ("0", "1")
     ])
 
     return redirect(get_comment_url(target_type, target_id))

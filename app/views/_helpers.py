@@ -5,7 +5,7 @@ from .. import config
 from ..extensions import cache
 from ..i18n import LANGS, t
 from ..notes import validate_note_id
-from ..theme import get_theme_script, get_simple_mode_script, get_simple_mode_toggle_btn, THEME_VARS
+from ..theme import get_theme_script, THEME_VARS
 from ..utils import format_note_time, render_latex_head
 
 
@@ -25,21 +25,24 @@ def check_note_id(note_id: str) -> None:
 
 
 def page_cache_key(*_args, **_kwargs) -> str:
-    """页面缓存键：请求路径 + 访问者 + 语言。
+    """页面缓存键：请求路径 + 访问者 + 语言 + 简洁模式。
 
     Flask-Caching 调用 make_cache_key 时会透传视图参数，签名须兼容
     （*_args/**_kwargs），否则键构造抛异常、缓存被静默禁用。
 
-    缓存页面的内容同时依赖三者：
+    缓存页面的内容同时依赖四者：
     - 语言（g.lang）：zh/en 两套文案不同，不区分会把首个访问者的语言
       发给所有人（首页缓存长达 30 分钟）；
     - 访问者（g.current_user）：导航栏按登录用户渲染，且私有笔记页的
       登录校验在视图内部——Flask-Caching 命中缓存时不会执行视图，键不
-      按访问者隔离的话，命中即绕过校验把缓存里的私有内容发给任何人。
+      按访问者隔离的话，命中即绕过校验把缓存里的私有内容发给任何人；
+    - 简洁模式（g.simple_mode）：账号级界面偏好，决定 <html> 是否带
+      simple-mode 类与导航栏入口，不区分会渲染出另一种模式的缓存页。
     """
     user = getattr(g, "current_user", None) or "anon"
     lang = getattr(g, "lang", "zh")
-    return f"page:{request.path}:{user}:{lang}"
+    simple = "1" if getattr(g, "simple_mode", False) else "0"
+    return f"page:{request.path}:{user}:{lang}:{simple}"
 
 
 def delete_cache_keys(keys) -> None:
@@ -50,16 +53,17 @@ def delete_cache_keys(keys) -> None:
 
 
 def purge_page_cache(paths, viewers=(None,)) -> None:
-    """删除 paths × viewers × 全部语言的页面缓存键（配合 page_cache_key）。
+    """删除 paths × viewers × 全部语言 × 两种简洁模式的页面缓存键。
 
     viewers 只需覆盖会产生对应键的访问者：私有页只有笔记所有者能写入
     200 缓存，公开页传 (None, 操作者) 即可，其余访问者的旧键靠 TTL 过期。
     """
     delete_cache_keys([
-        f"page:{path}:{viewer or 'anon'}:{lang}"
+        f"page:{path}:{viewer or 'anon'}:{lang}:{simple}"
         for path in paths
         for viewer in viewers
         for lang in LANGS
+        for simple in ("0", "1")
     ])
 
 
@@ -119,8 +123,7 @@ def build_note_context(
     return {
         "theme_vars": THEME_VARS,
         "theme_script": get_theme_script(lang),
-        "simple_mode_script": get_simple_mode_script(),
-        "simple_mode_toggle_btn": get_simple_mode_toggle_btn(lang),
+        "simple_mode": getattr(g, "simple_mode", False),
         "site_name": config.SITE_NAME,
         "title_prefix": title_prefix,
         "full_title": full_title,

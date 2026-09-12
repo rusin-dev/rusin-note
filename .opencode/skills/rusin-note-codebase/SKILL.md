@@ -76,6 +76,7 @@ upstash 后端所有键统一加 `rusin:` 前缀；memory 后端 get/set 带 dee
 | `utils.py` | `format_size`/`format_note_time` 格式化、`render_markdown_html`（markdown + codehilite/Pygments 高亮+行号 + bleach 清洗防 XSS）、`render_pygments_head`（亮/暗两套高亮 CSS，注入 base）、`render_latex_head`（KaTeX CDN 引入）、`read_disclaimer` |
 | `feature_flags.py` | **功能开关（#90）**：`FEATURES` 注册表（world_notes/benben/share_links/open_register/note_refs/latex_render/code_highlight/avatar）+ 运行时状态（KV 键 `feature_flags`，进程内 5s TTL 缓存）；`feature_enabled(key)` 查询、`set_flags` 整体写入、`require_feature(key)` 视图装饰器（停用→404，须放 `@bp.route` 后、缓存/限流装饰器前）、`is_admin`（`RUSIN_ADMIN` env + config `admin_users` 并集）；默认值：新功能读 `features` 段，历史功能沿用 latex_render/note_refs 等原配置段 |
 | `background.py` | 后台守护线程：会话清理、分享视图定期刷盘、过期笔记清理（`start_background_threads()` 一次性启动；`SERVERLESS` 时为无操作） |
+| `user_settings.py` | 用户设置业务：简洁模式（账号级偏好，存 users.json，`middleware` 注入 `g.simple_mode` 供服务端渲染）、修改密码（校验原密码/复杂度，注销其它会话）、修改用户名（先复制笔记/图床/附件到新命名空间，再迁移标签/文件夹/置顶/分享/犇犇/评论/组织等用户标识，最后删除旧数据） |
 
 ## app/views/ 蓝图与路由
 
@@ -87,7 +88,7 @@ upstash 后端所有键统一加 `rusin:` 前缀；memory 后端 get/set 带 dee
 | auth | `auth.py` | `/register` GET/POST（注册限流，密码复杂度校验；受 `open_register` 开关控制）、`/login` GET/POST、`/logout`、`/lang/<lang>` 语言切换（回跳 Referer） |
 | world | `world.py` | `/world`（生成随机 ID 重定向）、`/world/<id>` GET/POST（公开笔记，POST 走 SAVE 限流）、`/world/<id>/md` 与 `/world/<id>.md` Markdown 只读渲染；全部受 `world_notes` 开关控制 |
 | world_short | `world_short.py` | `/<id>`（短链重定向到 `/world/<id>`）、`/<id>.md`（短链 Markdown），catch-all 必须最后注册；受 `world_notes` 开关控制 |
-| user | `user.py` | `/user/<u>/` 笔记列表、`/user/<u>/new` 新建、`/user/<u>/<id>` GET/POST、`/user/<u>/<id>/md`、`/user/<u>/refs` 引用搜索（`note_refs` 开关）、`/user/<u>/shares` 分享管理（创建/删除，`share_links` 开关）。全部 `_require_auth`（当前会话用户须等于 URL 用户名，否则 401） |
+| user | `user.py` | `/user/<u>/` 笔记列表、`/user/<u>/new` 新建、`/user/<u>/settings` GET/POST 用户设置（简洁模式 / 修改密码 / 修改用户名，见 `user_settings.py`）、`/user/<u>/<id>` GET/POST、`/user/<u>/<id>/md`、`/user/<u>/refs` 引用搜索（`note_refs` 开关）、`/user/<u>/shares` 分享管理（创建/删除，`share_links` 开关）。全部 `_require_auth`（当前会话用户须等于 URL 用户名，否则 401） |
 | share | `share.py` | `/share/<token>`（可编辑则进编辑页、只读则进 Markdown 页；每次访问 `increment_share_views`）、POST 写回分享者原笔记（可编辑才允许，否则 403）、`/share/<token>/md` 与 `/share/<token>.md`；全部受 `share_links` 开关控制 |
 | benben | `benben.py` | `/benben` GET 分页查看（新→旧，`page` 参数）、POST 发布（需登录 + 内容长度 + 单用户冷却 + 限流）；受 `benben` 开关控制 |
 | admin | `admin.py` | `/admin/features` GET/POST 功能开关滑块管理页（仅管理员，非管理员 404；POST 保存后 `cache.clear()`） |
@@ -98,7 +99,7 @@ upstash 后端所有键统一加 `rusin:` 前缀；memory 后端 get/set 带 dee
 
 - `base.html` 基础布局（含功能开关滑块 `.ff-switch` 与状态卡 `.ff-card` 样式）；`partials/_navbar.html` 导航栏（benben/注册/分享入口按 `feature_enabled` 条件渲染）
 - `home.html` 首页、`count.html` 统计（含「功能状态」呈现区）、`disclaimer.html` 免责声明、`admin/features.html` 功能开关滑块管理页
-- `auth/` 注册/登录；`notes/` 笔记（`note_edit.html` 编辑页、`note_md.html` Markdown 只读页、`user_list.html` 笔记列表）；`share/share_list.html` 分享管理；`benben/benben.html` 犇犇
+- `auth/` 注册/登录；`notes/` 笔记（`note_edit.html` 编辑页、`note_md.html` Markdown 只读页、`user_list.html` 笔记列表、`user_settings.html` 用户设置页）；`share/share_list.html` 分享管理；`benben/benben.html` 犇犇
 - `errors/` 错误页 400/401/404/429/500（403/413 复用 400 模板）
 
 模板可直接用 i18n 注入的全局：`{{ t('key') }}`、`{{ lang }}`、`{{ theme }}`、`{{ theme_script }}`、`{{ theme_vars }}`、`{{ pygments_head }}`、`{{ current_user }}`、`{{ site_name }}`、`{{ lang_switch_url }}`。

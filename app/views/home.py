@@ -1,5 +1,5 @@
 """首页、统计、免责声明"""
-from flask import Blueprint, g, redirect, render_template, request, url_for
+from flask import Blueprint, g, redirect, render_template, url_for
 
 from .. import config
 from ..extensions import cache
@@ -15,9 +15,10 @@ bp = Blueprint("home", __name__)
 
 @bp.route("/")
 @cache.cached(timeout=config.CACHE_TIMEOUT_INDEX, make_cache_key=page_cache_key,
-              unless=lambda: request.cookies.get("rusin-simple") == "1")
+              unless=lambda: bool(getattr(g, "simple_mode", False)))
 def index():
-    if request.cookies.get("rusin-simple") == "1":
+    # 简洁模式（账号级偏好）：跳过首页直接进入编辑/公开笔记，减少干扰
+    if getattr(g, "simple_mode", False):
         current_user = getattr(g, "current_user", None)
         if current_user:
             note_id = generate_random_id()

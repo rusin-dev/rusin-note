@@ -129,6 +129,26 @@ def delete_note_tags(username: str, note_id: str) -> bool:
     return set_note_tags(username, note_id, [])
 
 
+def rename_user_note_tags(old: str, new: str) -> bool:
+    """把 old 用户的全部标签条目迁移到 new（用户改名用）。无条目视为成功。"""
+    try:
+        with tags_lock:
+            with storage.lock(K_TAGS):
+                _read_merge_locked()
+                if old not in note_tags:
+                    return True
+                moved = note_tags.pop(old)
+                existing = note_tags.get(new)
+                if isinstance(existing, dict) and isinstance(moved, dict):
+                    existing.update(moved)
+                else:
+                    note_tags[new] = moved
+                return _persist(note_tags)
+    except StorageError as e:
+        logger.error(f"[错误] 迁移笔记标签 {old} 失败: {e}")
+        return False
+
+
 def count_user_tags(username: str, note_ids=None) -> list:
     """统计该用户的标签云 [(tag, count), ...]，按 count 降序、名称升序。
     note_ids 给定时只统计仍存在的笔记（过滤已删除笔记的残留条目）。"""

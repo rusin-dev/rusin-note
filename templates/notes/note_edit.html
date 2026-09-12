@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html{% if theme %} data-theme="{{ theme }}"{% endif %} lang="{{ lang }}">
+<html{% if theme %} data-theme="{{ theme }}"{% endif %}{% if simple_mode %} class="simple-mode"{% endif %} lang="{{ lang }}">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -10,7 +10,6 @@
     <link rel="stylesheet" href="{{ config.GLOBAL_CDN }}/npm/@fortawesome/fontawesome-free@6.5.2/css/all.min.css" media="print" onload="this.media='all'">
     <noscript><link rel="stylesheet" href="{{ config.GLOBAL_CDN }}/npm/@fortawesome/fontawesome-free@6.5.2/css/all.min.css"></noscript>
     {{ theme_script|safe }}
-    {{ simple_mode_script|safe }}
     <script defer src="{{ config.GLOBAL_CDN }}/npm/marked@12.0.2/marked.min.js"></script>
     <script defer src="{{ config.GLOBAL_CDN }}/npm/dompurify@3.1.7/dist/purify.min.js"></script>
     {{ latex_head|safe }}
@@ -219,13 +218,12 @@
         .simple-mode .editor-header { display: none !important; }
         .simple-mode .attachment-btn { display: none !important; }
         .simple-mode #commentBtn { display: none !important; }
-        /* 简易模式：隐藏导航栏多余链接，只保留免责声明 */
-        .simple-mode .nav-links a:not([href*="disclaimer"]) { display: none !important; }
+        /* 简易模式：隐藏导航栏多余链接，只保留免责声明与设置入口 */
+        .simple-mode .nav-links a:not([href*="disclaimer"]):not([href*="settings"]) { display: none !important; }
         .simple-mode .nav-links form { display: none !important; }
         .simple-mode .navbar-brand { display: none !important; }
         .simple-mode .note-mtime { display: none !important; }
         .simple-mode .navbar { padding: 7px 24px; }
-        .simple-mode .simple-toggle { color: var(--link); border-color: var(--link); }
         .simple-mode .simple-auth-btn { display: inline-flex !important; }
         .simple-auth-btn {
             display: none;
@@ -243,19 +241,6 @@
             transition: background 0.2s ease, border-color 0.2s ease;
         }
         .simple-auth-btn-inner:hover { background: var(--card-bg); }
-        .simple-toggle {
-            width: 36px; height: 36px;
-            display: inline-flex; align-items: center; justify-content: center;
-            padding: 0; font-size: 15px;
-            border-radius: 8px;
-            background: var(--bg);
-            border: 1px solid var(--navbar-border);
-            color: var(--text);
-            cursor: pointer;
-            flex-shrink: 0;
-            transition: background 0.2s ease, border-color 0.2s ease;
-        }
-        .simple-toggle:hover { background: var(--card-bg); }
     </style>
 </head>
 <body>

@@ -115,6 +115,23 @@ def register_user(username: str, data: dict) -> bool:
         return False
 
 
+def update_user(username: str, updates: dict) -> bool:
+    """跨实例安全更新用户记录的字段（读改写，未列出的字段保留）。
+    返回 True 表示记录存在且写入成功。"""
+    try:
+        with users_lock:
+            with storage.lock(K_USERS):
+                _read_merge(K_USERS, users)
+                user = users.get(username)
+                if not isinstance(user, dict):
+                    return False
+                user.update(updates)
+                return _persist(K_USERS, users)
+    except StorageError as e:
+        logger.error(f"[错误] 更新用户 {username} 失败: {e}")
+        return False
+
+
 def save_users():
     with users_lock:
         _persist(K_USERS, users)
@@ -927,6 +944,177 @@ def org_public_join(org_name: str, username: str) -> bool:
     if not org or org.get("join_policy") != "public":
         return False
     return add_org_member(org_name, username, "member")
+
+
+# ---------- 用户改名：身份标识迁移 ----------
+# 登录用户名同时是笔记/图床/附件的存储命名空间，改名需要把下列子系统里
+# 以用户名为键或字段的数据整体迁移。各子系统独立加锁（threading.Lock →
+# storage.lock，锁内重读合并内存缓存），与既有写路径保持一致，不嵌套多把
+# storage.lock。任一子系统写入失败即返回 False，调用方应提示重试；改名为
+# 低频操作，允许这种「尽力而为 + 可重试」语义。
+def rename_user_records(old: str, new: str) -> bool:
+    """迁移 users / sessions / shares / benben / comments / orgs 中的用户标识。"""
+    ok = True
+
+    # users.json：移动整条记录
+    try:
+        with users_lock:
+            with storage.lock(K_USERS):
+                _read_merge(K_USERS, users)
+                if old not in users or new in users:
+                    return False
+                users[new] = users.pop(old)
+                ok = _persist(K_USERS, users) and ok
+    except StorageError as e:
+        logger.error(f"[错误] 迁移用户记录失败: {e}")
+        return False
+
+    # sessions.json：会话记录里的 username 字段
+    try:
+        with sessions_lock:
+            with storage.lock(K_SESSIONS):
+                _read_merge(K_SESSIONS, sessions)
+                changed = False
+                for sess in sessions.values():
+                    if isinstance(sess, dict) and sess.get("username") == old:
+                        sess["username"] = new
+                        changed = True
+                if changed:
+                    ok = _persist(K_SESSIONS, sessions) and ok
+    except StorageError as e:
+        logger.error(f"[错误] 迁移会话失败: {e}")
+        return False
+
+    # shares.json：分享的 owner 字段
+    try:
+        with shares_lock:
+            with storage.lock(K_SHARES):
+                _read_merge(K_SHARES, shares)
+                changed = False
+                for share in shares.values():
+                    if isinstance(share, dict) and share.get("owner") == old:
+                        share["owner"] = new
+                        changed = True
+                if changed:
+                    ok = _persist(K_SHARES, shares) and ok
+    except StorageError as e:
+        logger.error(f"[错误] 迁移分享失败: {e}")
+        return False
+
+    # 犇犇：帖子作者字段
+    try:
+        with benben_lock:
+            with storage.lock(K_BENBEN):
+                data = _read(K_BENBEN)
+                posts = data if isinstance(data, list) else list(benben_posts)
+                changed = False
+                for post in posts:
+                    if isinstance(post, dict) and post.get("username") == old:
+                        post["username"] = new
+                        changed = True
+                if changed:
+                    ok = _persist(K_BENBEN, posts) and ok
+                benben_posts.clear()
+                benben_posts.extend(posts)
+    except StorageError as e:
+        logger.error(f"[错误] 迁移犇犇失败: {e}")
+        return False
+
+    # comments:all：评论作者字段 + 私有笔记评论的目标键 note:<user>:<id>
+    try:
+        with comments_lock:
+            with storage.lock(K_COMMENTS):
+                data = _read(K_COMMENTS)
+                table = data if isinstance(data, dict) else dict(comments_data)
+                migrated = {}
+                old_prefix = f"note:{old}:"
+                for target_key, items in table.items():
+                    new_key = target_key
+                    if isinstance(target_key, str) and target_key.startswith(old_prefix):
+                        new_key = f"note:{new}:" + target_key[len(old_prefix):]
+                    if isinstance(items, list):
+                        for comment in items:
+                            if isinstance(comment, dict) and comment.get("username") == old:
+                                comment["username"] = new
+                    migrated[new_key] = items
+                if migrated != table:
+                    ok = _persist(K_COMMENTS, migrated) and ok
+                comments_data.clear()
+                comments_data.update(migrated)
+    except StorageError as e:
+        logger.error(f"[错误] 迁移评论失败: {e}")
+        return False
+
+    # 组织：owner 字段、成员键、邀请创建者、入群申请键
+    try:
+        with orgs_lock:
+            with storage.lock(K_ORGS):
+                _read_merge(K_ORGS, orgs)
+                changed = False
+                for org in orgs.values():
+                    if isinstance(org, dict) and org.get("owner") == old:
+                        org["owner"] = new
+                        changed = True
+                if changed:
+                    ok = _persist(K_ORGS, orgs) and ok
+    except StorageError as e:
+        logger.error(f"[错误] 迁移组织失败: {e}")
+        return False
+
+    try:
+        with org_members_lock:
+            with storage.lock(K_ORG_MEMBERS):
+                _read_merge(K_ORG_MEMBERS, org_members)
+                changed = False
+                for members in org_members.values():
+                    if isinstance(members, dict) and old in members:
+                        members[new] = members.pop(old)
+                        changed = True
+                if changed:
+                    ok = _persist(K_ORG_MEMBERS, org_members) and ok
+    except StorageError as e:
+        logger.error(f"[错误] 迁移组织成员失败: {e}")
+        return False
+
+    try:
+        with org_invites_lock:
+            with storage.lock(K_ORG_INVITES):
+                _read_merge(K_ORG_INVITES, org_invites)
+                changed = False
+                for invite in org_invites.values():
+                    if isinstance(invite, dict) and invite.get("created_by") == old:
+                        invite["created_by"] = new
+                        changed = True
+                if changed:
+                    ok = _persist(K_ORG_INVITES, org_invites) and ok
+    except StorageError as e:
+        logger.error(f"[错误] 迁移组织邀请失败: {e}")
+        return False
+
+    try:
+        with org_join_requests_lock:
+            with storage.lock(K_ORG_JOIN_REQUESTS):
+                _read_merge(K_ORG_JOIN_REQUESTS, org_join_requests)
+                changed = False
+                for requests in org_join_requests.values():
+                    if isinstance(requests, dict) and old in requests:
+                        requests[new] = requests.pop(old)
+                        changed = True
+                if changed:
+                    ok = _persist(K_ORG_JOIN_REQUESTS, org_join_requests) and ok
+    except StorageError as e:
+        logger.error(f"[错误] 迁移组织申请失败: {e}")
+        return False
+
+    # 发布冷却表是内存态，尽力迁移（缺失不影响功能正确性）
+    with benben_cooldown_lock:
+        if old in benben_last_post:
+            benben_last_post[new] = benben_last_post.pop(old)
+    with comments_cooldown_lock:
+        if old in comments_last_post:
+            comments_last_post[new] = comments_last_post.pop(old)
+
+    return ok
 
 
 load_users()

@@ -24,10 +24,11 @@ bp = Blueprint("benben", __name__)
 
 
 def _benben_cache_key():
-    """分页 + 访问者 + 语言：页面文案依赖语言、导航栏依赖登录用户（见 _helpers.page_cache_key）"""
+    """分页 + 访问者 + 语言 + 简洁模式：页面文案依赖语言、导航栏依赖登录用户（见 _helpers.page_cache_key）"""
     user = getattr(g, "current_user", None) or "anon"
     lang = getattr(g, "lang", "zh")
-    return f"benben:page:{request.args.get('page', '1')}:{user}:{lang}"
+    simple = "1" if getattr(g, "simple_mode", False) else "0"
+    return f"benben:page:{request.args.get('page', '1')}:{user}:{lang}:{simple}"
 
 
 @bp.route("/benben", methods=["GET"])
@@ -133,8 +134,9 @@ def benben_post():
     # 新动态把旧内容顶到第 2 页：清掉匿名与发布者视角的第 1 页，
     # 其余访问者的键靠 60s TTL 过期
     delete_cache_keys([
-        f"benben:page:1:{viewer}:{lang}"
+        f"benben:page:1:{viewer}:{lang}:{simple}"
         for viewer in ("anon", current_user)
         for lang in LANGS
+        for simple in ("0", "1")
     ])
     return redirect("/benben")
