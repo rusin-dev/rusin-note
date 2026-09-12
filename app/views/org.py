@@ -41,11 +41,27 @@ from ..store import (
     validate_org_invite,
 )
 from ..utils import format_note_time, format_size, render_markdown_html
+from ._helpers import purge_page_cache
 
 bp = Blueprint("org", __name__)
 
 # 组织笔记的虚拟用户名前缀
 ORG_USERNAME_PREFIX = "_orgs/"
+
+
+def _purge_nav_cache(username: str) -> None:
+    """组织归属变化后刷新该用户的导航栏缓存。
+
+    导航栏含「切换组织」下拉（用户所属组织列表），首页缓存长达 30 分钟；
+    加入/退出/创建组织后不清缓存会让下拉长时间停留在旧列表。
+    （犇犇缓存 TTL 仅 60s，其余页面按访问者隔离，可自然过期。）
+    """
+    purge_page_cache(
+        ["/", f"/user/{username}", f"/user/{username}/",
+         f"/user/{username}/shares", f"/user/{username}/shares/"],
+        viewers=(username,),
+    )
+
 
 # 保留的组织名（不能创建）
 RESERVED_ORG_NAMES = {"create", "join", "new", "settings", "members", "invites", "requests", "leave"}
@@ -297,16 +313,23 @@ def org_settings(org_name):
             "description": description,
             "join_policy": join_policy,
         })
+        # 下拉框展示组织显示名，改名后刷新全部成员导航栏缓存
+        for member in members:
+            _purge_nav_cache(member)
         return redirect(url_for("org.org_settings", org_name=org_name))
     elif action == "delete_org":
         _require_org_owner(org_name)
+        member_names = list(members)
         if delete_org(org_name):
+            for member in member_names:
+                _purge_nav_cache(member)
             return redirect(url_for("home.index"))
         abort(500)
     elif action == "remove_member":
         _require_org_admin(org_name)
         target_user = request.form.get("username", "")
         if remove_org_member(org_name, target_user):
+            _purge_nav_cache(target_user)
             return redirect(url_for("org.org_settings", org_name=org_name))
         abort(400)
     elif action == "update_role":
@@ -378,6 +401,8 @@ def org_requests(org_name):
         username = request.form.get("username", "")
         if action == "approve":
             approve_join_request(org_name, username)
+            # 通过后申请人成为成员：刷新其导航栏「切换组织」列表
+            _purge_nav_cache(username)
         elif action == "reject":
             reject_join_request(org_name, username)
         return redirect(url_for("org.org_requests", org_name=org_name))
@@ -418,6 +443,7 @@ def org_create():
         join_policy = "invite"
 
     if create_org(org_name, name, user, description, join_policy):
+        _purge_nav_cache(user)
         return redirect(url_for("org.org_home", org_name=org_name))
     abort(500)
 
@@ -437,6 +463,7 @@ def org_join_by_invite(invite_code):
 
     org_name = invite.get("org_name")
     if org_invite_join(invite_code, user):
+        _purge_nav_cache(user)
         return redirect(url_for("org.org_home", org_name=org_name))
     abort(400)
 
@@ -476,6 +503,7 @@ def org_join_public(org_name):
         abort(401)
 
     if org_public_join(org_name, user):
+        _purge_nav_cache(user)
         return redirect(url_for("org.org_home", org_name=org_name))
     abort(400)
 
@@ -496,6 +524,7 @@ def org_leave(org_name):
         abort(400)  # owner 不能退出，需转移或删除组织
 
     if remove_org_member(org_name, user):
+        _purge_nav_cache(user)
         return redirect(url_for("home.index"))
     abort(400)
 

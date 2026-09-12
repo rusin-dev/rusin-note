@@ -4,16 +4,50 @@
         <span class="navbar-brand-name">{{ (site_name or 'rusin-note')|e }}</span>
     </a>
     {% if current_user %}
-        <a href="/user/{{ current_user|e }}/" class="user-info">
-            {% set av = get_avatar(current_user) %}
+        {% set av = get_avatar(current_user) %}
+        {# 触发器用 <a role="button"> 而非 <button>：折叠测量会把它临时置为
+           position:absolute，原生 button 此时会撑满导航栏宽度导致永远折叠。 #}
+        <a class="user-info" id="userMenuBtn" href="#account" role="button" tabindex="0"
+           aria-haspopup="true" aria-expanded="false" aria-controls="userMenu"
+           title="{{ t('nav_account_menu') }}">
             {% if av %}<img class="avatar" src="{{ av|e }}" alt="" width="20" height="20" loading="lazy" referrerpolicy="no-referrer">{% endif %}
-            {{ t('nav_user_prefix')|e }}{{ current_user|e }}
+            <span class="user-name">{{ current_user|e }}</span>
+            <i class="fa-solid fa-chevron-down user-caret" aria-hidden="true"></i>
         </a>
+        <div class="user-menu" id="userMenu" role="menu" hidden>
+            <div class="user-menu-head">
+                {% if av %}<img class="avatar" src="{{ av|e }}" alt="" width="28" height="28" loading="lazy" referrerpolicy="no-referrer">{% endif %}
+                <span class="user-menu-name">{{ current_user|e }}</span>
+            </div>
+            {% if feature_enabled('orgs') %}
+            <div class="user-menu-label">
+                <i class="fa-solid fa-users" aria-hidden="true"></i>{{ t('nav_switch_org') }}
+            </div>
+            <a class="user-menu-item user-menu-org" role="menuitem" href="/user/{{ current_user|e }}/">
+                <i class="fa-solid fa-house-user" aria-hidden="true"></i>{{ t('nav_personal_space') }}
+            </a>
+            {% for org in user_orgs %}
+            <a class="user-menu-item user-menu-org" role="menuitem" href="/org/{{ org.id|e }}/">
+                <i class="fa-solid fa-people-group" aria-hidden="true"></i><span class="user-menu-org-name">{{ org.name|e }}</span>
+            </a>
+            {% endfor %}
+            <a class="user-menu-item user-menu-manage" role="menuitem" href="/org/mine">
+                <i class="fa-solid fa-sliders" aria-hidden="true"></i>{{ t('nav_manage_orgs') }}
+            </a>
+            {% endif %}
+            <div class="user-menu-sep" role="separator"></div>
+            <a class="user-menu-item" role="menuitem" href="/user/{{ current_user|e }}/settings">
+                <i class="fa-solid fa-gear" aria-hidden="true"></i>{{ t('nav_settings') }}
+            </a>
+            <form action="/logout" method="POST" class="user-menu-form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="user-menu-item user-menu-logout" role="menuitem"><i class="fa-solid fa-right-from-bracket" aria-hidden="true"></i>{{ t('nav_logout') }}</button>
+            </form>
+        </div>
         <span class="nav-links">
-            <a href="https://github.com/rusin-dev/rusin-note">Github</a>
             <a href="/user/{{ current_user|e }}/"><i class="fa-solid fa-file-lines" aria-hidden="true"></i>{{ t('nav_my_notes') }}</a>
-            <a href="/user/{{ current_user|e }}/new"><i class="fa-solid fa-square-plus" aria-hidden="true"></i>{{ t('nav_new_note') }}</a>
-            {% if feature_enabled('share_links') %}<a href="/user/{{ current_user|e }}/shares/"><i class="fa-solid fa-share-nodes" aria-hidden="true"></i>{{ t('nav_share_mgmt') }}</a>{% endif %}
+            <a class="nav-icon-btn" href="/user/{{ current_user|e }}/new" title="{{ t('nav_new_note') }}" aria-label="{{ t('nav_new_note') }}"><i class="fa-solid fa-square-plus" aria-hidden="true"></i><span class="nav-icon-label">{{ t('nav_new_note') }}</span></a>
+            {% if feature_enabled('share_links') %}<a class="nav-icon-btn" href="/user/{{ current_user|e }}/shares/" title="{{ t('nav_share_mgmt') }}" aria-label="{{ t('nav_share_mgmt') }}"><i class="fa-solid fa-share-nodes" aria-hidden="true"></i><span class="nav-icon-label">{{ t('nav_share_mgmt') }}</span></a>{% endif %}
             {% if feature_enabled('benben') %}<a href="/benben"><i class="fa-solid fa-sticky-note" aria-hidden="true"></i>{{ t('nav_benben') }}</a>{% endif %}
             {% if feature_enabled('orgs') %}<a href="/org/mine"><i class="fa-solid fa-users" aria-hidden="true"></i>{{ t('nav_orgs') }}</a>{% endif %}
             <a href="/user/{{ current_user|e }}/settings"><i class="fa-solid fa-gear" aria-hidden="true"></i>{{ t('nav_settings') }}</a>
@@ -22,10 +56,6 @@
                 <button type="submit" class="nav-link-btn"><i class="fa-solid fa-right-from-bracket" aria-hidden="true"></i>{{ t('nav_logout') }}</button>
             </form>
         </span>
-        <form action="/logout" method="POST" class="simple-auth-btn">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <button type="submit" class="simple-auth-btn-inner"><i class="fa-solid fa-right-from-bracket" aria-hidden="true"></i></button>
-        </form>
     {% else %}
         <span class="user-info">{{ t('nav_anonymous') }}</span>
         <span class="nav-links">
@@ -48,3 +78,62 @@
         <i class="fa-solid {% if theme == 'dark' %}fa-sun{% else %}fa-moon{% endif %}" aria-hidden="true"></i>
     </button>
 </div>
+<script>
+(function () {
+    var btn = document.getElementById('userMenuBtn');
+    var menu = document.getElementById('userMenu');
+    if (!btn || !menu) return;
+    var closeTimer = null;
+
+    // 下拉框用 position: fixed 定位，避免被 .navbar 的 overflow: hidden 裁剪。
+    // .navbar 保持在最上层（sticky + z-index），无需浮动菜单层。
+    function position() {
+        var rect = btn.getBoundingClientRect();
+        menu.style.top = (rect.bottom + 6) + 'px';
+        var left = rect.left;
+        var width = menu.offsetWidth || 220;
+        var maxLeft = window.innerWidth - width - 8;
+        if (left > maxLeft) left = Math.max(8, maxLeft);
+        menu.style.left = left + 'px';
+    }
+
+    function open() {
+        if (closeTimer) { clearTimeout(closeTimer); closeTimer = null; }
+        if (!menu.hidden && menu.classList.contains('open')) return;
+        menu.hidden = false;
+        position();
+        // 下一帧加 open，触发过渡而非初始态直接显示
+        requestAnimationFrame(function () { menu.classList.add('open'); });
+        btn.setAttribute('aria-expanded', 'true');
+    }
+
+    function close() {
+        menu.classList.remove('open');
+        btn.setAttribute('aria-expanded', 'false');
+        closeTimer = setTimeout(function () { menu.hidden = true; closeTimer = null; }, 160);
+    }
+
+    window.toggleUserMenu = function () {
+        if (menu.hidden) open(); else close();
+    };
+
+    btn.addEventListener('click', function (e) {
+        e.preventDefault();
+        window.toggleUserMenu();
+    });
+    btn.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === ' ' || e.key === 'Spacebar') {
+            e.preventDefault();
+            window.toggleUserMenu();
+        }
+    });
+    document.addEventListener('click', function (e) {
+        if (!menu.hidden && !menu.contains(e.target) && !btn.contains(e.target)) close();
+    });
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' && !menu.hidden) { close(); btn.focus(); }
+    });
+    window.addEventListener('resize', function () { if (!menu.hidden) position(); });
+    window.addEventListener('scroll', function () { if (!menu.hidden) position(); }, true);
+})();
+</script>
