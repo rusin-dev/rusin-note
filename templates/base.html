@@ -15,113 +15,9 @@
         {{ theme_vars|safe }}
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); }
-        .navbar {
-            background: var(--navbar-bg);
-            padding: 9px 24px;
-            border-bottom: 1px solid var(--navbar-border);
-            display: flex;
-            align-items: center;
-            flex-wrap: nowrap;
-            gap: 16px;
-            font-size: 14px;
-            overflow: hidden;
-        }
-        .navbar-brand { display: inline-flex; align-items: center; gap: 8px; color: var(--text); text-decoration: none; font-size: 16px; font-weight: 600; flex-shrink: 0; min-width: 0; overflow: hidden; }
-        .navbar-brand-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .navbar-brand:hover { color: var(--link); }
-        .navbar-brand-icon { width: 22px; height: 22px; border-radius: 4px; flex-shrink: 0; }
-        .navbar .user-info { font-weight: 500; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; color: var(--text); text-decoration: none; display: inline-flex; align-items: center; gap: 6px; }
-        .navbar .user-info:hover { color: var(--link); }
-.navbar .nav-links { display: flex; justify-content: flex-end; align-items: center; flex-shrink: 0; white-space: nowrap; gap: 2px; }
-        .navbar .nav-links a {
-            display: inline-flex; align-items: center; gap: 6px;
-            padding: 6px 12px;
-            border-radius: 999px;
-            color: var(--link);
-            text-decoration: none;
-            transition: background 0.2s ease, color 0.2s ease, transform 0.1s ease;
-        }
-        .navbar .nav-links a:hover { background: var(--card-bg); color: var(--text); text-decoration: none; }
-        .navbar .nav-links a:active { transform: scale(0.96); }
-        .navbar .nav-links i { font-size: 13px; }
-        .nav-link-btn {
-            display: inline-flex; align-items: center; gap: 6px;
-            padding: 6px 12px;
-            border-radius: 999px;
-            color: var(--link);
-            text-decoration: none;
-            background: none;
-            border: none;
-            cursor: pointer;
-            font: inherit;
-            transition: background 0.2s ease, color 0.2s ease, transform 0.1s ease;
-        }
-        .nav-link-btn:hover { background: var(--card-bg); color: var(--text); text-decoration: none; }
-        .nav-link-btn:active { transform: scale(0.96); }
-        .avatar { width: 20px; height: 20px; border-radius: 50%; object-fit: cover; vertical-align: middle; flex-shrink: 0; }
-        .navbar .user-info .avatar { margin-right: 6px; }
-        .theme-toggle, .nav-menu-btn {
-            width: 36px; height: 36px;
-            display: inline-flex; align-items: center; justify-content: center;
-            padding: 0; font-size: 15px;
-            border-radius: 8px;
-            background: var(--bg);
-            border: 1px solid var(--navbar-border);
-            color: var(--text);
-            cursor: pointer;
-            flex-shrink: 0;
-            transition: background 0.2s ease, border-color 0.2s ease;
-        }
-        .theme-toggle:hover, .nav-menu-btn:hover { background: var(--card-bg); }
-        .lang-toggle {
-            display: inline-flex; align-items: center; gap: 6px;
-            height: 36px; padding: 0 10px;
-            border-radius: 8px;
-            background: var(--bg);
-            border: 1px solid var(--navbar-border);
-            color: var(--text);
-            text-decoration: none;
-            cursor: pointer;
-            flex-shrink: 0;
-            font-size: 15px;
-            transition: background 0.2s ease, border-color 0.2s ease;
-        }
-        .lang-toggle:hover { background: var(--card-bg); }
-        .lang-toggle .fa-globe { font-size: 15px; }
-        .nav-menu-btn { display: none; }
-        .navbar.menu-collapsed { flex-wrap: wrap; }
-        .navbar.menu-collapsed .nav-menu-btn { display: inline-flex; }
-        .navbar.menu-collapsed .theme-toggle { display: none; }
-        .navbar.menu-collapsed .nav-links {
-            order: 10;
-            flex-basis: 100%;
-            flex-direction: column;
-            align-items: stretch;
-            gap: 0;
-            white-space: normal;
-            display: none;
-        }
-        .navbar.menu-collapsed .nav-links a {
-            margin-left: 0; padding: 10px 0;
-            border-bottom: 1px solid var(--navbar-border);
-            border-radius: 0;
-            justify-content: flex-start;
-        }
-        .navbar.menu-collapsed .nav-links a:hover { background: var(--card-bg); color: var(--text); }
-        .navbar.menu-collapsed .nav-links a:active { transform: none; }
-        .navbar.menu-collapsed .nav-links a:last-child { border-bottom: none; }
-        .navbar.menu-collapsed.menu-open .nav-links {
-            display: flex;
-            background: var(--bg);
-            border: 1px solid var(--navbar-border);
-            border-radius: 8px;
-            padding: 6px 16px;
-            margin-top: 2px;
-        }
-        @media (max-width: 640px) {
-            .navbar { gap: 12px; padding: 10px 16px; }
-            .navbar-brand-name { max-width: 45vw; }
-        }
+        {% include "partials/_navbar_css.html" %}
+        /* base 布局：导航栏吸顶，滚动时保持可见 */
+        .navbar { position: sticky; top: 0; }
         .container { max-width: 900px; margin: 20px auto; padding: 0 20px; }
         h1 { font-weight: 400; border-bottom: 1px solid var(--heading-border); padding-bottom: 10px; }
         h2 { font-weight: 400; border-bottom: 1px solid var(--heading-border); padding-bottom: 8px; }
@@ -230,32 +126,12 @@
         .ff-switch input:checked ~ .ff-track::before { transform: translateX(20px); }
         .ff-switch input:focus-visible ~ .ff-track { outline: 2px solid var(--link); outline-offset: 2px; }
         /* 简洁模式：隐藏高级功能，只保留读写保存、md预览URL、中英文、免责声明 */
-        /* 注意保留「设置」入口，否则用户在简洁模式下无法回到设置页关闭它 */
+        /* 注意保留「设置/登出」入口（账号下拉框内），否则用户无法回到设置页关闭它 */
         .simple-mode .tag-cloud { display: none !important; }
         .simple-mode .note-tags { display: none !important; }
         .simple-mode .pin-form { display: none !important; }
         .simple-mode .benben-list { display: none !important; }
         .simple-mode .benben-form { display: none !important; }
-        .simple-mode .nav-links a:not([href*="disclaimer"]):not([href*="settings"]) { display: none !important; }
-        .simple-mode .nav-links form { display: none !important; }
-        .simple-mode .navbar { padding: 7px 24px; }
-        .simple-mode .simple-auth-btn { display: inline-flex !important; }
-        .simple-auth-btn {
-            display: none;
-        }
-        .simple-auth-btn-inner {
-            width: 36px; height: 36px;
-            display: inline-flex; align-items: center; justify-content: center;
-            padding: 0; font-size: 15px;
-            border-radius: 8px;
-            background: var(--bg);
-            border: 1px solid var(--navbar-border);
-            color: var(--link);
-            cursor: pointer;
-            text-decoration: none;
-            transition: background 0.2s ease, border-color 0.2s ease;
-        }
-        .simple-auth-btn-inner:hover { background: var(--card-bg); }
         {{ extra_css|safe }}
     </style>
 {% block extra_head %}{{ extra_head|safe }}{% endblock %}
@@ -279,6 +155,8 @@
             if (!navbar || !links || !menuBtn || !brand) return;
             var wasOpen = navbar.classList.contains('menu-open');
             navbar.classList.remove('menu-collapsed', 'menu-open');
+            // measuring：强制图标按钮文字展开后再量宽度，避免悬浮展开时溢出
+            navbar.classList.add('measuring');
             [links, user, theme].forEach(function (el) {
                 if (!el) return;
                 el.style.position = 'absolute';
@@ -299,6 +177,7 @@
                 el.style.whiteSpace = '';
             });
             if (user) user.style.flex = '';
+            navbar.classList.remove('measuring');
             if (total > navbar.clientWidth) {
                 navbar.classList.add('menu-collapsed');
                 if (wasOpen) navbar.classList.add('menu-open');

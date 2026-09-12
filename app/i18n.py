@@ -16,7 +16,6 @@ DEFAULT_LANG = "zh"
 STRINGS = {
     "zh": {
         # 导航栏
-        "nav_user_prefix": "用户: ",
         "nav_anonymous": "匿名",
         "nav_my_notes": "我的笔记",
         "nav_orgs": "我的组织",
@@ -29,6 +28,10 @@ STRINGS = {
         "nav_stats": "统计",
         "nav_disclaimer": "免责声明",
         "nav_settings": "设置",
+        "nav_account_menu": "账号菜单",
+        "nav_personal_space": "个人空间",
+        "nav_switch_org": "切换组织",
+        "nav_manage_orgs": "管理组织",
         "lang_switch": "English",
         "theme_dark": "",
         "theme_light": "",
@@ -390,7 +393,6 @@ STRINGS = {
     },
     "en": {
         # Navbar
-        "nav_user_prefix": "User: ",
         "nav_anonymous": "Anonymous",
         "nav_my_notes": "My Notes",
         "nav_orgs": "My Orgs",
@@ -403,6 +405,10 @@ STRINGS = {
         "nav_stats": "Stats",
         "nav_disclaimer": "Disclaimer",
         "nav_settings": "Settings",
+        "nav_account_menu": "Account menu",
+        "nav_personal_space": "Personal Space",
+        "nav_switch_org": "Switch organization",
+        "nav_manage_orgs": "Manage Orgs",
         "lang_switch": "简体中文",
         "theme_dark": "",
         "theme_light": "",
@@ -816,6 +822,15 @@ def register_i18n(app: Flask) -> None:
     @app.context_processor
     def inject_globals():
         lang = getattr(g, "lang", DEFAULT_LANG)
+        current_user = getattr(g, "current_user", None)
+        # 导航栏用户下拉框的「切换组织」列表：仅登录且启用组织功能时构建，
+        # 供各页面直接渲染（页面缓存按访问者隔离，键见 views/_helpers.page_cache_key）
+        user_orgs = []
+        if current_user and feature_enabled("orgs"):
+            from .store import get_org, get_user_orgs
+            for org_name in get_user_orgs(current_user):
+                org = get_org(org_name) or {}
+                user_orgs.append({"id": org_name, "name": org.get("name") or org_name})
         return {
             "t": lambda key, **kw: t(lang, key, **kw),
             "lang": lang,
@@ -825,7 +840,8 @@ def register_i18n(app: Flask) -> None:
             "theme_vars": THEME_VARS,
             "simple_mode": getattr(g, "simple_mode", False),
             "pygments_head": render_pygments_head(),
-            "current_user": getattr(g, "current_user", None),
+            "current_user": current_user,
+            "user_orgs": user_orgs,
             "site_name": _cfg.SITE_NAME,
             "code_highlight_head": render_code_highlight_head(),
             "heading_anchors_head": render_heading_anchors_head(),
