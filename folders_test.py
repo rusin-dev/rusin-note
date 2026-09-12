@@ -66,10 +66,10 @@ def create_note(client, username, content, folder=""):
 
 
 def list_order(client, username, query=""):
-    """解析列表页笔记链接的出现顺序（排除 /new、/images 等入口）"""
+    """解析列表页笔记链接的出现顺序（排除 /new、/images、/settings 等入口）"""
     html = client.get(f"/user/{username}{query}").get_data(as_text=True)
     ids = re.findall(rf'href="/user/{username}/([a-z0-9]+)"', html)
-    return [i for i in ids if i not in ("new", "images", "attachments")]
+    return [i for i in ids if i not in ("new", "images", "attachments", "settings")]
 
 
 def main():
