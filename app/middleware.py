@@ -87,5 +87,9 @@ def register_request_hooks(app: Flask) -> None:
         g.lang = detect_lang_from_request()
         g.theme = get_theme_from_cookie()
         g.current_user = get_current_user()
+        # 简洁模式是账号级界面偏好（存 users.json），登录用户在服务端直接渲染
+        # <html class="simple-mode">，避免客户端 cookie/localStorage 与多设备冲突
+        from .user_settings import get_simple_mode
+        g.simple_mode = get_simple_mode(g.current_user) if g.current_user else False
         if config.SERVERLESS:
             _opportunistic_cleanup()

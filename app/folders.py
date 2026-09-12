@@ -139,6 +139,26 @@ def delete_note_folder(username: str, note_id: str) -> bool:
     return set_note_folder(username, note_id, "")
 
 
+def rename_user_note_folders(old: str, new: str) -> bool:
+    """把 old 用户的全部文件夹归属迁移到 new（用户改名用）。无条目视为成功。"""
+    try:
+        with folders_lock:
+            with storage.lock(K_FOLDERS):
+                _read_merge_locked()
+                if old not in note_folders:
+                    return True
+                moved = note_folders.pop(old)
+                existing = note_folders.get(new)
+                if isinstance(existing, dict) and isinstance(moved, dict):
+                    existing.update(moved)
+                else:
+                    note_folders[new] = moved
+                return _persist(note_folders)
+    except StorageError as e:
+        logger.error(f"[错误] 迁移笔记文件夹 {old} 失败: {e}")
+        return False
+
+
 def list_user_folders(username: str, note_ids=None) -> list:
     """统计该用户的文件夹列表 [(folder, count), ...]，按 count 降序、名称升序。
     note_ids 给定时只统计仍存在的笔记（过滤已删除笔记的残留条目）。"""

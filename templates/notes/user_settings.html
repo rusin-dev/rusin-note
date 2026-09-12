@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+    .settings-section {
+        border: 1px solid var(--card-border);
+        border-radius: 10px;
+        padding: 20px 22px;
+        margin-top: 20px;
+        background: var(--card-bg);
+    }
+    .settings-section h2 { margin-top: 0; font-size: 18px; border-bottom: 1px solid var(--card-border); }
+    .settings-section .desc { color: var(--muted); font-size: 13px; margin: 6px 0 14px; line-height: 1.5; }
+    .settings-section form { margin: 0; }
+    .settings-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+    .settings-row .settings-label { font-weight: 500; }
+    .settings-row .settings-label small { display: block; color: var(--muted); font-weight: 400; font-size: 12px; margin-top: 2px; }
+    .settings-switch { position: relative; display: inline-block; width: 46px; height: 26px; flex-shrink: 0; }
+    .settings-switch input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+    .settings-switch .track { position: absolute; inset: 0; background: var(--border); border-radius: 999px; transition: background 0.2s ease; pointer-events: none; }
+    .settings-switch .track::before { content: ""; position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%; background: #ffffff; transition: transform 0.2s ease; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3); }
+    .settings-switch input:checked ~ .track { background: #1a7f37; }
+    [data-theme="dark"] .settings-switch input:checked ~ .track { background: #2ea043; }
+    .settings-switch input:checked ~ .track::before { transform: translateX(20px); }
+    .settings-switch input:focus-visible ~ .track { outline: 2px solid var(--link); outline-offset: 2px; }
+    .settings-section .btn-primary { width: auto; padding: 8px 20px; }
+    .settings-danger .settings-section-title { color: #d32f2f; }
+    .saved-banner { background: var(--card-icon-bg); color: var(--link); border: 1px solid var(--card-border); border-radius: 8px; padding: 10px 16px; margin-top: 16px; font-size: 14px; }
+</style>
+
+<h1>{{ t('settings_title') }}</h1>
+<p class="desc" style="color: var(--muted); margin-top: 6px;">{{ t('settings_subtitle', username=username) }}</p>
+
+{% if error %}<p class="error">{{ error }}</p>{% endif %}
+{% if saved %}<div class="saved-banner">{{ t('settings_saved') }}</div>{% endif %}
+
+<div class="settings-section">
+    <h2>{{ t('settings_appearance') }}</h2>
+    <p class="desc">{{ t('settings_simple_mode_desc') }}</p>
+    <form method="POST" action="{{ url_for('user.user_settings_post', username=username) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="action" value="simple_mode">
+        <div class="settings-row">
+            <span class="settings-label">
+                {{ t('settings_simple_mode') }}
+                <small>{{ t('settings_simple_mode_hint') }}</small>
+            </span>
+            <label class="settings-switch" title="{{ t('settings_simple_mode') }}">
+                <input type="checkbox" name="simple_mode" value="1" {% if simple_mode %}checked{% endif %} onchange="this.form.submit()">
+                <span class="track"></span>
+            </label>
+        </div>
+        <noscript><button type="submit" class="btn-primary" style="margin-top: 12px;">{{ t('settings_save') }}</button></noscript>
+    </form>
+</div>
+
+<div class="settings-section">
+    <h2>{{ t('settings_password') }}</h2>
+    <p class="desc">{{ t('settings_password_desc') }}</p>
+    <form method="POST" action="{{ url_for('user.user_settings_post', username=username) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="action" value="password">
+        <div class="form-group">
+            <label>{{ t('settings_password_current') }}</label>
+            <input type="password" name="current_password" required autocomplete="current-password">
+        </div>
+        <div class="form-group">
+            <label>{{ t('settings_password_new', req=req_desc) }}</label>
+            <input type="password" name="new_password" required autocomplete="new-password">
+        </div>
+        <div class="form-group">
+            <label>{{ t('settings_password_confirm') }}</label>
+            <input type="password" name="confirm_password" required autocomplete="new-password">
+        </div>
+        <button type="submit" class="btn-primary">{{ t('settings_password_submit') }}</button>
+    </form>
+</div>
+
+<div class="settings-section settings-danger">
+    <h2 class="settings-section-title">{{ t('settings_username') }}</h2>
+    <p class="desc">{{ t('settings_username_desc') }}</p>
+    <form method="POST" action="{{ url_for('user.user_settings_post', username=username) }}"
+          onsubmit="return confirm('{{ t('settings_username_confirm') }}');">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="action" value="username">
+        <div class="form-group">
+            <label>{{ t('settings_username_current') }}</label>
+            <input type="text" value="{{ username }}" disabled>
+        </div>
+        <div class="form-group">
+            <label>{{ t('settings_username_new') }}</label>
+            <input type="text" name="new_username" required pattern="[a-zA-Z0-9_\-]+">
+        </div>
+        <div class="form-group">
+            <label>{{ t('settings_username_password') }}</label>
+            <input type="password" name="password" required autocomplete="current-password">
+        </div>
+        <button type="submit" class="btn-primary">{{ t('settings_username_submit') }}</button>
+    </form>
+</div>
+{% endblock %}

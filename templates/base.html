@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html{% if theme %} data-theme="{{ theme }}"{% endif %} lang="{{ lang }}">
+<html{% if theme %} data-theme="{{ theme }}"{% endif %}{% if simple_mode %} class="simple-mode"{% endif %} lang="{{ lang }}">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -10,7 +10,6 @@
     <link rel="stylesheet" href="{{ config.GLOBAL_CDN }}/npm/@fortawesome/fontawesome-free@6.5.2/css/all.min.css" media="print" onload="this.media='all'">
     <noscript><link rel="stylesheet" href="{{ config.GLOBAL_CDN }}/npm/@fortawesome/fontawesome-free@6.5.2/css/all.min.css"></noscript>
     {{ theme_script|safe }}
-    {{ simple_mode_script|safe }}
     {{ pygments_head|safe }}
     <style>
         {{ theme_vars|safe }}
@@ -93,7 +92,6 @@
         .navbar.menu-collapsed { flex-wrap: wrap; }
         .navbar.menu-collapsed .nav-menu-btn { display: inline-flex; }
         .navbar.menu-collapsed .theme-toggle { display: none; }
-        .navbar.menu-collapsed .simple-toggle { display: none; }
         .navbar.menu-collapsed .nav-links {
             order: 10;
             flex-basis: 100%;
@@ -231,13 +229,14 @@
         [data-theme="dark"] .ff-switch input:checked ~ .ff-track { background: #2ea043; }
         .ff-switch input:checked ~ .ff-track::before { transform: translateX(20px); }
         .ff-switch input:focus-visible ~ .ff-track { outline: 2px solid var(--link); outline-offset: 2px; }
-        /* 简易模式：隐藏高级功能，只保留读写保存、md预览URL、中英文、免责声明 */
+        /* 简洁模式：隐藏高级功能，只保留读写保存、md预览URL、中英文、免责声明 */
+        /* 注意保留「设置」入口，否则用户在简洁模式下无法回到设置页关闭它 */
         .simple-mode .tag-cloud { display: none !important; }
         .simple-mode .note-tags { display: none !important; }
         .simple-mode .pin-form { display: none !important; }
         .simple-mode .benben-list { display: none !important; }
         .simple-mode .benben-form { display: none !important; }
-        .simple-mode .nav-links a:not([href*="disclaimer"]) { display: none !important; }
+        .simple-mode .nav-links a:not([href*="disclaimer"]):not([href*="settings"]) { display: none !important; }
         .simple-mode .nav-links form { display: none !important; }
         .simple-mode .navbar { padding: 7px 24px; }
         .simple-mode .simple-auth-btn { display: inline-flex !important; }
@@ -257,20 +256,6 @@
             transition: background 0.2s ease, border-color 0.2s ease;
         }
         .simple-auth-btn-inner:hover { background: var(--card-bg); }
-        .simple-toggle {
-            width: 36px; height: 36px;
-            display: inline-flex; align-items: center; justify-content: center;
-            padding: 0; font-size: 15px;
-            border-radius: 8px;
-            background: var(--bg);
-            border: 1px solid var(--navbar-border);
-            color: var(--text);
-            cursor: pointer;
-            flex-shrink: 0;
-            transition: background 0.2s ease, border-color 0.2s ease;
-        }
-        .simple-toggle:hover { background: var(--card-bg); }
-        .simple-mode .simple-toggle { color: var(--link); border-color: var(--link); }
         {{ extra_css|safe }}
     </style>
 {% block extra_head %}{{ extra_head|safe }}{% endblock %}

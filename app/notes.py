@@ -19,6 +19,7 @@ FORBIDDEN_NOTE_IDS = {"user", "world", "shares", "login", "register",
                       "refs",  # refs：与 /user/<u>/refs 引用搜索路由冲突
                       "images",  # images：与 /user/<u>/images 图床上传/管理路由冲突
                       "attachments",  # attachments：与 /user/<u>/attachments 附件上传/管理路由冲突
+                      "settings",  # settings：与 /user/<u>/settings 用户设置路由冲突
                       "admin"}  # admin：与 /admin/features 功能开关管理路由（#90）冲突
 
 # 保留用户名（与固定路由或 notes/ 目录冲突，禁止注册）

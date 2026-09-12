@@ -32,7 +32,8 @@ from ..attachments import (
     validate_attachment_type,
     write_attachment,
 )
-from ..middleware import get_current_user
+from ..auth import hash_token
+from ..middleware import get_current_user, get_session_token
 from ..notes import (
     generate_random_id,
     get_note_mtime,
@@ -59,6 +60,7 @@ from ..store import (
     delete_share,
     list_user_shares,
 )
+from ..user_settings import change_password, get_simple_mode, rename_user, set_simple_mode
 from ..tags import (
     count_user_tags,
     get_note_tags,
@@ -357,6 +359,72 @@ def _render_attachments(username, error):
         usage_text=usage_text,
         error=error,
         max_size_kb=config.MAX_ATTACHMENT_SIZE_KB,
+    )
+
+
+# ---------- 用户设置：/user/<u>/settings（界面偏好 / 密码 / 用户名） ----------
+# 必须注册在 /user/<username>/<note_id> 之前，否则 settings 会被当作笔记 ID。
+@bp.route("/user/<username>/settings", methods=["GET"])
+@limiter.limit(lambda: f"{config.GET_RATE_MAX} per {config.GET_RATE_WINDOW} second")
+def user_settings_get(username):
+    if not validate_username(username):
+        abort(400)
+    _require_auth(username)
+    return _render_settings(username, error="", saved=request.args.get("saved", ""))
+
+
+@bp.route("/user/<username>/settings", methods=["POST"])
+@limiter.limit(lambda: f"{config.RATE_MAX} per {config.RATE_WINDOW} second")
+def user_settings_post(username):
+    if not validate_username(username):
+        abort(400)
+    _require_auth(username)
+    lang = getattr(g, "lang", "zh")
+    action = request.form.get("action", "")
+
+    if action == "simple_mode":
+        enabled = request.form.get("simple_mode") in ("1", "on", "true")
+        if not set_simple_mode(username, enabled):
+            return _render_settings(username, error=t(lang, "err_settings_save_failed"), saved="")
+        return redirect(url_for("user.user_settings_get", username=username, saved="simple"))
+
+    if action == "password":
+        token = get_session_token()
+        err = change_password(
+            username,
+            request.form.get("current_password", ""),
+            request.form.get("new_password", ""),
+            request.form.get("confirm_password", ""),
+            keep_token_hash=hash_token(token) if token else None,
+            lang=lang,
+        )
+        if err:
+            return _render_settings(username, error=t(lang, err[0], **err[1]), saved="")
+        return redirect(url_for("user.user_settings_get", username=username, saved="password"))
+
+    if action == "username":
+        new_username = request.form.get("new_username", "").strip()
+        err = rename_user(username, new_username, request.form.get("password", ""))
+        if err:
+            return _render_settings(username, error=t(lang, err[0], **err[1]), saved="")
+        # 改名前后的私有页面缓存都清理（旧键会随 TTL 过期，这里主动刷新新键）
+        purge_page_cache([f"/user/{username}", f"/user/{username}/",
+                          f"/user/{new_username}", f"/user/{new_username}/"],
+                         viewers=(username, new_username))
+        return redirect(url_for("user.user_settings_get", username=new_username, saved="username"))
+
+    abort(400)
+
+
+def _render_settings(username, error, saved=""):
+    lang = getattr(g, "lang", "zh")
+    return render_template(
+        "notes/user_settings.html",
+        username=username,
+        simple_mode=get_simple_mode(username),
+        error=error,
+        saved=saved,
+        req_desc=config.get_password_requirements_description(lang),
     )
 
 

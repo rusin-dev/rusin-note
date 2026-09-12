@@ -110,4 +110,24 @@ def delete_note_pins(username: str, note_id: str) -> bool:
     return set_note_pinned(username, note_id, False)
 
 
+def rename_user_note_pins(old: str, new: str) -> bool:
+    """把 old 用户的全部置顶条目迁移到 new（用户改名用）。无条目视为成功。"""
+    try:
+        with pins_lock:
+            with storage.lock(K_PINS):
+                _read_merge_locked()
+                if old not in note_pins:
+                    return True
+                moved = note_pins.pop(old)
+                existing = note_pins.get(new)
+                if isinstance(existing, dict) and isinstance(moved, dict):
+                    existing.update(moved)
+                else:
+                    note_pins[new] = moved
+                return _persist(note_pins)
+    except StorageError as e:
+        logger.error(f"[错误] 迁移笔记置顶 {old} 失败: {e}")
+        return False
+
+
 load_note_pins()
