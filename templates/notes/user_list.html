@@ -14,7 +14,6 @@
     .tag-chip .tag-count { font-size: 11px; opacity: 0.7; }
     .tag-chip-all { display: inline-flex; align-items: center; padding: 3px 12px; border-radius: 999px; font-size: 13px; border: 1px dashed var(--card-border); color: var(--muted); text-decoration: none; }
     .tag-chip-all:hover { text-decoration: none; color: var(--text); }
-    .cloud-divider { width: 1px; align-self: stretch; background: var(--card-border); margin: 0 4px; }
     .note-tags { display: inline-flex; flex-wrap: wrap; gap: 6px; margin-left: 10px; vertical-align: middle; }
     .note-tags a { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; padding: 1px 8px; border-radius: 999px; border: 1px solid var(--card-border); color: var(--muted); text-decoration: none; }
     .note-tags a:hover { text-decoration: none; color: var(--text); border-color: var(--hover); }
@@ -26,25 +25,113 @@
     .pin-btn:hover { background: var(--card-bg); color: var(--text); }
     .pin-btn.pinned { color: var(--link); }
     .note-list li.pinned-row { background: var(--card-bg); }
+    /* 文件夹树状图 */
+    .folder-breadcrumb { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 12px; font-size: 13px; color: var(--muted); }
+    .folder-breadcrumb a { color: var(--link); text-decoration: none; }
+    .folder-breadcrumb a:hover { text-decoration: underline; }
+    .folder-breadcrumb .crumb-current { color: var(--text); }
+    .folder-tree, .tree-children { list-style: none; margin: 0; padding: 0; }
+    .tree-children { padding-left: 18px; margin-left: 6px; border-left: 1px solid var(--card-border); }
+    .tree-row { display: flex; align-items: center; gap: 2px; }
+    .tree-toggle { display: inline-flex; align-items: center; gap: 6px; flex: 1 1 auto; min-width: 0; padding: 5px 6px; border: none; border-radius: 6px; background: transparent; color: var(--text); font: inherit; font-size: 14px; text-align: left; cursor: pointer; }
+    .tree-toggle:hover { background: var(--card-bg); }
+    .tree-caret { font-size: 10px; color: var(--muted); transition: transform 0.15s ease; }
+    .tree-node.collapsed > .tree-row .tree-caret { transform: rotate(-90deg); }
+    .tree-node.collapsed > .tree-children { display: none; }
+    .tree-folder-icon { font-size: 12px; color: var(--muted); }
+    .tree-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .tree-count { flex: none; padding: 0 7px; border-radius: 999px; background: var(--card-bg); font-size: 11px; opacity: 0.75; }
+    .tree-filter { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 24px; height: 24px; border-radius: 6px; color: var(--muted); font-size: 11px; text-decoration: none; }
+    .tree-filter:hover { background: var(--card-bg); color: var(--text); text-decoration: none; }
+    .tree-filter.active { color: var(--link); }
+    .tree-children .note-list { margin: 2px 0 6px; }
 </style>
+{% macro note_row(item, show_folder_chip) %}
+<li{% if pins_enabled and item.pinned %} class="pinned-row"{% endif %}>
+    {% if pins_enabled %}
+    <form method="POST" action="/user/{{ username|e }}/{{ item.id|e }}/pin" class="pin-form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        {% if active_tag %}<input type="hidden" name="tag" value="{{ active_tag|e }}">{% endif %}
+        {% if active_folder %}<input type="hidden" name="folder" value="{{ active_folder|e }}">{% endif %}
+        <button type="submit" class="pin-btn{% if item.pinned %} pinned{% endif %}"
+                title="{{ t('note_pins_toggle') }}" aria-label="{{ t('note_pins_toggle') }}"
+                aria-pressed="{{ 'true' if item.pinned else 'false' }}">
+            <i class="fa-solid fa-thumbtack" aria-hidden="true"></i>
+        </button>
+    </form>
+    {% endif %}
+    <a href="/user/{{ username|e }}/{{ item.id|e }}">{{ item.id|e }}</a>
+    {% if item.mtime %}<span class="note-time">{{ item.mtime }}</span>{% endif %}
+    {% if item.size %}<span class="note-size">{{ item.size }}</span>{% endif %}
+    {% if (tags_enabled and item.tags) or (show_folder_chip and folders_enabled and item.folder) %}
+    <span class="note-tags">
+        {% if show_folder_chip and folders_enabled and item.folder %}
+        <a class="note-folder" href="/user/{{ username|e }}?folder={{ item.folder|e }}">
+            <i class="fa-solid fa-folder" aria-hidden="true"></i>{{ item.folder|e }}
+        </a>
+        {% endif %}
+        {% if tags_enabled and item.tags %}
+            {% for tag in item.tags %}<a href="/user/{{ username|e }}?tag={{ tag|e }}">{{ tag|e }}</a>{% endfor %}
+        {% endif %}
+    </span>
+    {% endif %}
+</li>
+{% endmacro %}
+{# 递归渲染文件夹节点：节点本身是 button（不产生 /user/<name>/<id> 形态的
+   href），仅右侧漏斗图标用于按该文件夹子树筛选。collapsible_key 用于前端
+   记忆折叠状态（未归类节点用 __uncat__，不参与 ?folder= 筛选）。 #}
+{% macro folder_node(name, path, count, node_notes, children, collapsible_key, show_filter) %}
+<li class="tree-node" data-tree-key="{{ collapsible_key|e }}">
+    <div class="tree-row">
+        <button type="button" class="tree-toggle" aria-expanded="true"
+                title="{{ t('note_folders_toggle') }}">
+            <i class="fa-solid fa-chevron-down tree-caret" aria-hidden="true"></i>
+            <i class="fa-solid fa-folder tree-folder-icon" aria-hidden="true"></i>
+            <span class="tree-name">{{ name|e }}</span>
+            <span class="tree-count">{{ count }}</span>
+        </button>
+        {% if show_filter %}
+        <a class="tree-filter{% if path == active_folder %} active{% endif %}"
+           href="/user/{{ username|e }}?folder={{ path|e }}{% if active_tag %}&amp;tag={{ active_tag|e }}{% endif %}"
+           title="{{ t('note_folders_filter') }}" aria-label="{{ t('note_folders_filter') }}">
+            <i class="fa-solid fa-filter" aria-hidden="true"></i>
+        </a>
+        {% endif %}
+    </div>
+    <ul class="tree-children">
+        {% for child in children %}
+            {{ folder_node(child.name, child.path, child.count, child.notes, child.children, child.path, True) }}
+        {% endfor %}
+        {% if node_notes %}
+        <li class="tree-note">
+            <ul class="note-list">
+                {% for item in node_notes %}{{ note_row(item, False) }}{% endfor %}
+            </ul>
+        </li>
+        {% endif %}
+    </ul>
+</li>
+{% endmacro %}
 <div style="margin-bottom: 16px;">
     <a href="/user/{{ username|e }}/new">{{ t('user_new_note') }}</a>
     {% if feature_enabled('note_images') %} · <a href="/user/{{ username|e }}/images">{{ t('user_images_link') }}</a>{% endif %}
     {% if feature_enabled('note_attachments') %} · <a href="/user/{{ username|e }}/attachments">{{ t('user_attachments_link') }}</a>{% endif %}
 </div>
-{% set has_cloud = (tag_cloud or active_tag) or (folder_cloud or active_folder) %}
-{% if (tags_enabled or folders_enabled) and has_cloud %}
-<div class="tag-cloud">
-    <a class="tag-chip-all" href="/user/{{ username|e }}">{{ t('note_tags_all') }}</a>
-    {% for folder, count in folder_cloud %}
-    <a class="tag-chip{% if folder == active_folder %} active{% endif %}"
-       href="/user/{{ username|e }}?folder={{ folder|e }}{% if active_tag %}&amp;tag={{ active_tag|e }}{% endif %}">
-        <i class="fa-solid fa-folder" aria-hidden="true" style="font-size: 11px;"></i>{{ folder|e }}<span class="tag-count">{{ count }}</span>
-    </a>
+{% if folders_enabled and active_folder %}
+<nav class="folder-breadcrumb" aria-label="{{ t('note_folders_label') }}">
+    <a href="/user/{{ username|e }}{% if active_tag %}?tag={{ active_tag|e }}{% endif %}">{{ t('note_tags_all') }}</a>
+    {% set acc = namespace(p='') %}
+    {% for seg in active_folder.split('/') %}
+        {% set acc.p = (acc.p ~ '/' ~ seg) if acc.p else seg %}
+        <span aria-hidden="true">/</span>
+        {% if loop.last %}<span class="crumb-current">{{ seg|e }}</span>
+        {% else %}<a href="/user/{{ username|e }}?folder={{ acc.p|e }}{% if active_tag %}&amp;tag={{ active_tag|e }}{% endif %}">{{ seg|e }}</a>{% endif %}
     {% endfor %}
-    {% if folder_cloud and tag_cloud %}
-    <span class="cloud-divider" aria-hidden="true"></span>
-    {% endif %}
+</nav>
+{% endif %}
+{% if tags_enabled and (tag_cloud or active_tag) %}
+<div class="tag-cloud">
+    <a class="tag-chip-all" href="/user/{{ username|e }}{% if active_folder %}?folder={{ active_folder|e }}{% endif %}">{{ t('note_tags_all') }}</a>
     {% for tag, count in tag_cloud %}
     <a class="tag-chip{% if tag == active_tag %} active{% endif %}"
        href="/user/{{ username|e }}?tag={{ tag|e }}{% if active_folder %}&amp;folder={{ active_folder|e }}{% endif %}">
@@ -53,37 +140,19 @@
     {% endfor %}
 </div>
 {% endif %}
+{% if folders_enabled and folder_tree and folder_tree.children %}
+<ul class="folder-tree" data-active-folder="{{ active_folder|e }}">
+    {% for node in folder_tree.children %}
+        {{ folder_node(node.name, node.path, node.count, node.notes, node.children, node.path, True) }}
+    {% endfor %}
+    {% if folder_tree.notes %}
+        {{ folder_node(t('note_folders_uncategorized'), '', folder_tree.notes|length, folder_tree.notes, [], '__uncat__', False) }}
+    {% endif %}
+</ul>
+{% else %}
 <ul class="note-list">
     {% for item in items %}
-    <li{% if pins_enabled and item.pinned %} class="pinned-row"{% endif %}>
-        {% if pins_enabled %}
-        <form method="POST" action="/user/{{ username|e }}/{{ item.id|e }}/pin" class="pin-form">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            {% if active_tag %}<input type="hidden" name="tag" value="{{ active_tag|e }}">{% endif %}
-            {% if active_folder %}<input type="hidden" name="folder" value="{{ active_folder|e }}">{% endif %}
-            <button type="submit" class="pin-btn{% if item.pinned %} pinned{% endif %}"
-                    title="{{ t('note_pins_toggle') }}" aria-label="{{ t('note_pins_toggle') }}"
-                    aria-pressed="{{ 'true' if item.pinned else 'false' }}">
-                <i class="fa-solid fa-thumbtack" aria-hidden="true"></i>
-            </button>
-        </form>
-        {% endif %}
-        <a href="/user/{{ username|e }}/{{ item.id|e }}">{{ item.id|e }}</a>
-        {% if item.mtime %}<span class="note-time">{{ item.mtime }}</span>{% endif %}
-        {% if item.size %}<span class="note-size">{{ item.size }}</span>{% endif %}
-        {% if (tags_enabled and item.tags) or (folders_enabled and item.folder) %}
-        <span class="note-tags">
-            {% if folders_enabled and item.folder %}
-            <a class="note-folder" href="/user/{{ username|e }}?folder={{ item.folder|e }}">
-                <i class="fa-solid fa-folder" aria-hidden="true"></i>{{ item.folder|e }}
-            </a>
-            {% endif %}
-            {% if tags_enabled and item.tags %}
-                {% for tag in item.tags %}<a href="/user/{{ username|e }}?tag={{ tag|e }}">{{ tag|e }}</a>{% endfor %}
-            {% endif %}
-        </span>
-        {% endif %}
-    </li>
+        {{ note_row(item, True) }}
     {% else %}
     <li class="empty">
         {% if folders_enabled and active_folder %}{{ t('note_folders_no_match') }}
@@ -92,4 +161,46 @@
     </li>
     {% endfor %}
 </ul>
+{% endif %}
+{% if folders_enabled and folder_tree and folder_tree.children %}
+<script>
+(function () {
+    var key = 'rusin-folder-tree-closed';
+    var tree = document.querySelector('.folder-tree');
+    if (!tree) { return; }
+    var activePath = tree.getAttribute('data-active-folder') || '';
+    var closed = [];
+    try { closed = JSON.parse(localStorage.getItem(key) || '[]'); } catch (e) { closed = []; }
+    if (!Array.isArray(closed)) { closed = []; }
+    // 深链进入文件夹筛选时，展开该文件夹及其所有祖先，保证目标可见
+    if (activePath) {
+        closed = closed.filter(function (k) {
+            return !(activePath === k || activePath.indexOf(k + '/') === 0);
+        });
+    }
+    function setCollapsed(li, collapsed) {
+        li.classList.toggle('collapsed', collapsed);
+        var btn = li.querySelector(':scope > .tree-row > .tree-toggle');
+        if (btn) { btn.setAttribute('aria-expanded', collapsed ? 'false' : 'true'); }
+    }
+    var nodes = tree.querySelectorAll('li.tree-node');
+    for (var i = 0; i < nodes.length; i++) {
+        setCollapsed(nodes[i], closed.indexOf(nodes[i].getAttribute('data-tree-key')) !== -1);
+    }
+    tree.addEventListener('click', function (e) {
+        var btn = e.target.closest ? e.target.closest('.tree-toggle') : null;
+        if (!btn) { return; }
+        var li = btn.closest('li.tree-node');
+        if (!li) { return; }
+        var collapsed = !li.classList.contains('collapsed');
+        setCollapsed(li, collapsed);
+        var nodeKey = li.getAttribute('data-tree-key');
+        var idx = closed.indexOf(nodeKey);
+        if (collapsed && idx === -1) { closed.push(nodeKey); }
+        else if (!collapsed && idx !== -1) { closed.splice(idx, 1); }
+        try { localStorage.setItem(key, JSON.stringify(closed)); } catch (e2) { /* 隐私模式下忽略 */ }
+    });
+})();
+</script>
+{% endif %}
 {% endblock %}

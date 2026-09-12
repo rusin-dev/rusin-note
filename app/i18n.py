@@ -201,8 +201,11 @@ STRINGS = {
         "note_tags_no_match": "该标签下没有笔记",
         # 笔记文件夹
         "note_folders_label": "文件夹",
-        "note_folders_placeholder": "文件夹名，留空不归类",
+        "note_folders_placeholder": "文件夹路径，用 / 分层，如 工作/项目A，留空不归类",
         "note_folders_no_match": "该文件夹下没有笔记",
+        "note_folders_uncategorized": "未归类",
+        "note_folders_toggle": "展开 / 折叠",
+        "note_folders_filter": "只看该文件夹及其子文件夹",
         # 笔记置顶
         "note_pins_toggle": "置顶 / 取消置顶",
         # Markdown 标题锚点
@@ -574,8 +577,11 @@ STRINGS = {
         "note_tags_no_match": "No notes with this tag",
         # Note folders
         "note_folders_label": "Folder",
-        "note_folders_placeholder": "Folder name, empty for none",
+        "note_folders_placeholder": "Folder path, use / for subfolders, e.g. work/projectA, empty for none",
         "note_folders_no_match": "No notes in this folder",
+        "note_folders_uncategorized": "Uncategorized",
+        "note_folders_toggle": "Expand / collapse",
+        "note_folders_filter": "Only this folder and its subfolders",
         # Note pinning
         "note_pins_toggle": "Pin / unpin",
         # Markdown heading anchors
