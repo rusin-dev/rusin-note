@@ -5,15 +5,44 @@
     </a>
     {% if current_user %}
         {% set av = get_avatar(current_user) %}
+        {% set show_org_menu = feature_enabled('orgs') and not simple_mode %}
         {# 触发器用 <a role="button"> 而非 <button>：折叠测量会把它临时置为
            position:absolute，原生 button 此时会撑满导航栏宽度导致永远折叠。 #}
-        <a class="user-info" id="userMenuBtn" href="#account" role="button" tabindex="0"
-           aria-haspopup="dialog" aria-expanded="false" aria-controls="userMenu"
-           title="{{ t('nav_account_menu') }}">
+        {% if show_org_menu %}
+        <a class="user-info" id="orgMenuBtn" href="#orgs" role="button" tabindex="0"
+           aria-haspopup="true" aria-expanded="false" aria-controls="orgMenu"
+           title="{{ t('nav_switch_org') }}">
             {% if av %}<img class="avatar" src="{{ av|e }}" alt="" width="20" height="20" loading="lazy" referrerpolicy="no-referrer">{% endif %}
             <span class="user-name">{{ current_user|e }}</span>
             <i class="fa-solid fa-chevron-down user-caret" aria-hidden="true"></i>
         </a>
+        <div class="org-menu" id="orgMenu" role="menu" hidden>
+            <div class="org-menu-label">
+                <i class="fa-solid fa-users" aria-hidden="true"></i>{{ t('nav_switch_org') }}
+            </div>
+            <a class="org-menu-item" href="/user/{{ current_user|e }}/">
+                <i class="fa-solid fa-house-user" aria-hidden="true"></i>{{ t('nav_personal_space') }}
+            </a>
+            {% for org in user_orgs %}
+            <a class="org-menu-item" href="/org/{{ org.id|e }}/">
+                <i class="fa-solid fa-people-group" aria-hidden="true"></i><span class="org-menu-org-name">{{ org.name|e }}</span>
+            </a>
+            {% endfor %}
+            <a class="org-menu-item org-menu-manage" href="/org/mine">
+                <i class="fa-solid fa-sliders" aria-hidden="true"></i>{{ t('nav_manage_orgs') }}
+            </a>
+        </div>
+        {% else %}
+        <span class="user-info user-info-static">
+            {% if av %}<img class="avatar" src="{{ av|e }}" alt="" width="20" height="20" loading="lazy" referrerpolicy="no-referrer">{% endif %}
+            <span class="user-name">{{ current_user|e }}</span>
+        </span>
+        {% endif %}
+        <button type="button" class="account-menu-btn" id="userMenuBtn"
+                aria-haspopup="dialog" aria-expanded="false" aria-controls="userMenu"
+                title="{{ t('nav_account_menu') }}" aria-label="{{ t('nav_account_menu') }}">
+            <i class="fa-solid fa-gear" aria-hidden="true"></i>
+        </button>
         <div class="user-menu-backdrop" id="userMenuBackdrop" hidden></div>
         <aside class="user-menu" id="userMenu" role="dialog" aria-modal="true" aria-label="{{ t('nav_account_menu') }}" hidden>
             <div class="user-menu-head">
@@ -26,23 +55,6 @@
                 </button>
             </div>
             <nav class="user-menu-body" aria-label="{{ t('nav_account_menu') }}">
-                {% if feature_enabled('orgs') %}
-                <div class="user-menu-label">
-                    <i class="fa-solid fa-users" aria-hidden="true"></i>{{ t('nav_switch_org') }}
-                </div>
-                <a class="user-menu-item user-menu-org" href="/user/{{ current_user|e }}/">
-                    <i class="fa-solid fa-house-user" aria-hidden="true"></i>{{ t('nav_personal_space') }}
-                </a>
-                {% for org in user_orgs %}
-                <a class="user-menu-item user-menu-org" href="/org/{{ org.id|e }}/">
-                    <i class="fa-solid fa-people-group" aria-hidden="true"></i><span class="user-menu-org-name">{{ org.name|e }}</span>
-                </a>
-                {% endfor %}
-                <a class="user-menu-item user-menu-manage" href="/org/mine">
-                    <i class="fa-solid fa-sliders" aria-hidden="true"></i>{{ t('nav_manage_orgs') }}
-                </a>
-                {% endif %}
-                <div class="user-menu-sep" role="separator"></div>
                 <a class="user-menu-item" href="/user/{{ current_user|e }}/settings">
                     <i class="fa-solid fa-gear" aria-hidden="true"></i>{{ t('nav_settings') }}
                 </a>
@@ -148,5 +160,62 @@
     document.addEventListener('keydown', function (e) {
         if (e.key === 'Escape' && !menu.hidden) { close(); }
     });
+})();
+</script>
+<script>
+(function () {
+    var btn = document.getElementById('orgMenuBtn');
+    var menu = document.getElementById('orgMenu');
+    if (!btn || !menu) return;
+    var closeTimer = null;
+
+    // 组织切换下拉框用 position: fixed 定位，避免被 .navbar 的 overflow: hidden 裁剪。
+    function position() {
+        var rect = btn.getBoundingClientRect();
+        menu.style.top = (rect.bottom + 6) + 'px';
+        var left = rect.left;
+        var width = menu.offsetWidth || 220;
+        var maxLeft = window.innerWidth - width - 8;
+        if (left > maxLeft) left = Math.max(8, maxLeft);
+        menu.style.left = left + 'px';
+    }
+
+    function open() {
+        if (closeTimer) { clearTimeout(closeTimer); closeTimer = null; }
+        if (!menu.hidden && menu.classList.contains('open')) return;
+        menu.hidden = false;
+        position();
+        requestAnimationFrame(function () { menu.classList.add('open'); });
+        btn.setAttribute('aria-expanded', 'true');
+    }
+
+    function close() {
+        menu.classList.remove('open');
+        btn.setAttribute('aria-expanded', 'false');
+        closeTimer = setTimeout(function () { menu.hidden = true; closeTimer = null; }, 160);
+    }
+
+    window.toggleOrgMenu = function () {
+        if (menu.hidden) open(); else close();
+    };
+
+    btn.addEventListener('click', function (e) {
+        e.preventDefault();
+        window.toggleOrgMenu();
+    });
+    btn.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === ' ' || e.key === 'Spacebar') {
+            e.preventDefault();
+            window.toggleOrgMenu();
+        }
+    });
+    document.addEventListener('click', function (e) {
+        if (!menu.hidden && !menu.contains(e.target) && !btn.contains(e.target)) close();
+    });
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' && !menu.hidden) { close(); btn.focus(); }
+    });
+    window.addEventListener('resize', function () { if (!menu.hidden) position(); });
+    window.addEventListener('scroll', function () { if (!menu.hidden) position(); }, true);
 })();
 </script>
