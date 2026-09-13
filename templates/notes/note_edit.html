@@ -240,6 +240,7 @@
                 var user = document.querySelector('.user-info');
                 var theme = document.querySelector('.theme-toggle');
                 var lang = document.querySelector('.lang-toggle');
+                var accountBtn = document.querySelector('.account-menu-btn');
                 if (!navbar || !links || !menuBtn || !brand) return;
                 var wasOpen = navbar.classList.contains('menu-open');
                 navbar.classList.remove('menu-collapsed', 'menu-open');
@@ -256,8 +257,9 @@
                 var userW = user ? user.scrollWidth : 0;
                 var themeW = theme ? theme.offsetWidth : 0;
                 var langW = lang ? lang.offsetWidth : 0;
+                var accountW = accountBtn ? accountBtn.offsetWidth : 0;
                 var menuW = menuBtn.offsetWidth;
-                var total = brand.offsetWidth + userW + linksW + themeW + langW + menuW + GAP * 3;
+                var total = brand.offsetWidth + userW + linksW + accountW + themeW + langW + menuW + GAP * 3;
                 [links, user, theme].forEach(function (el) {
                     if (!el) return;
                     el.style.position = '';
