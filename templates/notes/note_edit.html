@@ -36,6 +36,9 @@
         .save-btn { position: fixed; bottom: 24px; right: 24px; background: var(--btn-bg); border: 1px solid var(--navbar-border); padding: 8px 20px; border-radius: 20px; font-size: 14px; color: var(--text); cursor: pointer; backdrop-filter: blur(4px); transition: all 0.2s; z-index: 10; font-weight: 500; }
         .save-btn:hover { background: var(--btn-hover); box-shadow: var(--glow-shadow); border-color: var(--glow-ring); }
         .save-btn:active { background: var(--border); }
+        .note-delete-form { position: fixed; bottom: 24px; left: 24px; z-index: 10; margin: 0; }
+        .note-delete-btn { background: var(--btn-bg); border: 1px solid var(--navbar-border); padding: 8px 18px; border-radius: 20px; font-size: 14px; color: var(--error); cursor: pointer; backdrop-filter: blur(4px); transition: box-shadow 0.2s ease, border-color 0.2s ease, background 0.2s ease; font-weight: 500; }
+        .note-delete-btn:hover { background: var(--btn-hover); border-color: var(--error); box-shadow: var(--glow-shadow); }
         .attachment-btn { position: fixed; bottom: 70px; right: 24px; background: var(--btn-bg); border: 1px solid var(--navbar-border); padding: 8px 20px; border-radius: 20px; font-size: 14px; color: var(--text); cursor: pointer; backdrop-filter: blur(4px); transition: all 0.2s; z-index: 10; font-weight: 500; }
         .attachment-btn:hover { background: var(--btn-hover); box-shadow: var(--glow-shadow); border-color: var(--glow-ring); }
         .attachment-btn:active { background: var(--border); }
@@ -137,6 +140,8 @@
             .navbar-brand-name { max-width: 45vw; }
             textarea { padding: 16px 18px; font-size: 15px; }
             .save-btn { bottom: 16px; right: 16px; padding: 6px 16px; font-size: 13px; }
+            .note-delete-form { bottom: 16px; left: 16px; }
+            .note-delete-btn { padding: 6px 14px; font-size: 13px; }
             .attachment-btn { bottom: 60px; right: 16px; padding: 6px 16px; font-size: 13px; }
             .save-hint { bottom: 70px; padding: 8px 16px; font-size: 12px; white-space: nowrap; }
             .save-status { bottom: 70px; right: 16px; font-size: 12px; padding: 4px 14px; }
@@ -260,6 +265,24 @@
     </a>
     {% endif %}
     <button type="button" class="save-btn" id="saveBtn">{{ t('note_save_btn') }}</button>
+    {% if note_delete_url %}
+    <form method="POST" action="{{ note_delete_url|e }}" class="note-delete-form" id="noteDeleteForm"
+          data-confirm="{{ t('note_delete_confirm')|e }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="note-delete-btn" id="noteDeleteBtn">
+            <i class="fa-solid fa-trash-can" aria-hidden="true"></i> {{ t('note_delete') }}
+        </button>
+    </form>
+    <script>
+    (function () {
+        var form = document.getElementById('noteDeleteForm');
+        if (!form) return;
+        form.addEventListener('submit', function (e) {
+            if (!window.confirm(form.getAttribute('data-confirm') || '')) e.preventDefault();
+        });
+    })();
+    </script>
+    {% endif %}
     <div class="save-hint" id="saveHint">{{ hint_text|safe }}</div>
     <div class="save-status" id="saveStatus"></div>
     <div class="note-mtime" id="noteMtime">{{ last_edited }}</div>

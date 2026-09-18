@@ -237,6 +237,9 @@ STRINGS = {
         "note_folders_filter": "只看该文件夹及其子文件夹",
         # 笔记置顶
         "note_pins_toggle": "置顶 / 取消置顶",
+        # 笔记删除
+        "note_delete": "删除笔记",
+        "note_delete_confirm": "确定删除这篇笔记吗？此操作不可撤销。",
         # Markdown 标题锚点
         "note_anchor_title": "跳转到此标题",
         # 笔记图床
@@ -642,6 +645,8 @@ STRINGS = {
         "note_folders_filter": "Only this folder and its subfolders",
         # Note pinning
         "note_pins_toggle": "Pin / unpin",
+        "note_delete": "Delete note",
+        "note_delete_confirm": "Delete this note? This cannot be undone.",
         # Markdown heading anchors
         "note_anchor_title": "Link to this heading",
         # Note image hosting
