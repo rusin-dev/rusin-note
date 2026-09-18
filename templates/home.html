@@ -1,5 +1,102 @@
 {% extends "base.html" %}
 {% block content %}
+{% if current_user %}
+{# ===== 工作台（登录后的首页） ===== #}
+<div class="wb">
+    <header class="wb-head">
+        <div class="wb-head-text">
+            <h1 class="wb-title">{{ t('wb_title') }}</h1>
+            <p class="wb-subtitle">{{ t('wb_welcome', name=current_user) }} · {{ t('wb_subtitle') }}</p>
+        </div>
+        <a class="wb-new-btn" href="/user/{{ current_user|e }}/new">
+            <i class="fa-solid fa-pen-to-square" aria-hidden="true"></i>{{ t('wb_new_note') }}
+        </a>
+    </header>
+
+    {% if quick_actions %}
+    <nav class="wb-actions" aria-label="{{ t('wb_quick_actions') }}">
+        {% for href, icon, label in quick_actions %}
+        <a class="wb-action" href="{{ href|e }}">
+            <span class="wb-action-icon"><i class="fa-solid {{ icon|e }}" aria-hidden="true"></i></span>
+            <span class="wb-action-label">{{ label }}</span>
+        </a>
+        {% endfor %}
+    </nav>
+    {% endif %}
+
+    <div class="wb-body">
+        <section class="wb-panel wb-panel-notes">
+            <div class="wb-panel-head">
+                <h2><i class="fa-solid fa-clock-rotate-left" aria-hidden="true"></i>{{ t('home_recent_notes') }}</h2>
+                <a href="/user/{{ current_user|e }}/">{{ t('wb_view_all') }} <i class="fa-solid fa-arrow-right" aria-hidden="true"></i></a>
+            </div>
+            {% if recent_notes %}
+            <div class="wb-list">
+                {% for note in recent_notes %}
+                <a class="wb-note" href="/user/{{ current_user|e }}/{{ note.id|e }}">
+                    <span class="wb-note-icon"><i class="fa-regular fa-file-lines" aria-hidden="true"></i></span>
+                    <span class="wb-note-main">
+                        <span class="wb-note-title">{{ note.title[:40] }}{% if note.title|length > 40 %}…{% endif %}</span>
+                        <span class="wb-note-meta">{{ note.id|e }} · {{ note.mtime|format_note_time }}</span>
+                    </span>
+                    <i class="fa-solid fa-chevron-right wb-note-arrow" aria-hidden="true"></i>
+                </a>
+                {% endfor %}
+            </div>
+            {% else %}
+            <p class="wb-empty">{{ t('wb_empty_notes') }}</p>
+            {% endif %}
+        </section>
+
+        <aside class="wb-side">
+            <section class="wb-panel wb-overview">
+                <div class="wb-panel-head"><h2><i class="fa-solid fa-chart-pie" aria-hidden="true"></i>{{ t('wb_overview') }}</h2></div>
+                <div class="wb-stats">
+                    <div class="wb-stat">
+                        <span class="wb-stat-num">{{ note_count }}</span>
+                        <span class="wb-stat-label">{{ t('wb_stat_notes') }}</span>
+                    </div>
+                    <div class="wb-stat">
+                        <span class="wb-stat-num">{{ share_count }}</span>
+                        <span class="wb-stat-label">{{ t('wb_stat_shares') }}</span>
+                    </div>
+                    <div class="wb-stat">
+                        <span class="wb-stat-num">{{ share_views }}</span>
+                        <span class="wb-stat-label">{{ t('wb_stat_views') }}</span>
+                    </div>
+                </div>
+            </section>
+
+            {% if recent_shares %}
+            <section class="wb-panel">
+                <div class="wb-panel-head">
+                    <h2><i class="fa-solid fa-share-nodes" aria-hidden="true"></i>{{ t('home_recent_shares') }}</h2>
+                    <a href="/user/{{ current_user|e }}/shares/">{{ t('wb_view_all') }} <i class="fa-solid fa-arrow-right" aria-hidden="true"></i></a>
+                </div>
+                <div class="wb-list">
+                    {% for share in recent_shares %}
+                    <a class="wb-note" href="/user/{{ current_user|e }}/{{ share.note_id|e }}">
+                        <span class="wb-note-icon"><i class="fa-solid fa-link" aria-hidden="true"></i></span>
+                        <span class="wb-note-main">
+                            <span class="wb-note-title">{{ share.note_id|e }}</span>
+                            <span class="wb-note-meta"><i class="fa-solid fa-eye" aria-hidden="true"></i> {{ share.views }}{% if share.editable %} · {{ t('shares_editable') }}{% endif %}</span>
+                        </span>
+                        <i class="fa-solid fa-chevron-right wb-note-arrow" aria-hidden="true"></i>
+                    </a>
+                    {% endfor %}
+                </div>
+            </section>
+            {% else %}
+            <section class="wb-panel">
+                <div class="wb-panel-head"><h2><i class="fa-solid fa-share-nodes" aria-hidden="true"></i>{{ t('home_recent_shares') }}</h2></div>
+                <p class="wb-empty">{{ t('wb_empty_shares') }}</p>
+            </section>
+            {% endif %}
+        </aside>
+    </div>
+</div>
+{% else %}
+{# ===== 未登录：站点落地页 ===== #}
 <div class="home-hero">
     <h1>{{ site_name|e }}</h1>
     <p>{{ t('home_tagline') }}</p>
@@ -24,42 +121,8 @@
         <span class="home-card-arrow"><i class="fa-solid fa-arrow-right" aria-hidden="true"></i></span>
     </a>
 </div>
-{% if current_user and (recent_notes or recent_shares) %}
-<div class="home-recent-row">
-    {% if recent_notes %}
-    <div class="home-recent">
-        <h2>{{ t('home_recent_notes') }}</h2>
-        <div class="home-recent-list">
-            {% for note in recent_notes %}
-            <a class="home-recent-item" href="/user/{{ current_user }}/{{ note.id }}">
-                <span class="home-recent-id">{{ note.id }}</span>
-                <span class="home-recent-preview">{{ note.title[:10] }}{% if note.title|length > 10 %}...{% endif %}</span>
-                <span class="home-recent-time">{{ note.mtime|format_note_time }}</span>
-            </a>
-            {% endfor %}
-        </div>
-    </div>
-    {% endif %}
-    {% if recent_shares %}
-    <div class="home-recent">
-        <h2>{{ t('home_recent_shares') }}</h2>
-        <div class="home-recent-list">
-            {% for share in recent_shares %}
-            <a class="home-recent-item" href="/user/{{ current_user }}/{{ share.note_id }}">
-                <span class="home-recent-title">{{ share.note_id }}</span>
-                <span class="home-recent-meta">
-                    <span class="home-recent-views"><i class="fa-solid fa-eye" aria-hidden="true"></i> {{ share.views }}</span>
-                    {% if share.editable %}
-                    <span class="home-recent-badge">{{ t('shares_editable') }}</span>
-                    {% endif %}
-                </span>
-            </a>
-            {% endfor %}
-        </div>
-    </div>
-    {% endif %}
-</div>
 {% endif %}
+
 {% if show_benben %}
 <a class="home-card home-benben-card" href="/benben">
     <span class="home-card-icon"><i class="fa-solid fa-sticky-note" aria-hidden="true"></i></span>
