@@ -35,6 +35,24 @@
         }
         .navbar .nav-links a:hover { background: var(--card-bg); color: var(--text); text-decoration: none; transform: translateY(-1px); }
         .navbar .nav-links a:active { transform: scale(0.96); }
+        /* 当前页面：菜单链接下划线指示（::after 绘制，居中平滑展开） */
+        .navbar .nav-links a { position: relative; }
+        .navbar .nav-links a::after {
+            content: "";
+            position: absolute;
+            left: 12px; right: 12px; bottom: 2px;
+            height: 2px;
+            border-radius: 2px;
+            background: currentColor;
+            opacity: 0;
+            transform: scaleX(0);
+            transform-origin: center;
+            pointer-events: none;
+            transition: transform 0.24s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.24s ease;
+        }
+        .navbar .nav-links a.active { color: var(--text); }
+        .navbar .nav-links a.active::after { opacity: 1; transform: scaleX(1); }
+        .navbar .nav-links .nav-icon-btn::after { left: 10px; right: 10px; }
         .navbar .nav-links i { font-size: 13px; }
         /* 图标入口（新建笔记 / 分享管理）：默认只显示图标，悬浮/聚焦时平滑展开文字 */
         .navbar .nav-links .nav-icon-btn { gap: 0; padding: 6px 11px; }
@@ -237,6 +255,9 @@
         .navbar.menu-collapsed .nav-links a:hover { background: var(--card-bg); color: var(--text); }
         .navbar.menu-collapsed .nav-links a:active { transform: none; }
         .navbar.menu-collapsed .nav-links a:last-child { border-bottom: none; }
+        /* 折叠菜单为纵向列表：下划线改为左侧竖条，避免与分隔线重叠 */
+        .navbar.menu-collapsed .nav-links a::after { display: none; }
+        .navbar.menu-collapsed .nav-links a.active { box-shadow: inset 3px 0 0 var(--link); }
         .navbar.menu-collapsed .nav-links .nav-icon-btn .nav-icon-label {
             max-width: 9em; margin-left: 6px; opacity: 1; transform: none;
         }
@@ -274,6 +295,7 @@
         @media (prefers-reduced-motion: reduce) {
             .navbar .nav-links .nav-icon-btn .nav-icon-label,
             .user-menu, .user-menu-backdrop, .org-menu, .user-caret { transition: none; }
+            .navbar .nav-links a::after { transition: none; }
             .navbar .nav-links a:hover { transform: none; }
             .user-menu-item:hover, .org-menu-item:hover { transform: none; }
         }
