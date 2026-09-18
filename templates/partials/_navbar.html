@@ -72,6 +72,12 @@
                 </button>
             </div>
             <nav class="user-menu-body" aria-label="{{ t('nav_account_menu') }}">
+                <a class="user-menu-item" href="/user/{{ current_user|e }}/">
+                    <i class="fa-solid fa-file-lines" aria-hidden="true"></i>{{ t('nav_my_notes') }}
+                </a>
+                <a class="user-menu-item" href="/user/{{ current_user|e }}/new">
+                    <i class="fa-solid fa-square-plus" aria-hidden="true"></i>{{ t('nav_new_note') }}
+                </a>
                 {% if feature_enabled('share_links') and not simple_mode %}
                 <a class="user-menu-item" href="/user/{{ current_user|e }}/shares/">
                     <i class="fa-solid fa-share-nodes" aria-hidden="true"></i>{{ t('nav_share_mgmt') }}
