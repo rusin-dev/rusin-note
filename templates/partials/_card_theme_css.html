@@ -8,26 +8,26 @@
     padding: 28px 32px 34px;
     background: var(--card-bg);
     border: 1px solid var(--card-border);
-    border-radius: 18px;
+    border-radius: 12px;
     box-shadow: var(--card-shadow);
 }
 
 /* --- 通用圆角 --- */
-input, button, textarea, select, .btn-sm { border-radius: 10px; }
+input, button, textarea, select, .btn-sm { border-radius: 8px; }
 .stat-card, .ff-card, .ff-row, .settings-section, .disclaimer,
 .benben-post, .comment-post, .image-card, .attachment-card,
 .home-card, .home-recent-item, .upload-zone,
 .user-menu-item, .org-menu-item, .tree-toggle {
-    border-radius: 14px;
+    border-radius: 8px;
 }
-.org-menu, .outline-panel, .outline-popover, .ref-popover { border-radius: 14px; }
-.markdown-body pre, .markdown-body code, .markdown-body blockquote { border-radius: 10px; }
-.image-thumb, .attachment-icon { border-radius: 12px; }
+.org-menu, .outline-panel, .outline-popover, .ref-popover { border-radius: 8px; }
+.markdown-body pre, .markdown-body code, .markdown-body blockquote { border-radius: 6px; }
+.image-thumb, .attachment-icon { border-radius: 8px; }
 
 /* --- 表格卡片化 --- */
 .share-table {
     border-collapse: separate; border-spacing: 0;
-    border: 1px solid var(--card-border); border-radius: 14px; overflow: hidden;
+    border: 1px solid var(--card-border); border-radius: 8px; overflow: hidden;
 }
 .share-table th, .share-table td {
     border: none; border-bottom: 1px solid var(--navbar-border); border-right: 1px solid var(--navbar-border);
@@ -39,7 +39,7 @@ input, button, textarea, select, .btn-sm { border-radius: 10px; }
 .note-list li {
     background: var(--bg);
     border: 1px solid var(--card-border);
-    border-radius: 12px;
+    border-radius: 8px;
     padding: 12px 14px;
     margin-bottom: 8px;
 }
@@ -94,13 +94,13 @@ button:focus-visible, a:focus-visible, [role="button"]:focus-visible {
 .pane, .pane.editor-pane, .pane.preview-pane {
     background: var(--card-bg);
     border: 1px solid var(--card-border);
-    border-radius: 14px;
+    border-radius: 8px;
     overflow: hidden;
 }
 .editor-shell textarea, .editor-shell .preview-body { background: transparent; }
 
 /* --- 移动端适配 --- */
 @media (max-width: 640px) {
-    .container { margin: 12px auto 24px; padding: 18px 16px 24px; border-radius: 14px; }
+    .container { margin: 12px auto 24px; padding: 18px 16px 24px; border-radius: 10px; }
     .editor-shell { gap: 8px; padding: 58px 8px 8px; }
 }
