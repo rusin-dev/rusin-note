@@ -31,6 +31,9 @@ THEME_VARS = """:root {
     --card-icon-bg: #eef3fa;
     --hero-grad-a: #ffffff;
     --hero-grad-b: #000000;
+    --glow-ring: rgba(3, 102, 214, 0.55);
+    --glow-soft: rgba(3, 102, 214, 0.22);
+    --glow-shadow: 0 0 0 1px rgba(3, 102, 214, 0.55), 0 0 20px -2px rgba(3, 102, 214, 0.45);
 }
 [data-theme="dark"] {
     color-scheme: dark;
@@ -61,6 +64,9 @@ THEME_VARS = """:root {
     --card-icon-bg: #1c2530;
     --hero-grad-a: #ffffff;
     --hero-grad-b: #000000;
+    --glow-ring: rgba(121, 184, 255, 0.6);
+    --glow-soft: rgba(121, 184, 255, 0.28);
+    --glow-shadow: 0 0 0 1px rgba(121, 184, 255, 0.6), 0 0 22px -2px rgba(121, 184, 255, 0.55);
 }
 """
 # 主题切换脚本：放在 <head> 最前避免闪烁；优先服务器渲染的主题（Cookie），其次 localStorage，最后跟随系统偏好。

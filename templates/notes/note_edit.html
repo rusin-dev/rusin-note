@@ -34,11 +34,11 @@
         .preview-empty { color: var(--muted); font-style: italic; }
 
         .save-btn { position: fixed; bottom: 24px; right: 24px; background: var(--btn-bg); border: 1px solid var(--navbar-border); padding: 8px 20px; border-radius: 20px; font-size: 14px; color: var(--text); cursor: pointer; backdrop-filter: blur(4px); transition: all 0.2s; z-index: 10; font-weight: 500; }
-        .save-btn:hover { background: var(--btn-hover); transform: scale(1.02); }
-        .save-btn:active { background: var(--border); transform: scale(0.98); }
+        .save-btn:hover { background: var(--btn-hover); box-shadow: var(--glow-shadow); border-color: var(--glow-ring); }
+        .save-btn:active { background: var(--border); }
         .attachment-btn { position: fixed; bottom: 70px; right: 24px; background: var(--btn-bg); border: 1px solid var(--navbar-border); padding: 8px 20px; border-radius: 20px; font-size: 14px; color: var(--text); cursor: pointer; backdrop-filter: blur(4px); transition: all 0.2s; z-index: 10; font-weight: 500; }
-        .attachment-btn:hover { background: var(--btn-hover); transform: scale(1.02); }
-        .attachment-btn:active { background: var(--border); transform: scale(0.98); }
+        .attachment-btn:hover { background: var(--btn-hover); box-shadow: var(--glow-shadow); border-color: var(--glow-ring); }
+        .attachment-btn:active { background: var(--border); }
         .pane-header.editor-header { justify-content: space-between; }
         .pane-header.preview-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
         .preview-title { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
@@ -153,6 +153,7 @@
         .simple-mode .navbar-brand { display: none !important; }
         .simple-mode .note-mtime { display: none !important; }
     </style>
+    <style>{% include "partials/_card_theme_css.html" %}</style>
 </head>
 <body>
     {% include "partials/_navbar.html" %}

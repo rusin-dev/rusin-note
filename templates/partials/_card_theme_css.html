@@ -1,0 +1,106 @@
+/* ===== 全局卡片化与边缘发光主题（base.html 与 note_edit.html 共用，见 partials/_card_theme_css.html） =====
+   在所有页面样式之后加载：统一圆角卡片观感，并把悬浮位移/缩放改为边缘发光。 */
+
+/* --- 主内容区：圆角卡片 --- */
+.container {
+    max-width: 920px;
+    margin: 28px auto 48px;
+    padding: 28px 32px 34px;
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: 18px;
+    box-shadow: var(--card-shadow);
+}
+
+/* --- 通用圆角 --- */
+input, button, textarea, select, .btn-sm { border-radius: 10px; }
+.stat-card, .ff-card, .ff-row, .settings-section, .disclaimer,
+.benben-post, .comment-post, .image-card, .attachment-card,
+.home-card, .home-recent-item, .upload-zone,
+.user-menu-item, .org-menu-item, .tree-toggle {
+    border-radius: 14px;
+}
+.org-menu, .outline-panel, .outline-popover, .ref-popover { border-radius: 14px; }
+.markdown-body pre, .markdown-body code, .markdown-body blockquote { border-radius: 10px; }
+.image-thumb, .attachment-icon { border-radius: 12px; }
+
+/* --- 表格卡片化 --- */
+.share-table {
+    border-collapse: separate; border-spacing: 0;
+    border: 1px solid var(--card-border); border-radius: 14px; overflow: hidden;
+}
+.share-table th, .share-table td {
+    border: none; border-bottom: 1px solid var(--navbar-border); border-right: 1px solid var(--navbar-border);
+}
+.share-table th:last-child, .share-table td:last-child { border-right: none; }
+.share-table tr:last-child td { border-bottom: none; }
+
+/* --- 笔记列表项卡片化 --- */
+.note-list li {
+    background: var(--bg);
+    border: 1px solid var(--card-border);
+    border-radius: 12px;
+    padding: 12px 14px;
+    margin-bottom: 8px;
+}
+.note-list li:last-child { margin-bottom: 0; }
+.note-list li.pinned-row { background: var(--card-icon-bg); border-color: var(--glow-ring); }
+
+/* --- 悬浮：不加位移/缩放，只做边缘发光 --- */
+.home-card, .home-recent-item, .stat-card, .ff-card, .ff-row,
+.image-card, .attachment-card, .benben-post, .comment-post,
+.settings-section, .note-list li, .disclaimer,
+.tag-chip, .tag-chip-all, .tree-toggle, .tree-filter,
+.user-menu-item, .org-menu-item, .user-menu-close,
+.navbar .nav-links a, .navbar-brand, .nav-link-btn,
+.theme-toggle, .lang-toggle, .nav-menu-btn, .account-menu-btn, .simple-auth-btn-inner,
+.save-btn, .attachment-btn, .upload-zone,
+.outline-item, .outline-btn, .outline-close, .outline-fab,
+.ref-item, .pin-btn, .benben-reply, .md-manual {
+    transition: box-shadow 0.22s ease, border-color 0.2s ease, background 0.2s ease, color 0.2s ease;
+}
+.home-card:hover, .home-recent-item:hover, .stat-card:hover, .ff-card:hover, .ff-row:hover,
+.image-card:hover, .attachment-card:hover, .benben-post:hover, .comment-post:hover,
+.settings-section:hover, .note-list li:hover, .disclaimer:hover,
+.tag-chip:hover, .tag-chip-all:hover, .tree-toggle:hover, .tree-filter:hover,
+.user-menu-item:hover, .org-menu-item:hover, .user-menu-close:hover,
+.navbar .nav-links a:hover, .navbar-brand:hover, .nav-link-btn:hover,
+.theme-toggle:hover, .lang-toggle:hover, .nav-menu-btn:hover, .account-menu-btn:hover, .simple-auth-btn-inner:hover,
+.save-btn:hover, .attachment-btn:hover, .upload-zone:hover,
+.outline-item:hover, .outline-btn:hover, .outline-close:hover, .outline-fab:hover,
+.ref-item:hover, .pin-btn:hover, .benben-reply:hover, .md-manual:hover {
+    box-shadow: var(--glow-shadow) !important;
+    border-color: var(--glow-ring) !important;
+}
+
+/* --- 输入控件聚焦发光 --- */
+input:focus, select:focus, textarea:focus {
+    outline: none;
+    border-color: var(--glow-ring);
+    box-shadow: 0 0 0 3px var(--glow-soft);
+}
+/* 无边框输入（编辑器正文、标签栏）不加聚焦光晕，避免整块高亮 */
+.editor-shell textarea:focus, .tag-bar input:focus {
+    border-color: transparent;
+    box-shadow: none;
+}
+button:focus-visible, a:focus-visible, [role="button"]:focus-visible {
+    outline: 2px solid var(--glow-ring);
+    outline-offset: 2px;
+}
+
+/* --- 编辑器（note_edit.html）：两块圆角面板 --- */
+.editor-shell { gap: 12px; padding: 60px 12px 12px; }
+.pane, .pane.editor-pane, .pane.preview-pane {
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: 14px;
+    overflow: hidden;
+}
+.editor-shell textarea, .editor-shell .preview-body { background: transparent; }
+
+/* --- 移动端适配 --- */
+@media (max-width: 640px) {
+    .container { margin: 12px auto 24px; padding: 18px 16px 24px; border-radius: 14px; }
+    .editor-shell { gap: 8px; padding: 58px 8px 8px; }
+}

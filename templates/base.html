@@ -81,7 +81,7 @@
             border-radius: 10px; text-decoration: none; color: var(--text);
             transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
         }
-        .home-recent-item:hover { transform: translateY(-2px); border-color: var(--hover); box-shadow: var(--card-shadow); }
+        .home-recent-item:hover { border-color: var(--glow-ring); box-shadow: var(--glow-shadow); }
         .home-recent-id { font-size: 14px; font-weight: 600; color: var(--link); flex-shrink: 0; }
         .home-recent-preview { font-size: 13px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; min-width: 0; }
         .home-recent-time { font-size: 12px; color: var(--muted); white-space: nowrap; margin-left: auto; flex-shrink: 0; }
@@ -95,16 +95,15 @@
             border-radius: 12px; text-decoration: none; color: var(--text);
             transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
         }
-        .home-card:hover { transform: translateY(-3px); border-color: var(--hover); box-shadow: var(--card-shadow); }
-        .home-card:active { transform: translateY(-1px) scale(0.99); }
+        .home-card:hover { border-color: var(--glow-ring); box-shadow: var(--glow-shadow); }
         .home-card:focus-visible { outline: 2px solid var(--link); outline-offset: 2px; }
-        .home-card-icon { flex-shrink: 0; width: 46px; height: 46px; display: flex; align-items: center; justify-content: center; font-size: 20px; color: #546271; background: var(--card-icon-bg); border-radius: 10px; transition: transform 0.18s ease, background 0.18s ease; }
-        .home-card:hover .home-card-icon { transform: scale(1.1); }
+        .home-card-icon { flex-shrink: 0; width: 46px; height: 46px; display: flex; align-items: center; justify-content: center; font-size: 20px; color: #546271; background: var(--card-icon-bg); border-radius: 10px; transition: color 0.18s ease, background 0.18s ease; }
+        .home-card:hover .home-card-icon { color: var(--link); }
         .home-card-body { flex: 1; min-width: 0; }
         .home-card-title { display: block; font-size: 16px; font-weight: 600; }
         .home-card-desc { display: block; color: var(--muted); font-size: 13px; margin-top: 4px; line-height: 1.4; }
-        .home-card-arrow { flex-shrink: 0; color: var(--muted); font-size: 14px; transition: transform 0.18s ease, color 0.18s ease; }
-        .home-card:hover .home-card-arrow { transform: translateX(4px); color: var(--hover); }
+        .home-card-arrow { flex-shrink: 0; color: var(--muted); font-size: 14px; transition: color 0.18s ease; }
+        .home-card:hover .home-card-arrow { color: var(--hover); }
         /* 犇犇入口：从导航栏移到主页最下方，占满整行 */
         .home-benben-card { margin-top: 32px; }
         /* 功能开关（#90）：/count 状态卡片与 /admin/features 滑块 */
@@ -138,6 +137,7 @@
         {{ extra_css|safe }}
     </style>
 {% block extra_head %}{{ extra_head|safe }}{% endblock %}
+<style>{% include "partials/_card_theme_css.html" %}</style>
 </head>
 <body>
     {% include "partials/_navbar.html" %}
