@@ -60,4 +60,14 @@
     {% endif %}
 </div>
 {% endif %}
+{% if show_benben %}
+<a class="home-card home-benben-card" href="/benben">
+    <span class="home-card-icon"><i class="fa-solid fa-sticky-note" aria-hidden="true"></i></span>
+    <span class="home-card-body">
+        <span class="home-card-title">{{ t('home_benben') }}</span>
+        <span class="home-card-desc">{{ t('home_benben_desc') }}</span>
+    </span>
+    <span class="home-card-arrow"><i class="fa-solid fa-arrow-right" aria-hidden="true"></i></span>
+</a>
+{% endif %}
 {% endblock %}

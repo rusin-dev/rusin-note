@@ -34,8 +34,6 @@ def index():
         ]
         if feature_enabled("share_links"):
             cards.append((f"/user/{current_user}/shares/", "fa-share-nodes", t(lang, "nav_share_mgmt"), t(lang, "home_share_mgmt_desc")))
-        if feature_enabled("benben"):
-            cards.append(("/benben", "fa-sticky-note", t(lang, "home_benben"), t(lang, "home_benben_desc")))
         cards.append(("/count", "fa-chart-simple", t(lang, "home_stats"), t(lang, "home_stats_desc")))
         # 获取用户最近编辑的笔记
         recent_notes = search_user_notes(current_user, "")[:config.RECENT_NOTES_LIMIT]
@@ -58,14 +56,12 @@ def index():
         cards.append(("/login", "fa-right-to-bracket", t(lang, "home_login"), t(lang, "home_login_desc")))
         if feature_enabled("open_register"):
             cards.append(("/register", "fa-user-plus", t(lang, "home_register"), t(lang, "home_register_desc")))
-        if feature_enabled("benben"):
-            cards.append(("/benben", "fa-sticky-note", t(lang, "home_benben"), t(lang, "home_benben_desc")))
         cards.append(("/count", "fa-chart-simple", t(lang, "home_stats"), t(lang, "home_stats_desc")))
         recent_notes = []
         recent_shares = []
     return render_template("home.html", site_name=config.SITE_NAME or "如形の笔记", cards=cards,
                            recent_notes=recent_notes, recent_shares=recent_shares,
-                           current_user=current_user)
+                           current_user=current_user, show_benben=feature_enabled("benben"))
 
 
 @bp.route("/count")

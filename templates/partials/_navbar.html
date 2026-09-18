@@ -72,6 +72,11 @@
                 </button>
             </div>
             <nav class="user-menu-body" aria-label="{{ t('nav_account_menu') }}">
+                {% if feature_enabled('share_links') and not simple_mode %}
+                <a class="user-menu-item" href="/user/{{ current_user|e }}/shares/">
+                    <i class="fa-solid fa-share-nodes" aria-hidden="true"></i>{{ t('nav_share_mgmt') }}
+                </a>
+                {% endif %}
                 <a class="user-menu-item" href="/user/{{ current_user|e }}/settings">
                     <i class="fa-solid fa-gear" aria-hidden="true"></i>{{ t('nav_settings') }}
                 </a>
@@ -84,8 +89,6 @@
         <span class="nav-links">
             <a {{ nav_attrs('/user/' ~ current_user ~ '/', 'nav-link', false, ['/user/' ~ current_user ~ '/settings', '/user/' ~ current_user ~ '/shares/']) |safe }} href="/user/{{ current_user|e }}/"><i class="fa-solid fa-file-lines" aria-hidden="true"></i>{{ t('nav_my_notes') }}</a>
             <a {{ nav_attrs('/user/' ~ current_user ~ '/new', 'nav-link nav-icon-btn')|safe }} href="/user/{{ current_user|e }}/new" title="{{ t('nav_new_note') }}" aria-label="{{ t('nav_new_note') }}"><i class="fa-solid fa-square-plus" aria-hidden="true"></i><span class="nav-icon-label">{{ t('nav_new_note') }}</span></a>
-            {% if feature_enabled('share_links') %}<a {{ nav_attrs('/user/' ~ current_user ~ '/shares/', 'nav-link nav-icon-btn')|safe }} href="/user/{{ current_user|e }}/shares/" title="{{ t('nav_share_mgmt') }}" aria-label="{{ t('nav_share_mgmt') }}"><i class="fa-solid fa-share-nodes" aria-hidden="true"></i><span class="nav-icon-label">{{ t('nav_share_mgmt') }}</span></a>{% endif %}
-            {% if feature_enabled('benben') %}<a {{ nav_attrs('/benben')|safe }} href="/benben"><i class="fa-solid fa-sticky-note" aria-hidden="true"></i>{{ t('nav_benben') }}</a>{% endif %}
             {% if feature_enabled('orgs') %}<a {{ nav_attrs('/org')|safe }} href="/org/mine"><i class="fa-solid fa-users" aria-hidden="true"></i>{{ t('nav_orgs') }}</a>{% endif %}
             <a {{ nav_attrs('/user/' ~ current_user ~ '/settings')|safe }} href="/user/{{ current_user|e }}/settings"><i class="fa-solid fa-gear" aria-hidden="true"></i>{{ t('nav_settings') }}</a>
             <form action="/logout" method="POST" style="display:inline">
@@ -98,7 +101,6 @@
         <span class="nav-links">
             {% if feature_enabled('open_register') %}<a {{ nav_attrs('/register')|safe }} href="/register"><i class="fa-solid fa-user-plus" aria-hidden="true"></i>{{ t('nav_register') }}</a>{% endif %}
             <a {{ nav_attrs('/login')|safe }} href="/login"><i class="fa-solid fa-right-to-bracket" aria-hidden="true"></i>{{ t('nav_login') }}</a>
-            {% if feature_enabled('benben') %}<a {{ nav_attrs('/benben')|safe }} href="/benben"><i class="fa-solid fa-sticky-note" aria-hidden="true"></i>{{ t('nav_benben') }}</a>{% endif %}
             <a {{ nav_attrs('/count')|safe }} href="/count"><i class="fa-solid fa-chart-simple" aria-hidden="true"></i>{{ t('nav_stats') }}</a>
             <a {{ nav_attrs('/disclaimer')|safe }} href="/disclaimer"><i class="fa-solid fa-circle-info" aria-hidden="true"></i>{{ t('nav_disclaimer') }}</a>
         </span>
