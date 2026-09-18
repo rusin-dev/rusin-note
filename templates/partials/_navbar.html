@@ -1,3 +1,20 @@
+{#- 导航链接状态：与当前 request.path 比对，命中时输出 active 类与 aria-current。
+    exact=true 仅精确匹配；否则按前缀匹配（如 /count、/user/<u>/settings）。
+    exclude 可列出需排除的前缀，用于「我的笔记」页下的 settings / shares 等子页。 -#}
+{%- macro nav_attrs(match, cls='nav-link', exact=false, exclude=()) -%}
+{%- set p = (request.path or '/') -%}
+{%- set m = match -%}
+{%- if exact -%}
+{%- set on = (p == m or p == m.rstrip('/')) -%}
+{%- else -%}
+{%- set on = (p == m or p.startswith(m if m.endswith('/') else m + '/')) -%}
+{%- endif -%}
+{%- set ns = namespace(on=on) -%}
+{%- for ex in exclude -%}
+{%- if ns.on and p.startswith(ex) -%}{%- set ns.on = false -%}{%- endif -%}
+{%- endfor -%}
+{{ ('class="' ~ cls ~ (' active' if ns.on else '') ~ '"') | safe }}{{ (' aria-current="page"' if ns.on else '') | safe }}
+{%- endmacro -%}
 <div class="navbar">
     <a class="navbar-brand" href="/" title="Home">
         <img src="/favicon.ico" alt="" class="navbar-brand-icon">
@@ -55,6 +72,17 @@
                 </button>
             </div>
             <nav class="user-menu-body" aria-label="{{ t('nav_account_menu') }}">
+                <a class="user-menu-item" href="/user/{{ current_user|e }}/">
+                    <i class="fa-solid fa-file-lines" aria-hidden="true"></i>{{ t('nav_my_notes') }}
+                </a>
+                <a class="user-menu-item" href="/user/{{ current_user|e }}/new">
+                    <i class="fa-solid fa-square-plus" aria-hidden="true"></i>{{ t('nav_new_note') }}
+                </a>
+                {% if feature_enabled('share_links') and not simple_mode %}
+                <a class="user-menu-item" href="/user/{{ current_user|e }}/shares/">
+                    <i class="fa-solid fa-share-nodes" aria-hidden="true"></i>{{ t('nav_share_mgmt') }}
+                </a>
+                {% endif %}
                 <a class="user-menu-item" href="/user/{{ current_user|e }}/settings">
                     <i class="fa-solid fa-gear" aria-hidden="true"></i>{{ t('nav_settings') }}
                 </a>
@@ -65,12 +93,9 @@
             </nav>
         </aside>
         <span class="nav-links">
-            <a href="/user/{{ current_user|e }}/"><i class="fa-solid fa-file-lines" aria-hidden="true"></i>{{ t('nav_my_notes') }}</a>
-            <a class="nav-icon-btn" href="/user/{{ current_user|e }}/new" title="{{ t('nav_new_note') }}" aria-label="{{ t('nav_new_note') }}"><i class="fa-solid fa-square-plus" aria-hidden="true"></i><span class="nav-icon-label">{{ t('nav_new_note') }}</span></a>
-            {% if feature_enabled('share_links') %}<a class="nav-icon-btn" href="/user/{{ current_user|e }}/shares/" title="{{ t('nav_share_mgmt') }}" aria-label="{{ t('nav_share_mgmt') }}"><i class="fa-solid fa-share-nodes" aria-hidden="true"></i><span class="nav-icon-label">{{ t('nav_share_mgmt') }}</span></a>{% endif %}
-            {% if feature_enabled('benben') %}<a href="/benben"><i class="fa-solid fa-sticky-note" aria-hidden="true"></i>{{ t('nav_benben') }}</a>{% endif %}
-            {% if feature_enabled('orgs') %}<a href="/org/mine"><i class="fa-solid fa-users" aria-hidden="true"></i>{{ t('nav_orgs') }}</a>{% endif %}
-            <a href="/user/{{ current_user|e }}/settings"><i class="fa-solid fa-gear" aria-hidden="true"></i>{{ t('nav_settings') }}</a>
+            <a {{ nav_attrs('/user/' ~ current_user ~ '/', 'nav-link', false, ['/user/' ~ current_user ~ '/settings', '/user/' ~ current_user ~ '/shares/']) |safe }} href="/user/{{ current_user|e }}/"><i class="fa-solid fa-file-lines" aria-hidden="true"></i>{{ t('nav_my_notes') }}</a>
+            <a {{ nav_attrs('/user/' ~ current_user ~ '/new', 'nav-link nav-icon-btn')|safe }} href="/user/{{ current_user|e }}/new" title="{{ t('nav_new_note') }}" aria-label="{{ t('nav_new_note') }}"><i class="fa-solid fa-square-plus" aria-hidden="true"></i><span class="nav-icon-label">{{ t('nav_new_note') }}</span></a>
+            <a {{ nav_attrs('/user/' ~ current_user ~ '/settings')|safe }} href="/user/{{ current_user|e }}/settings"><i class="fa-solid fa-gear" aria-hidden="true"></i>{{ t('nav_settings') }}</a>
             <form action="/logout" method="POST" style="display:inline">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <button type="submit" class="nav-link-btn"><i class="fa-solid fa-right-from-bracket" aria-hidden="true"></i>{{ t('nav_logout') }}</button>
@@ -79,11 +104,10 @@
     {% else %}
         <span class="user-info">{{ t('nav_anonymous') }}</span>
         <span class="nav-links">
-            {% if feature_enabled('open_register') %}<a href="/register"><i class="fa-solid fa-user-plus" aria-hidden="true"></i>{{ t('nav_register') }}</a>{% endif %}
-            <a href="/login"><i class="fa-solid fa-right-to-bracket" aria-hidden="true"></i>{{ t('nav_login') }}</a>
-            {% if feature_enabled('benben') %}<a href="/benben"><i class="fa-solid fa-sticky-note" aria-hidden="true"></i>{{ t('nav_benben') }}</a>{% endif %}
-            <a href="/count"><i class="fa-solid fa-chart-simple" aria-hidden="true"></i>{{ t('nav_stats') }}</a>
-            <a href="/disclaimer"><i class="fa-solid fa-circle-info" aria-hidden="true"></i>{{ t('nav_disclaimer') }}</a>
+            {% if feature_enabled('open_register') %}<a {{ nav_attrs('/register')|safe }} href="/register"><i class="fa-solid fa-user-plus" aria-hidden="true"></i>{{ t('nav_register') }}</a>{% endif %}
+            <a {{ nav_attrs('/login')|safe }} href="/login"><i class="fa-solid fa-right-to-bracket" aria-hidden="true"></i>{{ t('nav_login') }}</a>
+            <a {{ nav_attrs('/count')|safe }} href="/count"><i class="fa-solid fa-chart-simple" aria-hidden="true"></i>{{ t('nav_stats') }}</a>
+            <a {{ nav_attrs('/disclaimer')|safe }} href="/disclaimer"><i class="fa-solid fa-circle-info" aria-hidden="true"></i>{{ t('nav_disclaimer') }}</a>
         </span>
         <a href="/login" class="simple-auth-btn"><span class="simple-auth-btn-inner"><i class="fa-solid fa-right-to-bracket" aria-hidden="true"></i></span></a>
     {% endif %}

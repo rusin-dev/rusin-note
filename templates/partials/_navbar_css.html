@@ -33,30 +33,35 @@
             text-decoration: none;
             transition: background 0.2s ease, color 0.2s ease, transform 0.1s ease;
         }
-        .navbar .nav-links a:hover { background: var(--card-bg); color: var(--text); text-decoration: none; transform: translateY(-1px); }
-        .navbar .nav-links a:active { transform: scale(0.96); }
-        .navbar .nav-links i { font-size: 13px; }
-        /* 图标入口（新建笔记 / 分享管理）：默认只显示图标，悬浮/聚焦时平滑展开文字 */
-        .navbar .nav-links .nav-icon-btn { gap: 0; padding: 6px 11px; }
-        .navbar .nav-links .nav-icon-btn .nav-icon-label {
-            max-width: 0;
-            margin-left: 0;
+        .navbar .nav-links a:hover { background: var(--card-bg); color: var(--text); text-decoration: none; box-shadow: var(--glow-shadow); }
+        .navbar .nav-links a:active { background: var(--card-bg); }
+        /* 当前页面：菜单链接下划线指示（::after 绘制，居中平滑展开） */
+        .navbar .nav-links a { position: relative; }
+        .navbar .nav-links a::after {
+            content: "";
+            position: absolute;
+            left: 12px; right: 12px; bottom: 2px;
+            height: 2px;
+            border-radius: 2px;
+            background: currentColor;
             opacity: 0;
-            overflow: hidden;
-            white-space: nowrap;
-            transform: translateX(-4px);
-            transition: max-width 0.3s cubic-bezier(0.4, 0, 0.2, 1),
-                        opacity 0.2s ease,
-                        transform 0.3s cubic-bezier(0.4, 0, 0.2, 1),
-                        margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            transform: scaleX(0);
+            transform-origin: center;
+            pointer-events: none;
+            transition: transform 0.24s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.24s ease;
         }
-        .navbar .nav-links .nav-icon-btn:hover .nav-icon-label,
-        .navbar .nav-links .nav-icon-btn:focus-visible .nav-icon-label,
-        .navbar.measuring .nav-links .nav-icon-btn .nav-icon-label {
-            max-width: 9em;
-            margin-left: 6px;
+        .navbar .nav-links a.active { color: var(--text); }
+        .navbar .nav-links a.active::after { opacity: 1; transform: scaleX(1); }
+        .navbar .nav-links .nav-icon-btn::after { left: 10px; right: 10px; }
+        .navbar .nav-links i { font-size: 13px; }
+        /* 图标入口（新建笔记 / 分享管理）：文字常显，无悬浮展开动效（悬浮只发光） */
+        .navbar .nav-links .nav-icon-btn { gap: 6px; padding: 6px 12px; }
+        .navbar .nav-links .nav-icon-btn .nav-icon-label {
+            max-width: none;
+            margin-left: 0;
             opacity: 1;
-            transform: none;
+            overflow: visible;
+            white-space: nowrap;
         }
         /* 账号侧边栏：position: fixed 右侧抽屉，避免被 .navbar 的 overflow: hidden 裁剪。
            .navbar 不可加 transform/filter/backdrop-filter，否则会成为 fixed 的
@@ -128,7 +133,7 @@
             transition: background 0.16s ease, color 0.16s ease, transform 0.16s ease;
         }
         .user-menu-item i { width: 18px; text-align: center; color: var(--muted); transition: color 0.16s ease; flex-shrink: 0; }
-        .user-menu-item:hover { background: var(--bg); color: var(--link); transform: translateX(2px); }
+        .user-menu-item:hover { background: var(--bg); color: var(--link); box-shadow: var(--glow-shadow); }
         .user-menu-item:hover i { color: var(--link); }
         .user-menu-form { margin: 0; }
         .user-menu-logout { width: 100%; background: none; border: none; font: inherit; cursor: pointer; text-align: left; }
@@ -167,7 +172,7 @@
             transition: background 0.16s ease, color 0.16s ease, transform 0.16s ease;
         }
         .org-menu-item i { width: 16px; text-align: center; color: var(--muted); transition: color 0.16s ease; flex-shrink: 0; }
-        .org-menu-item:hover { background: var(--bg); color: var(--link); transform: translateX(2px); }
+        .org-menu-item:hover { background: var(--bg); color: var(--link); box-shadow: var(--glow-shadow); }
         .org-menu-item:hover i { color: var(--link); }
         .org-menu-org-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .org-menu-manage { color: var(--muted); font-size: 13px; }
@@ -184,7 +189,7 @@
             transition: background 0.2s ease, color 0.2s ease, transform 0.1s ease;
         }
         .nav-link-btn:hover { background: var(--card-bg); color: var(--text); text-decoration: none; }
-        .nav-link-btn:active { transform: scale(0.96); }
+        .nav-link-btn:active { background: var(--card-bg); }
         .avatar { width: 20px; height: 20px; border-radius: 50%; object-fit: cover; vertical-align: middle; flex-shrink: 0; }
         .navbar .user-info .avatar { margin-right: 6px; }
         .theme-toggle, .nav-menu-btn, .account-menu-btn {
@@ -237,8 +242,11 @@
         .navbar.menu-collapsed .nav-links a:hover { background: var(--card-bg); color: var(--text); }
         .navbar.menu-collapsed .nav-links a:active { transform: none; }
         .navbar.menu-collapsed .nav-links a:last-child { border-bottom: none; }
+        /* 折叠菜单为纵向列表：下划线改为左侧竖条，避免与分隔线重叠 */
+        .navbar.menu-collapsed .nav-links a::after { display: none; }
+        .navbar.menu-collapsed .nav-links a.active { box-shadow: inset 3px 0 0 var(--link); }
         .navbar.menu-collapsed .nav-links .nav-icon-btn .nav-icon-label {
-            max-width: 9em; margin-left: 6px; opacity: 1; transform: none;
+            max-width: none; margin-left: 0; opacity: 1;
         }
         .navbar.menu-collapsed.menu-open .nav-links {
             display: flex;
@@ -274,6 +282,7 @@
         @media (prefers-reduced-motion: reduce) {
             .navbar .nav-links .nav-icon-btn .nav-icon-label,
             .user-menu, .user-menu-backdrop, .org-menu, .user-caret { transition: none; }
+            .navbar .nav-links a::after { transition: none; }
             .navbar .nav-links a:hover { transform: none; }
             .user-menu-item:hover, .org-menu-item:hover { transform: none; }
         }

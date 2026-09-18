@@ -1,0 +1,23 @@
+/* ===== 页面切换动画（base.html 与 note_edit.html 共用，见 partials/_page_transition_css.html） =====
+   支持跨文档 View Transitions 的浏览器，站内跳转时对整页做交叉淡入淡出；
+   其余浏览器通过 @supports 回退到内容淡入上浮动画（在 base/编辑器布局中均生效）。 */
+        @view-transition { navigation: auto; }
+        ::view-transition-old(root),
+        ::view-transition-new(root) {
+            animation-duration: 0.26s;
+            animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        @keyframes rusin-page-in {
+            from { opacity: 0; transform: translateY(8px); }
+            to { opacity: 1; transform: none; }
+        }
+        @supports not (view-transition-name: none) {
+            .container,
+            .editor-shell { animation: rusin-page-in 0.28s cubic-bezier(0.4, 0, 0.2, 1) both; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+            ::view-transition-old(root),
+            ::view-transition-new(root) { animation: none; }
+            .container,
+            .editor-shell { animation: none; }
+        }

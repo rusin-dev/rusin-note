@@ -96,6 +96,10 @@ DEFAULT_CONFIG = {
         "max_height_px": 1000,
         "max_posts": 200
     },
+    "todos": {
+        "max_items": 100,
+        "max_length": 200
+    },
     "note_editor": {
         "live_preview_default": False,
         "markdown_manual_url": "https://markdown.com.cn"
@@ -418,6 +422,19 @@ try:
     RECENT_SHARES_LIMIT = max(0, int(RECENT_SHARES_LIMIT))
 except (TypeError, ValueError):
     RECENT_SHARES_LIMIT = 5
+
+# ---------- 工作台待办（TODO LIST）----------
+TODOS_CFG = config.get("todos", DEFAULT_CONFIG["todos"])
+TODO_MAX_ITEMS = TODOS_CFG.get("max_items", 100)
+TODO_MAX_LENGTH = TODOS_CFG.get("max_length", 200)
+try:
+    TODO_MAX_ITEMS = max(1, int(TODO_MAX_ITEMS))
+except (TypeError, ValueError):
+    TODO_MAX_ITEMS = 100
+try:
+    TODO_MAX_LENGTH = max(1, int(TODO_MAX_LENGTH))
+except (TypeError, ValueError):
+    TODO_MAX_LENGTH = 200
 
 # ---------- 用户头像配置 ----------
 # 头像通过第三方服务生成。由于本站用户没有邮箱，默认用 md5(用户名) 作为哈希（

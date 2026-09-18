@@ -111,7 +111,8 @@ def register_post():
         return render_template("auth/register.html", error="err_username_taken"), 400
 
     token = create_session(username)
-    resp = make_response(redirect(f"/user/{username}/new"))
+    # 注册后直接进入工作台首页（而不是编辑器）
+    resp = make_response(redirect("/"))
     _set_session_cookie(resp, token)
     return resp
 
@@ -135,6 +136,7 @@ def login_post():
         return render_template("auth/login.html", error="err_login_failed"), 401
 
     token = create_session(username)
-    resp = make_response(redirect(f"/user/{username}/"))
+    # 登录后跳转到工作台样式的首页
+    resp = make_response(redirect("/"))
     _set_session_cookie(resp, token)
     return resp

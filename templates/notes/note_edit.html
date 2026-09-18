@@ -20,6 +20,7 @@
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { background: var(--bg); color: var(--text); height: 100vh; overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif; }
         {% include "partials/_navbar_css.html" %}
+        {% include "partials/_page_transition_css.html" %}
         /* note_edit 布局：导航栏固定在顶部，编辑器占满视口 */
         .navbar { position: fixed; top: 0; left: 0; right: 0; z-index: 30; }
 
@@ -33,11 +34,14 @@
         .preview-empty { color: var(--muted); font-style: italic; }
 
         .save-btn { position: fixed; bottom: 24px; right: 24px; background: var(--btn-bg); border: 1px solid var(--navbar-border); padding: 8px 20px; border-radius: 20px; font-size: 14px; color: var(--text); cursor: pointer; backdrop-filter: blur(4px); transition: all 0.2s; z-index: 10; font-weight: 500; }
-        .save-btn:hover { background: var(--btn-hover); transform: scale(1.02); }
-        .save-btn:active { background: var(--border); transform: scale(0.98); }
+        .save-btn:hover { background: var(--btn-hover); box-shadow: var(--glow-shadow); border-color: var(--glow-ring); }
+        .save-btn:active { background: var(--border); }
+        .note-delete-form { position: fixed; bottom: 24px; left: 24px; z-index: 10; margin: 0; }
+        .note-delete-btn { background: var(--btn-bg); border: 1px solid var(--navbar-border); padding: 8px 18px; border-radius: 20px; font-size: 14px; color: var(--error); cursor: pointer; backdrop-filter: blur(4px); transition: box-shadow 0.2s ease, border-color 0.2s ease, background 0.2s ease; font-weight: 500; }
+        .note-delete-btn:hover { background: var(--btn-hover); border-color: var(--error); box-shadow: var(--glow-shadow); }
         .attachment-btn { position: fixed; bottom: 70px; right: 24px; background: var(--btn-bg); border: 1px solid var(--navbar-border); padding: 8px 20px; border-radius: 20px; font-size: 14px; color: var(--text); cursor: pointer; backdrop-filter: blur(4px); transition: all 0.2s; z-index: 10; font-weight: 500; }
-        .attachment-btn:hover { background: var(--btn-hover); transform: scale(1.02); }
-        .attachment-btn:active { background: var(--border); transform: scale(0.98); }
+        .attachment-btn:hover { background: var(--btn-hover); box-shadow: var(--glow-shadow); border-color: var(--glow-ring); }
+        .attachment-btn:active { background: var(--border); }
         .pane-header.editor-header { justify-content: space-between; }
         .pane-header.preview-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
         .preview-title { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
@@ -136,6 +140,8 @@
             .navbar-brand-name { max-width: 45vw; }
             textarea { padding: 16px 18px; font-size: 15px; }
             .save-btn { bottom: 16px; right: 16px; padding: 6px 16px; font-size: 13px; }
+            .note-delete-form { bottom: 16px; left: 16px; }
+            .note-delete-btn { padding: 6px 14px; font-size: 13px; }
             .attachment-btn { bottom: 60px; right: 16px; padding: 6px 16px; font-size: 13px; }
             .save-hint { bottom: 70px; padding: 8px 16px; font-size: 12px; white-space: nowrap; }
             .save-status { bottom: 70px; right: 16px; font-size: 12px; padding: 4px 14px; }
@@ -151,6 +157,43 @@
         /* 简易模式：编辑器内隐藏品牌名；其余导航栏隐藏逻辑见 partials/_navbar_css.html */
         .simple-mode .navbar-brand { display: none !important; }
         .simple-mode .note-mtime { display: none !important; }
+    </style>
+    <style>{% include "partials/_card_theme_css.html" %}</style>
+    <style>
+        /* 编辑器 / 预览 分隔条：可拖动自定义两栏宽度（见文件末尾脚本） */
+        .editor-shell { gap: 0; }
+        .splitter {
+            flex: 0 0 12px;
+            position: relative;
+            align-self: stretch;
+            cursor: col-resize;
+            touch-action: none;
+            background: transparent;
+        }
+        .splitter::before {
+            content: "";
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            width: 3px; height: 44px;
+            border-radius: 3px;
+            background: var(--card-border);
+            transition: background 0.16s ease, box-shadow 0.16s ease, height 0.16s ease;
+        }
+        .splitter:hover::before,
+        .splitter:focus-visible::before,
+        .splitter.dragging::before {
+            background: var(--link);
+            height: 68px;
+            box-shadow: var(--glow-shadow);
+        }
+        .splitter:focus-visible { outline: none; }
+        .editor-shell.preview-hidden .splitter { display: none; }
+        .simple-mode .splitter { display: none !important; }
+        @media (max-width: 768px) {
+            .splitter { display: none; }
+            .editor-shell { gap: 12px; }
+        }
     </style>
 </head>
 <body>
@@ -194,6 +237,8 @@
                 {% endif %}
             </form>
         </div>
+        <div class="splitter" id="paneSplitter" role="separator" aria-orientation="vertical"
+             aria-label="{{ t('note_splitter_label') }}" title="{{ t('note_splitter_label') }}" tabindex="0"></div>
         <div class="pane preview-pane">
             <div class="pane-header preview-header" id="previewHeader">
                 <span class="preview-title">
@@ -220,6 +265,24 @@
     </a>
     {% endif %}
     <button type="button" class="save-btn" id="saveBtn">{{ t('note_save_btn') }}</button>
+    {% if note_delete_url %}
+    <form method="POST" action="{{ note_delete_url|e }}" class="note-delete-form" id="noteDeleteForm"
+          data-confirm="{{ t('note_delete_confirm')|e }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="note-delete-btn" id="noteDeleteBtn">
+            <i class="fa-solid fa-trash-can" aria-hidden="true"></i> {{ t('note_delete') }}
+        </button>
+    </form>
+    <script>
+    (function () {
+        var form = document.getElementById('noteDeleteForm');
+        if (!form) return;
+        form.addEventListener('submit', function (e) {
+            if (!window.confirm(form.getAttribute('data-confirm') || '')) e.preventDefault();
+        });
+    })();
+    </script>
+    {% endif %}
     <div class="save-hint" id="saveHint">{{ hint_text|safe }}</div>
     <div class="save-status" id="saveStatus"></div>
     <div class="note-mtime" id="noteMtime">{{ last_edited }}</div>
@@ -552,6 +615,7 @@
                 previewSwitch.checked = previewOn;
                 editorShell.classList.toggle('preview-hidden', !previewOn);
                 (previewOn ? previewHeader : editorHeader).appendChild(previewSwitchWrap);
+                applySplit();
                 if (previewOn) {
                     updatePreview();
                 } else {
@@ -574,6 +638,100 @@
             }
 
             previewSwitch.addEventListener('change', syncPreviewToggle);
+
+            // ===== 编辑器 / 预览分隔条：拖动自定义宽度，localStorage 记忆 =====
+            const SPLIT_KEY = 'rusin-editor-split';
+            const splitter = document.getElementById('paneSplitter');
+            const editorPane = editorShell.querySelector('.pane.editor-pane');
+            const previewPane = editorShell.querySelector('.pane.preview-pane');
+            const SPLIT_MIN = 0.15, SPLIT_MAX = 0.85;
+            let splitRatio = 0.5;
+            try {
+                const savedSplit = parseFloat(localStorage.getItem(SPLIT_KEY));
+                if (isFinite(savedSplit)) splitRatio = Math.min(SPLIT_MAX, Math.max(SPLIT_MIN, savedSplit));
+            } catch (e) {}
+            let splitDragging = false;
+
+            function splitActive() {
+                return !!splitter && previewOn && !window.matchMedia('(max-width: 768px)').matches;
+            }
+
+            function applySplit() {
+                if (!editorPane || !previewPane || !splitter) return;
+                if (!splitActive()) {
+                    editorPane.style.flex = '';
+                    previewPane.style.flex = '';
+                    return;
+                }
+                const style = getComputedStyle(editorShell);
+                const avail = editorShell.clientWidth
+                    - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight)
+                    - splitter.offsetWidth;
+                if (avail <= 0) return;
+                editorPane.style.flex = '0 0 ' + Math.round(avail * splitRatio) + 'px';
+                previewPane.style.flex = '1 1 0';
+            }
+
+            function saveSplit() {
+                try { localStorage.setItem(SPLIT_KEY, String(splitRatio)); } catch (e) {}
+            }
+
+            function splitMove(clientX) {
+                const rect = editorShell.getBoundingClientRect();
+                const style = getComputedStyle(editorShell);
+                const padL = parseFloat(style.paddingLeft);
+                const avail = editorShell.clientWidth - padL - parseFloat(style.paddingRight) - splitter.offsetWidth;
+                if (avail <= 0) return;
+                const editorW = clientX - (rect.left + padL) - splitter.offsetWidth / 2;
+                splitRatio = Math.min(SPLIT_MAX, Math.max(SPLIT_MIN, editorW / avail));
+                editorPane.style.flex = '0 0 ' + Math.round(avail * splitRatio) + 'px';
+                previewPane.style.flex = '1 1 0';
+            }
+
+            if (splitter && editorPane && previewPane) {
+                splitter.addEventListener('pointerdown', function (e) {
+                    if (!splitActive()) return;
+                    if (e.pointerType === 'mouse' && e.button !== 0) return;
+                    splitDragging = true;
+                    splitter.classList.add('dragging');
+                    document.body.style.cursor = 'col-resize';
+                    document.body.style.userSelect = 'none';
+                    try { splitter.setPointerCapture(e.pointerId); } catch (err) {}
+                    e.preventDefault();
+                });
+                splitter.addEventListener('pointermove', function (e) {
+                    if (splitDragging) splitMove(e.clientX);
+                });
+                function endSplitDrag(e) {
+                    if (!splitDragging) return;
+                    splitDragging = false;
+                    splitter.classList.remove('dragging');
+                    document.body.style.cursor = '';
+                    document.body.style.userSelect = '';
+                    if (e && e.pointerId !== undefined) {
+                        try { splitter.releasePointerCapture(e.pointerId); } catch (err) {}
+                    }
+                    saveSplit();
+                }
+                splitter.addEventListener('pointerup', endSplitDrag);
+                splitter.addEventListener('pointercancel', endSplitDrag);
+                // 双击恢复默认 50 / 50
+                splitter.addEventListener('dblclick', function () {
+                    splitRatio = 0.5;
+                    applySplit();
+                    saveSplit();
+                });
+                // 键盘：左右方向键微调
+                splitter.addEventListener('keydown', function (e) {
+                    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+                    e.preventDefault();
+                    splitRatio = Math.min(SPLIT_MAX, Math.max(SPLIT_MIN,
+                        splitRatio + (e.key === 'ArrowRight' ? 0.02 : -0.02)));
+                    applySplit();
+                    saveSplit();
+                });
+                window.addEventListener('resize', applySplit);
+            }
 
             previewBody.addEventListener('click', function() {
                 if (!previewOn) {

@@ -474,6 +474,7 @@ def user_note_get(username, note_id):
         folder_options=folder_options,
         note_images_api=note_images_api,
         note_attachments_api=note_attachments_api,
+        note_delete_url=url_for("user.user_note_delete", username=username, note_id=note_id),
         **ctx,
     )
 
@@ -506,6 +507,28 @@ def user_note_post(username, note_id):
         viewers=(username,),
     )
     return redirect(url_for("user.user_note_get", username=username, note_id=note_id))
+
+
+@bp.route("/user/<username>/<note_id>/delete", methods=["POST"])
+@limiter.limit(lambda: f"{config.RATE_MAX} per {config.RATE_WINDOW} second")
+def user_note_delete(username, note_id):
+    """删除笔记：编辑页与列表页的删除按钮共用。空内容即删除，
+    write_note 的删除钩子会同步清理标签/文件夹/置顶。"""
+    if not validate_username(username):
+        abort(400)
+    check_note_id(note_id)
+    _require_auth(username)
+    if not note_exists(username, note_id):
+        abort(404)
+    if not write_note(username, note_id, ""):
+        abort(500)
+    purge_page_cache(
+        ["/", f"/user/{username}", f"/user/{username}/",
+         f"/user/{username}/{note_id}", f"/user/{username}/{note_id}/",
+         f"/user/{username}/{note_id}.md", f"/user/{username}/{note_id}/md"],
+        viewers=(username,),
+    )
+    return redirect(url_for("user.user_root", username=username))
 
 
 @bp.route("/user/<username>/<note_id>/pin", methods=["POST"])

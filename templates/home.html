@@ -1,5 +1,72 @@
 {% extends "base.html" %}
 {% block content %}
+{% if current_user %}
+{# ===== 工作台（VSCode 欢迎页风格）：最近编辑 + TODO LIST ===== #}
+<div class="wb-grid">
+    <section class="wb-panel">
+        <div class="wb-panel-head">
+            <h2><i class="fa-solid fa-clock-rotate-left" aria-hidden="true"></i>{{ t('home_recent_notes') }}</h2>
+            <a href="/user/{{ current_user|e }}/">{{ t('wb_view_all') }} <i class="fa-solid fa-arrow-right" aria-hidden="true"></i></a>
+        </div>
+        {% if recent_notes %}
+        <div class="wb-list">
+            {% for note in recent_notes %}
+            <a class="wb-note" href="/user/{{ current_user|e }}/{{ note.id|e }}">
+                <span class="wb-note-icon"><i class="fa-regular fa-file-lines" aria-hidden="true"></i></span>
+                <span class="wb-note-main">
+                    <span class="wb-note-title">{{ note.title[:40] }}{% if note.title|length > 40 %}…{% endif %}</span>
+                    <span class="wb-note-meta">{{ note.id|e }} · {{ note.mtime|format_note_time }}</span>
+                </span>
+                <i class="fa-solid fa-chevron-right wb-note-arrow" aria-hidden="true"></i>
+            </a>
+            {% endfor %}
+        </div>
+        {% else %}
+        <p class="wb-empty">{{ t('wb_empty_notes') }}</p>
+        {% endif %}
+    </section>
+
+    <section class="wb-panel wb-todo-panel">
+        <div class="wb-panel-head">
+            <h2><i class="fa-solid fa-list-check" aria-hidden="true"></i>{{ t('wb_todo_title') }}</h2>
+            {% if todos %}
+            <form method="POST" action="/user/{{ current_user|e }}/todos/clear-done">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="wb-todo-clear">{{ t('wb_todo_clear_done') }}</button>
+            </form>
+            {% endif %}
+        </div>
+        {% if todo_err %}<p class="wb-todo-err">{{ todo_err }}</p>{% endif %}
+        <form class="wb-todo-add" method="POST" action="/user/{{ current_user|e }}/todos/add">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="text" name="text" maxlength="{{ todo_max_length }}" placeholder="{{ t('wb_todo_placeholder') }}" autocomplete="off" aria-label="{{ t('wb_todo_placeholder') }}">
+            <button type="submit" aria-label="{{ t('wb_todo_add') }}" title="{{ t('wb_todo_add') }}"><i class="fa-solid fa-plus" aria-hidden="true"></i></button>
+        </form>
+        <ul class="wb-todos">
+            {% for todo in todos %}
+            <li class="wb-todo{% if todo.done %} done{% endif %}">
+                <form method="POST" action="/user/{{ current_user|e }}/todos/{{ todo.id|e }}/toggle">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit" class="wb-todo-check" aria-label="{{ t('wb_todo_toggle') }}" title="{{ t('wb_todo_toggle') }}">
+                        <i class="fa-{% if todo.done %}solid fa-square-check{% else %}regular fa-square{% endif %}" aria-hidden="true"></i>
+                    </button>
+                </form>
+                <span class="wb-todo-text">{{ todo.text }}</span>
+                <form method="POST" action="/user/{{ current_user|e }}/todos/{{ todo.id|e }}/delete">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit" class="wb-todo-del" aria-label="{{ t('wb_todo_delete') }}" title="{{ t('wb_todo_delete') }}">
+                        <i class="fa-solid fa-xmark" aria-hidden="true"></i>
+                    </button>
+                </form>
+            </li>
+            {% else %}
+            <li class="wb-empty">{{ t('wb_todo_empty') }}</li>
+            {% endfor %}
+        </ul>
+    </section>
+</div>
+{% else %}
+{# ===== 未登录：站点落地页 ===== #}
 <div class="home-hero">
     <h1>{{ site_name|e }}</h1>
     <p>{{ t('home_tagline') }}</p>
@@ -24,40 +91,16 @@
         <span class="home-card-arrow"><i class="fa-solid fa-arrow-right" aria-hidden="true"></i></span>
     </a>
 </div>
-{% if current_user and (recent_notes or recent_shares) %}
-<div class="home-recent-row">
-    {% if recent_notes %}
-    <div class="home-recent">
-        <h2>{{ t('home_recent_notes') }}</h2>
-        <div class="home-recent-list">
-            {% for note in recent_notes %}
-            <a class="home-recent-item" href="/user/{{ current_user }}/{{ note.id }}">
-                <span class="home-recent-id">{{ note.id }}</span>
-                <span class="home-recent-preview">{{ note.title[:10] }}{% if note.title|length > 10 %}...{% endif %}</span>
-                <span class="home-recent-time">{{ note.mtime|format_note_time }}</span>
-            </a>
-            {% endfor %}
-        </div>
-    </div>
-    {% endif %}
-    {% if recent_shares %}
-    <div class="home-recent">
-        <h2>{{ t('home_recent_shares') }}</h2>
-        <div class="home-recent-list">
-            {% for share in recent_shares %}
-            <a class="home-recent-item" href="/user/{{ current_user }}/{{ share.note_id }}">
-                <span class="home-recent-title">{{ share.note_id }}</span>
-                <span class="home-recent-meta">
-                    <span class="home-recent-views"><i class="fa-solid fa-eye" aria-hidden="true"></i> {{ share.views }}</span>
-                    {% if share.editable %}
-                    <span class="home-recent-badge">{{ t('shares_editable') }}</span>
-                    {% endif %}
-                </span>
-            </a>
-            {% endfor %}
-        </div>
-    </div>
-    {% endif %}
-</div>
+{% endif %}
+
+{% if show_benben %}
+<a class="home-card home-benben-card" href="/benben">
+    <span class="home-card-icon"><i class="fa-solid fa-sticky-note" aria-hidden="true"></i></span>
+    <span class="home-card-body">
+        <span class="home-card-title">{{ t('home_benben') }}</span>
+        <span class="home-card-desc">{{ t('home_benben_desc') }}</span>
+    </span>
+    <span class="home-card-arrow"><i class="fa-solid fa-arrow-right" aria-hidden="true"></i></span>
+</a>
 {% endif %}
 {% endblock %}

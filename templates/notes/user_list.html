@@ -25,6 +25,10 @@
     .pin-btn:hover { background: var(--card-bg); color: var(--text); }
     .pin-btn.pinned { color: var(--link); }
     .note-list li.pinned-row { background: var(--card-bg); }
+    /* 笔记删除按钮 */
+    .note-del-form { display: inline-flex; margin-left: 6px; vertical-align: middle; }
+    .note-del-btn { display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; padding: 0; border: none; border-radius: 6px; background: transparent; color: var(--muted); cursor: pointer; font-size: 13px; transition: background 0.15s ease, color 0.15s ease; }
+    .note-del-btn:hover { background: var(--card-bg); color: var(--error); }
     /* 文件夹树状图 */
     .folder-breadcrumb { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 12px; font-size: 13px; color: var(--muted); }
     .folder-breadcrumb a { color: var(--link); text-decoration: none; }
@@ -75,6 +79,13 @@
         {% endif %}
     </span>
     {% endif %}
+    <form method="POST" action="/user/{{ username|e }}/{{ item.id|e }}/delete" class="note-del-form"
+          data-confirm="{{ t('note_delete_confirm')|e }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="note-del-btn" title="{{ t('note_delete') }}" aria-label="{{ t('note_delete') }}">
+            <i class="fa-solid fa-trash-can" aria-hidden="true"></i>
+        </button>
+    </form>
 </li>
 {% endmacro %}
 {# 递归渲染文件夹节点：节点本身是 button（不产生 /user/<name>/<id> 形态的
@@ -203,4 +214,13 @@
 })();
 </script>
 {% endif %}
+<script>
+(function () {
+    document.addEventListener('submit', function (e) {
+        var form = e.target;
+        if (!form || !form.classList || !form.classList.contains('note-del-form')) return;
+        if (!window.confirm(form.getAttribute('data-confirm') || '')) e.preventDefault();
+    });
+})();
+</script>
 {% endblock %}
