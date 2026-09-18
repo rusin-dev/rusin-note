@@ -28,6 +28,7 @@ from .store import (
 from .tags import rename_user_note_tags
 from .folders import rename_user_note_folders
 from .pins import rename_user_note_pins
+from .todos import rename_user_todos
 
 logger = create_logger("user_settings")
 
@@ -188,6 +189,8 @@ def rename_user(old: str, new: str, password: str):
     if not rename_user_note_folders(old, new):
         return ("err_settings_rename_failed", {})
     if not rename_user_note_pins(old, new):
+        return ("err_settings_rename_failed", {})
+    if not rename_user_todos(old, new):
         return ("err_settings_rename_failed", {})
 
     # 3) 清理旧命名空间笔记（此时删除钩子已无旧标签/文件夹/置顶可清）

@@ -59,6 +59,7 @@ KV_FILE_MAP = {
     "note_tags": "note_tags.json",
     "note_folders": "note_folders.json",
     "note_pins": "note_pins.json",
+    "todos": "todos.json",
     "feature_flags": "feature_flags.json",
     "secret_key": ".secret_key",
     # 组织相关

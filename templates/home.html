@@ -1,99 +1,69 @@
 {% extends "base.html" %}
 {% block content %}
 {% if current_user %}
-{# ===== 工作台（登录后的首页） ===== #}
-<div class="wb">
-    <header class="wb-head">
-        <div class="wb-head-text">
-            <h1 class="wb-title">{{ t('wb_title') }}</h1>
-            <p class="wb-subtitle">{{ t('wb_welcome', name=current_user) }} · {{ t('wb_subtitle') }}</p>
+{# ===== 工作台（VSCode 欢迎页风格）：最近编辑 + TODO LIST ===== #}
+<div class="wb-grid">
+    <section class="wb-panel">
+        <div class="wb-panel-head">
+            <h2><i class="fa-solid fa-clock-rotate-left" aria-hidden="true"></i>{{ t('home_recent_notes') }}</h2>
+            <a href="/user/{{ current_user|e }}/">{{ t('wb_view_all') }} <i class="fa-solid fa-arrow-right" aria-hidden="true"></i></a>
         </div>
-        <a class="wb-new-btn" href="/user/{{ current_user|e }}/new">
-            <i class="fa-solid fa-pen-to-square" aria-hidden="true"></i>{{ t('wb_new_note') }}
-        </a>
-    </header>
+        {% if recent_notes %}
+        <div class="wb-list">
+            {% for note in recent_notes %}
+            <a class="wb-note" href="/user/{{ current_user|e }}/{{ note.id|e }}">
+                <span class="wb-note-icon"><i class="fa-regular fa-file-lines" aria-hidden="true"></i></span>
+                <span class="wb-note-main">
+                    <span class="wb-note-title">{{ note.title[:40] }}{% if note.title|length > 40 %}…{% endif %}</span>
+                    <span class="wb-note-meta">{{ note.id|e }} · {{ note.mtime|format_note_time }}</span>
+                </span>
+                <i class="fa-solid fa-chevron-right wb-note-arrow" aria-hidden="true"></i>
+            </a>
+            {% endfor %}
+        </div>
+        {% else %}
+        <p class="wb-empty">{{ t('wb_empty_notes') }}</p>
+        {% endif %}
+    </section>
 
-    {% if quick_actions %}
-    <nav class="wb-actions" aria-label="{{ t('wb_quick_actions') }}">
-        {% for href, icon, label in quick_actions %}
-        <a class="wb-action" href="{{ href|e }}">
-            <span class="wb-action-icon"><i class="fa-solid {{ icon|e }}" aria-hidden="true"></i></span>
-            <span class="wb-action-label">{{ label }}</span>
-        </a>
-        {% endfor %}
-    </nav>
-    {% endif %}
-
-    <div class="wb-body">
-        <section class="wb-panel wb-panel-notes">
-            <div class="wb-panel-head">
-                <h2><i class="fa-solid fa-clock-rotate-left" aria-hidden="true"></i>{{ t('home_recent_notes') }}</h2>
-                <a href="/user/{{ current_user|e }}/">{{ t('wb_view_all') }} <i class="fa-solid fa-arrow-right" aria-hidden="true"></i></a>
-            </div>
-            {% if recent_notes %}
-            <div class="wb-list">
-                {% for note in recent_notes %}
-                <a class="wb-note" href="/user/{{ current_user|e }}/{{ note.id|e }}">
-                    <span class="wb-note-icon"><i class="fa-regular fa-file-lines" aria-hidden="true"></i></span>
-                    <span class="wb-note-main">
-                        <span class="wb-note-title">{{ note.title[:40] }}{% if note.title|length > 40 %}…{% endif %}</span>
-                        <span class="wb-note-meta">{{ note.id|e }} · {{ note.mtime|format_note_time }}</span>
-                    </span>
-                    <i class="fa-solid fa-chevron-right wb-note-arrow" aria-hidden="true"></i>
-                </a>
-                {% endfor %}
-            </div>
-            {% else %}
-            <p class="wb-empty">{{ t('wb_empty_notes') }}</p>
+    <section class="wb-panel wb-todo-panel">
+        <div class="wb-panel-head">
+            <h2><i class="fa-solid fa-list-check" aria-hidden="true"></i>{{ t('wb_todo_title') }}</h2>
+            {% if todos %}
+            <form method="POST" action="/user/{{ current_user|e }}/todos/clear-done">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="wb-todo-clear">{{ t('wb_todo_clear_done') }}</button>
+            </form>
             {% endif %}
-        </section>
-
-        <aside class="wb-side">
-            <section class="wb-panel wb-overview">
-                <div class="wb-panel-head"><h2><i class="fa-solid fa-chart-pie" aria-hidden="true"></i>{{ t('wb_overview') }}</h2></div>
-                <div class="wb-stats">
-                    <div class="wb-stat">
-                        <span class="wb-stat-num">{{ note_count }}</span>
-                        <span class="wb-stat-label">{{ t('wb_stat_notes') }}</span>
-                    </div>
-                    <div class="wb-stat">
-                        <span class="wb-stat-num">{{ share_count }}</span>
-                        <span class="wb-stat-label">{{ t('wb_stat_shares') }}</span>
-                    </div>
-                    <div class="wb-stat">
-                        <span class="wb-stat-num">{{ share_views }}</span>
-                        <span class="wb-stat-label">{{ t('wb_stat_views') }}</span>
-                    </div>
-                </div>
-            </section>
-
-            {% if recent_shares %}
-            <section class="wb-panel">
-                <div class="wb-panel-head">
-                    <h2><i class="fa-solid fa-share-nodes" aria-hidden="true"></i>{{ t('home_recent_shares') }}</h2>
-                    <a href="/user/{{ current_user|e }}/shares/">{{ t('wb_view_all') }} <i class="fa-solid fa-arrow-right" aria-hidden="true"></i></a>
-                </div>
-                <div class="wb-list">
-                    {% for share in recent_shares %}
-                    <a class="wb-note" href="/user/{{ current_user|e }}/{{ share.note_id|e }}">
-                        <span class="wb-note-icon"><i class="fa-solid fa-link" aria-hidden="true"></i></span>
-                        <span class="wb-note-main">
-                            <span class="wb-note-title">{{ share.note_id|e }}</span>
-                            <span class="wb-note-meta"><i class="fa-solid fa-eye" aria-hidden="true"></i> {{ share.views }}{% if share.editable %} · {{ t('shares_editable') }}{% endif %}</span>
-                        </span>
-                        <i class="fa-solid fa-chevron-right wb-note-arrow" aria-hidden="true"></i>
-                    </a>
-                    {% endfor %}
-                </div>
-            </section>
+        </div>
+        {% if todo_err %}<p class="wb-todo-err">{{ todo_err }}</p>{% endif %}
+        <form class="wb-todo-add" method="POST" action="/user/{{ current_user|e }}/todos/add">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="text" name="text" maxlength="{{ todo_max_length }}" placeholder="{{ t('wb_todo_placeholder') }}" autocomplete="off" aria-label="{{ t('wb_todo_placeholder') }}">
+            <button type="submit" aria-label="{{ t('wb_todo_add') }}" title="{{ t('wb_todo_add') }}"><i class="fa-solid fa-plus" aria-hidden="true"></i></button>
+        </form>
+        <ul class="wb-todos">
+            {% for todo in todos %}
+            <li class="wb-todo{% if todo.done %} done{% endif %}">
+                <form method="POST" action="/user/{{ current_user|e }}/todos/{{ todo.id|e }}/toggle">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit" class="wb-todo-check" aria-label="{{ t('wb_todo_toggle') }}" title="{{ t('wb_todo_toggle') }}">
+                        <i class="fa-{% if todo.done %}solid fa-square-check{% else %}regular fa-square{% endif %}" aria-hidden="true"></i>
+                    </button>
+                </form>
+                <span class="wb-todo-text">{{ todo.text }}</span>
+                <form method="POST" action="/user/{{ current_user|e }}/todos/{{ todo.id|e }}/delete">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit" class="wb-todo-del" aria-label="{{ t('wb_todo_delete') }}" title="{{ t('wb_todo_delete') }}">
+                        <i class="fa-solid fa-xmark" aria-hidden="true"></i>
+                    </button>
+                </form>
+            </li>
             {% else %}
-            <section class="wb-panel">
-                <div class="wb-panel-head"><h2><i class="fa-solid fa-share-nodes" aria-hidden="true"></i>{{ t('home_recent_shares') }}</h2></div>
-                <p class="wb-empty">{{ t('wb_empty_shares') }}</p>
-            </section>
-            {% endif %}
-        </aside>
-    </div>
+            <li class="wb-empty">{{ t('wb_todo_empty') }}</li>
+            {% endfor %}
+        </ul>
+    </section>
 </div>
 {% else %}
 {# ===== 未登录：站点落地页 ===== #}
