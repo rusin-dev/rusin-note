@@ -1,0 +1,54 @@
+/* ===== 提示卡片（GitHub Alerts：NOTE / TIP / WARNING 等引用块标记，可折叠） =====
+   样式参考 OI Wiki 的 admonition：四边统一使用类型色描边（不再只强调左侧），
+   标题栏使用类型色浅底，正文区使用更浅的类型色底色，整体作为一张边框卡片。
+   选择器不加 .markdown-body 前缀，保证只读页、编辑器实时预览、组织笔记等
+   所有挂载 .md-alert 的位置都能得到一致样式。 */
+.md-alert {
+    --md-alert-accent: #0969da;
+    --md-alert-bg: #eef5ff;
+    --md-alert-title-bg: rgba(9, 105, 218, 0.10);
+    margin: 16px 0;
+    padding: 0;
+    overflow: hidden;
+    border: 1px solid var(--md-alert-accent);
+    border-radius: 8px;
+    background: var(--md-alert-bg);
+    color: var(--text);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+}
+.md-alert > .md-alert-title {
+    display: flex; align-items: center; gap: 8px;
+    padding: 9px 14px;
+    font-weight: 600; line-height: 1.5;
+    color: var(--md-alert-accent);
+    background: var(--md-alert-title-bg);
+    cursor: pointer; list-style: none;
+    user-select: none; -webkit-user-select: none;
+}
+.md-alert > .md-alert-title::-webkit-details-marker { display: none; }
+.md-alert > .md-alert-title > i {
+    flex: 0 0 auto; font-size: 1em; line-height: 1; color: var(--md-alert-accent);
+}
+.md-alert > .md-alert-title::after {
+    content: "\f054"; font-family: "Font Awesome 6 Free"; font-weight: 900;
+    margin-left: auto; font-size: 0.7em; transition: transform 0.2s ease;
+}
+.md-alert[open] > .md-alert-title::after { transform: rotate(90deg); }
+.md-alert > .md-alert-body { padding: 10px 16px 12px; }
+.md-alert > .md-alert-body > :first-child { margin-top: 0; }
+.md-alert > .md-alert-body > :last-child { margin-bottom: 0; }
+
+/* 各类型配色（浅色主题）：accent 同时用于边框、标题文字与图标 */
+.md-alert-note { --md-alert-accent: #0969da; --md-alert-bg: #eef5ff; --md-alert-title-bg: rgba(9, 105, 218, 0.10); }
+.md-alert-tip { --md-alert-accent: #1a7f37; --md-alert-bg: #edfaf0; --md-alert-title-bg: rgba(26, 127, 55, 0.10); }
+.md-alert-important { --md-alert-accent: #8250df; --md-alert-bg: #f7f0ff; --md-alert-title-bg: rgba(130, 80, 223, 0.10); }
+.md-alert-warning { --md-alert-accent: #9a6700; --md-alert-bg: #fff9e3; --md-alert-title-bg: rgba(154, 103, 0, 0.12); }
+.md-alert-caution { --md-alert-accent: #cf222e; --md-alert-bg: #ffefee; --md-alert-title-bg: rgba(207, 34, 46, 0.10); }
+
+/* 各类型配色（暗色主题）：边框沿用明亮 accent，标题底更浓一档以拉开层次 */
+[data-theme="dark"] .md-alert { box-shadow: none; }
+[data-theme="dark"] .md-alert-note { --md-alert-accent: #4493f8; --md-alert-bg: rgba(56, 139, 253, 0.10); --md-alert-title-bg: rgba(56, 139, 253, 0.20); }
+[data-theme="dark"] .md-alert-tip { --md-alert-accent: #3fb950; --md-alert-bg: rgba(63, 185, 80, 0.10); --md-alert-title-bg: rgba(63, 185, 80, 0.20); }
+[data-theme="dark"] .md-alert-important { --md-alert-accent: #ab7df8; --md-alert-bg: rgba(163, 113, 247, 0.10); --md-alert-title-bg: rgba(163, 113, 247, 0.20); }
+[data-theme="dark"] .md-alert-warning { --md-alert-accent: #d29922; --md-alert-bg: rgba(187, 128, 9, 0.10); --md-alert-title-bg: rgba(187, 128, 9, 0.22); }
+[data-theme="dark"] .md-alert-caution { --md-alert-accent: #f85149; --md-alert-bg: rgba(248, 81, 73, 0.10); --md-alert-title-bg: rgba(248, 81, 73, 0.20); }

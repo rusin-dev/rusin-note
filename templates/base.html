@@ -57,45 +57,7 @@
         .markdown-body pre { background: var(--code-bg); padding: 12px; border-radius: 4px; overflow-x: auto; }
         .markdown-body blockquote { border-left: 4px solid var(--quote-border); padding-left: 16px; color: var(--quote-text); }
         .markdown-body a { color: var(--link); }
-        /* ===== GitHub 风格提示卡片（引用块内的 NOTE / WARNING 等标记，可折叠） ===== */
-        .markdown-body .md-alert {
-            --md-alert-accent: #0969da;
-            --md-alert-border: #54aeff;
-            --md-alert-bg: #ddf4ff;
-            margin: 16px 0; padding: 0; overflow: hidden;
-            border: 1px solid var(--md-alert-border);
-            border-left: 4px solid var(--md-alert-accent);
-            border-radius: 8px;
-            background: var(--md-alert-bg); color: var(--text);
-        }
-        .markdown-body .md-alert > .md-alert-title {
-            display: flex; align-items: center; gap: 8px;
-            padding: 10px 16px; font-weight: 600; line-height: 1.5;
-            color: var(--md-alert-accent); cursor: pointer; list-style: none;
-            user-select: none; -webkit-user-select: none;
-        }
-        .markdown-body .md-alert > .md-alert-title::-webkit-details-marker { display: none; }
-        .markdown-body .md-alert > .md-alert-title > i {
-            flex: 0 0 auto; font-size: 1em; line-height: 1; color: var(--md-alert-accent);
-        }
-        .markdown-body .md-alert > .md-alert-title::after {
-            content: "\f078"; font-family: "Font Awesome 6 Free"; font-weight: 900;
-            margin-left: auto; font-size: 0.75em; transition: transform 0.2s ease;
-        }
-        .markdown-body .md-alert[open] > .md-alert-title::after { transform: rotate(180deg); }
-        .markdown-body .md-alert > .md-alert-body { padding: 0 16px 12px; }
-        .markdown-body .md-alert > .md-alert-body > :first-child { margin-top: 0; }
-        .markdown-body .md-alert > .md-alert-body > :last-child { margin-bottom: 0; }
-        .markdown-body .md-alert-note { --md-alert-accent: #0969da; --md-alert-border: #54aeff; --md-alert-bg: #ddf4ff; }
-        .markdown-body .md-alert-tip { --md-alert-accent: #1a7f37; --md-alert-border: #4ac26b; --md-alert-bg: #dafbe1; }
-        .markdown-body .md-alert-important { --md-alert-accent: #8250df; --md-alert-border: #c297ff; --md-alert-bg: #fbefff; }
-        .markdown-body .md-alert-warning { --md-alert-accent: #9a6700; --md-alert-border: #d4a72c; --md-alert-bg: #fff8c5; }
-        .markdown-body .md-alert-caution { --md-alert-accent: #cf222e; --md-alert-border: #ff8182; --md-alert-bg: #ffebe9; }
-        [data-theme="dark"] .markdown-body .md-alert-note { --md-alert-accent: #4493f8; --md-alert-border: #1f6feb; --md-alert-bg: rgba(56, 139, 253, 0.1); }
-        [data-theme="dark"] .markdown-body .md-alert-tip { --md-alert-accent: #3fb950; --md-alert-border: #238636; --md-alert-bg: rgba(63, 185, 80, 0.1); }
-        [data-theme="dark"] .markdown-body .md-alert-important { --md-alert-accent: #ab7df8; --md-alert-border: #8957e5; --md-alert-bg: rgba(163, 113, 247, 0.1); }
-        [data-theme="dark"] .markdown-body .md-alert-warning { --md-alert-accent: #d29922; --md-alert-border: #9e6a03; --md-alert-bg: rgba(187, 128, 9, 0.1); }
-        [data-theme="dark"] .markdown-body .md-alert-caution { --md-alert-accent: #f85149; --md-alert-border: #da3633; --md-alert-bg: rgba(248, 81, 73, 0.1); }
+        {% include "partials/_markdown_alerts_css.html" %}
         .home-hero { text-align: center; padding: 28px 8px 8px; }
         .home-hero h1 {
             border: none;

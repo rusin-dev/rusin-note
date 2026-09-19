@@ -125,6 +125,8 @@
         .markdown-body th, .markdown-body td { border: 1px solid var(--border); padding: 6px 10px; }
         .markdown-body img { max-width: 100%; }
 
+        {% include "partials/_markdown_alerts_css.html" %}
+
         /* Mobile: hide preview by default; toggle button reveals it */
         @media (max-width: 768px) {
             .pane.preview-pane { display: none; }
