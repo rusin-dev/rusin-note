@@ -52,8 +52,9 @@ upstash 后端所有键统一加 `rusin:` 前缀；memory 后端 get/set 带 dee
 | `README.md` / `README_en.md` | 中英文文档（含 Vercel / Lambda / VPS 部署步骤与存储后端说明） |
 | `Disclaimer.md` / `Disclaimer-en.md` | 中英文免责声明（`/disclaimer` 页面读取） |
 | `contributing.md` | 协作指南 |
+| `tests/` | 测试目录（pytest + logging：`test_*.py` 端到端测试 + `conftest.py` 环境隔离 + `support.py` 共享辅助，`frontend_check.py` 前端语法检查 CLI）；运行 `pytest tests/`，各测试使用独立临时 `RUSIN_DATA_DIR` |
 | `favicon.ico` / `image/logo.png` | 站点图标与 logo |
-| `.github/` | Issue 模板、issue-labeler、CI/CD workflows（check/codeql/release/auto-merge/upstream-sync 等） |
+| `.github/` | Issue 模板、issue-labeler、CI/CD workflows（check/codeql/release/auto-merge/upstream-sync 等）；`check.yml` 含 `changes`（paths-filter 判断 python/frontend 变更）、`test`（启动服务健康检查）、`frontend`（前端语法检查）三个 job |
 | `.gitignore` | Git 忽略规则 |
 
 ## app/ 核心模块
@@ -103,6 +104,8 @@ upstash 后端所有键统一加 `rusin:` 前缀；memory 后端 get/set 带 dee
 - `errors/` 错误页 400/401/404/429/500（403/413 复用 400 模板）
 
 模板可直接用 i18n 注入的全局：`{{ t('key') }}`、`{{ lang }}`、`{{ theme }}`、`{{ theme_script }}`、`{{ theme_vars }}`、`{{ pygments_head }}`、`{{ current_user }}`、`{{ site_name }}`、`{{ lang_switch_url }}`。
+
+前端**无独立 JS/CSS 文件**（无 `static/`），脚本/样式全部内联在模板的 `<script>`/`<style>` 中；`partials/_card_theme_css.html`、`_navbar_css.html`、`_page_transition_css.html` 是纯 CSS 片段，被 `<style>{% include %}</style>` 引入。改动模板后请运行 `python tests/frontend_check.py`（Jinja2 语法 + 内联 JS 经 Node `--check` + 内联 CSS 配平 + JSON）。
 
 ## 安全与限流机制（改动时必须保持）
 
