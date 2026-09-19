@@ -15,6 +15,8 @@
 - 无服务器部署（AWS Lambda）：入口 `lambda_handler.handler`（Mangum）
 - 数据目录：由环境变量 `RUSIN_DATA_DIR` 指定（默认 `.`，仅 file 后端）
 - 依赖安装：`pip install -r requirements.txt`
+- 前端语法检查：`python tests/frontend_check.py`（校验 Jinja2 模板语法、模板内联 JS/CSS、JSON；CI 中由 `check.yml` 的 `frontend` job 自动执行）
+- 端到端测试：统一放在 `tests/` 目录，使用 **pytest + logging**（`pip install -r requirements-dev.txt` 后运行 `pytest tests/`，如 `pytest tests/test_user_settings.py`）；`conftest.py` 会自动隔离临时 `RUSIN_DATA_DIR` 并清空运行时缓存
 
 ## 数据存储（重点：可插拔后端）
 存储层统一在 `app/storage.py`，后端由 `RUSIN_STORAGE` 显式指定或自动识别：
@@ -44,11 +46,12 @@
 - 入口：`app/__main__.py`（waitress）或 `app/wsgi.py`（gunicorn）；无服务器：`api/index.py`（Vercel）、`lambda_handler.py`（Lambda）
 - 核心模块：`storage.py`（存储后端抽象）、`store.py`（数据存储业务）、`auth.py`（认证）、`notes.py`（笔记操作）、`middleware.py`（请求上下文）、`user_settings.py`（用户设置：简洁模式 / 修改密码 / 修改用户名，含数据迁移）、`plugins.py`（插件系统：zip 解压安装 / auth_token 校验 / 命名空间冲突检查 / 蓝图加载 / 上游更新线程）、`feature_flags.py`（功能开关：注册表 + 存储持久化 + `require_feature` 装饰器）
 - 路由蓝图：home, auth, benben, static_routes, world, user, share, admin（`/admin/features` 功能开关管理）, **插件蓝图（在 views.register_blueprints 内注册）**, world_short（注意最后注册 catch-all）
-- 用户设置（`/user/<u>/settings`，`app/user_settings.py`）：简洁模式（原导航栏切换按钮已并入，账号级偏好存 users.json，`middleware` 注入 `g.simple_mode` 服务端渲染 `<html class="simple-mode">`，页面缓存键含该标志）、修改密码（注销其它会话）、修改用户名（先复制笔记/图床/附件再迁移各存储用户标识，最后删旧数据）。端到端测试：`python user_settings_test.py`
-- 功能开关（`app/feature_flags.py`，#90）：管理员（`RUSIN_ADMIN` 环境变量或 config.json `admin_users`）在 `/admin/features` 用滑块切换；运行时状态存 KV 键 `feature_flags`（file 后端即 `feature_flags.json`），进程内 5s TTL 缓存；停用功能路由 404、导航/首页入口隐藏，状态呈现于 `/count`。新增可开关功能：在 `FEATURES` 注册表登记 + 视图加 `@require_feature(key)`（必须放 `@bp.route` 之后、`@cache.cached`/`@limiter.limit` 之前）。端到端测试：`python flags_test.py`
-- 插件系统（`app/plugins.py`；无服务器只读盘环境自动禁用）：`*.plugin.zip` 投放到 `RUSIN_DATA_DIR` 自动解压安装到 `plugins/<namespace>/` 并删除包；desc.json 缺 `auth_token` 须 `--skip-auth`（或 `RUSIN_PLUGIN_SKIP_AUTH=1`）放行；命名空间冲突非同源且未声明 OVERRIDE 拒绝；后台线程每 `plugins.update_interval_hours`（默认 6h）检查，`last_update` 超过 `update_stale_days`（默认 3 天）则请求 `upstream_repo`（3s 超时）后重跑安装。端到端测试：`python plugin_test.py`
+- 用户设置（`/user/<u>/settings`，`app/user_settings.py`）：简洁模式（原导航栏切换按钮已并入，账号级偏好存 users.json，`middleware` 注入 `g.simple_mode` 服务端渲染 `<html class="simple-mode">`，页面缓存键含该标志）、修改密码（注销其它会话）、修改用户名（先复制笔记/图床/附件再迁移各存储用户标识，最后删旧数据）。端到端测试：`pytest tests/test_user_settings.py`
+- 功能开关（`app/feature_flags.py`，#90）：管理员（`RUSIN_ADMIN` 环境变量或 config.json `admin_users`）在 `/admin/features` 用滑块切换；运行时状态存 KV 键 `feature_flags`（file 后端即 `feature_flags.json`），进程内 5s TTL 缓存；停用功能路由 404、导航/首页入口隐藏，状态呈现于 `/count`。新增可开关功能：在 `FEATURES` 注册表登记 + 视图加 `@require_feature(key)`（必须放 `@bp.route` 之后、`@cache.cached`/`@limiter.limit` 之前）。端到端测试：`python tests/flags_test.py`
+- 插件系统（`app/plugins.py`；无服务器只读盘环境自动禁用）：`*.plugin.zip` 投放到 `RUSIN_DATA_DIR` 自动解压安装到 `plugins/<namespace>/` 并删除包；desc.json 缺 `auth_token` 须 `--skip-auth`（或 `RUSIN_PLUGIN_SKIP_AUTH=1`）放行；命名空间冲突非同源且未声明 OVERRIDE 拒绝；后台线程每 `plugins.update_interval_hours`（默认 6h）检查，`last_update` 超过 `update_stale_days`（默认 3 天）则请求 `upstream_repo`（3s 超时）后重跑安装。端到端测试：`python tests/plugin_test.py`
 - 模板：Jinja2，支持 `{{ t('key') }}` 多语言
 - 无服务器默认存储：Vercel 绑定 Neon 后 `DATABASE_URL` 自动注入 → 自动切到 postgres 后端
+- 前端检查：前端资源全部内联在 Jinja2 模板中，无独立 JS/CSS 文件；`tests/frontend_check.py` 做静态语法检查（Jinja2 `Environment.parse` + Node `--check` 校验内联 JS + CSS 括号配平 + JSON 解析），由 `.github/workflows/check.yml` 的 `frontend` job 在前端文件变更时运行
 
 ## 文档导航
 - 详细的模块职责、路由表、配置项说明，请参考 Skill：`.opencode/skills/rusin-note-codebase/SKILL.md`。
