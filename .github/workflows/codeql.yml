@@ -20,7 +20,25 @@ on:
     - cron: '42 12 * * 2'
 
 jobs:
+  # 检测本次变更中是否包含 Python 代码（.py 文件）
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      python: ${{ steps.filter.outputs.python }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Detect changed file extensions
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            python:
+              - '**/*.py'
+
   analyze:
+    needs: changes
     name: Analyze (${{ matrix.language }})
     # Runner size impacts CodeQL analysis time. To learn more, please see:
     #   - https://gh.io/recommended-hardware-resources-for-running-codeql
@@ -66,7 +84,9 @@ jobs:
     #   uses: actions/setup-example@v1
 
     # Initializes the CodeQL tools for scanning.
+    # 没有修改 Python 代码时，跳过 Python 语言的质量检测（actions 语言不受影响）
     - name: Initialize CodeQL
+      if: ${{ matrix.language != 'python' || needs.changes.outputs.python == 'true' }}
       uses: github/codeql-action/init@v4
       with:
         languages: ${{ matrix.language }}
@@ -96,6 +116,7 @@ jobs:
         exit 1
 
     - name: Perform CodeQL Analysis
+      if: ${{ matrix.language != 'python' || needs.changes.outputs.python == 'true' }}
       uses: github/codeql-action/analyze@v4
       with:
         category: "/language:${{matrix.language}}"
