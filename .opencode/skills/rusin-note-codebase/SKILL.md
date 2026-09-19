@@ -5,7 +5,7 @@ description: Use when working in this project (Rusin-Note, a Flask 云端剪贴�
 
 # Rusin-Note 项目结构与文件作用
 
-Rusin-Note 是一个受 note.ms 启发的轻量级云端剪贴板 / 在线记事本，基于 Flask 3，支持 VPS 与无服务器（Vercel / AWS Lambda）部署。核心是"随机短链公开笔记 + 用户私有笔记 + 分享链接 + 犇犇动态"，数据存储通过可插拔存储层（`app/storage.py`）统一：file（JSON 落盘）/ upstash（外部 KV）/ postgres（Neon/PostgreSQL）/ memory（纯内存）。
+Rusin-Note 是一个受 note.ms 启发的轻量级云端剪贴板 / 在线记事本，基于 Flask 3，支持 VPS 与无服务器（Vercel / AWS Lambda）部署。核心是"随机短链公开笔记 + 用户私有笔记 + 分享链接 + 犇犇动态"，数据存储通过可插拔、统一的存储接口（`app/storage.py` 的 `storage` 单例）访问：sqlite（本地默认，SQLite 索引 + JSON 内容）/ file（纯 JSON 落盘）/ upstash（外部 KV）/ postgres（Neon/PostgreSQL）/ memory（纯内存）。
 
 ## 运行方式
 
@@ -13,24 +13,26 @@ Rusin-Note 是一个受 note.ms 启发的轻量级云端剪贴板 / 在线记事
 - 生产建议（Linux）：`gunicorn 'app.wsgi:app' -b 0.0.0.0:$PORT --workers 2 --threads 4`
 - 无服务器（Vercel）：`api/index.py`（WSGI app 由 @vercel/python 构建器识别）+ `vercel.json`（routes 全量转发 + includeFiles 打包模板/配置）；存储推荐绑定 **Neon**（自动注入 `DATABASE_URL` → postgres 后端）或 Upstash Redis（手动填 `KV_REST_API_URL`/`KV_REST_API_TOKEN`），并设置 `RUSIN_SECRET_KEY`（Vercel KV 已停服）
 - 无服务器（AWS Lambda）：`lambda_handler.py` 的 `handler`（Mangum 适配 WSGI，API Gateway 代理集成）
-- 数据目录：`RUSIN_DATA_DIR` 环境变量（默认 `.`），仅 file 后端使用；Zeabur 等平台挂卷到 `/data` 并设 `RUSIN_DATA_DIR=/data`
+- 数据目录：`RUSIN_DATA_DIR` 环境变量（默认 `data`，即项目下 `data/`，JSON 内容 + SQLite 索引均在此），本地 sqlite/file 后端使用；Zeabur 等平台挂卷到 `/data` 并设 `RUSIN_DATA_DIR=/data`
 - 存储后端：`RUSIN_STORAGE`（file/memory/upstash/postgres）显式指定，未指定时自动识别：KV 环境变量 → upstash；`DATABASE_URL` → postgres；检测到 `VERCEL`/`NETLIFY`/`AWS_LAMBDA_FUNCTION_NAME` → memory；否则 file
 - 依赖：见 `requirements.txt`（Flask、Flask-WTF、Flask-Limiter、waitress、markdown、bleach、redis、mangum、psycopg）
 - 要求 Python >= 3.10
 
-## 数据模型（存储层可插拔）
+## 数据模型（统一存储接口 + 可插拔后端）
 
-存储后端统一键布局（`app/storage.py` 内 `KV_FILE_MAP` / `_note_key`）：
+存储后端统一键布局（`app/storage.py` 内 `KV_FILE_MAP` / `_note_key`），内容均落盘到 `RUSIN_DATA_DIR`（默认 `data/`）；sqlite 后端另建 `index.db` 索引以加速查找：
 
-| 键 | file 后端落盘 | 内容 | 关键结构 |
+| 键 | 内容 JSON / 二进制落盘 | 内容 | 关键结构 |
 |---|---|---|---|
 | `users.json` | `users.json` | 用户 | `{username: {salt, hash}}`，hash 为 PBKDF2 格式 |
 | `sessions.json` | `sessions.json` | 会话 | `{sha256(token): {username, created_at}}` |
 | `shares.json` | `shares.json` | 分享链接 | `{token: {owner, note_id, created_at, editable, views}}` |
 | `benben:posts` | `benben.json` | 犇犇（已持久化） | `[{username, content, time, ip}]`，最多 `benben.max_posts` 条（默认 200） |
 | `feature_flags` | `feature_flags.json` | 功能开关运行时状态（#90） | `{feature_key: bool}`，默认值来自 config.json（`features` 段 + 历史功能各自配置段） |
-| `note:<u>:<id>` | `notes/<u>/<id>.txt` | 笔记 | file 后端存纯文本（mtime 取文件 stat）；memory/upstash 存 `{"content", "mtime"}` |
+| `note:<u>:<id>` | `notes/<u>/<id>.json` | 笔记 | sqlite 存 `{"content", "created_at", "updated_at"}` 并索引标题/大小/mtime；file 后端存 `notes/<u>/<id>.txt` 纯文本；memory/upstash 存 `{"content", "mtime"}` |
 | `secret_key` | `.secret_key` | SECRET_KEY | 纯文本 |
+
+sqlite 索引表（`<DATA_DIR>/index.db`）：`notes_index`（标题/大小/mtime/created_at）、`kv_index`（键→路径/大小/更新时间）、`images_index`、`attachments_index`。图床/附件在 sqlite 与 file 后端均为原生二进制文件（`images/<u>/<id>`、`attachments/<u>/<id>` + `<id>.meta.json`）。
 
 upstash 后端所有键统一加 `rusin:` 前缀；memory 后端 get/set 带 deepcopy（防外部原地修改破坏内部数据）。
 
@@ -64,7 +66,8 @@ upstash 后端所有键统一加 `rusin:` 前缀；memory 后端 get/set 带 dee
 | `__init__.py` | Flask app 工厂 `create_app()`：组装 SECRET_KEY（`RUSIN_SECRET_KEY` > 存储后端 `secret_key`（file 即 `.secret_key` 文件、upstash 存 KV 多实例共享）> 随机兜底）、CSRF、限流（`REDIS_URL` 可切共享存储）、请求钩子、i18n、蓝图、错误页；`SERVERLESS` 或 `TESTING` 时不启动后台线程 |
 | `__main__.py` | 入口 `python -m app`，waitress 启动 |
 | `wsgi.py` | WSGI 入口 `app.wsgi:app`（gunicorn 用） |
-| `storage.py` | **存储层抽象**：`StorageBackend` 基类 + `FileBackend`/`MemoryBackend`/`UpstashBackend`（纯 urllib REST）/`PostgresBackend`（psycopg，表 `storage_kv`+`storage_notes`），接口为 `get/set/delete/list_keys` + 笔记专用方法 + `lock(name)` 跨实例互斥（file 用 fcntl 文件锁、upstash 用 SET NX EX 自动过期、postgres 用 `pg_try_advisory_xact_lock`、memory 用线程锁）；`select_backend()` 自动识别（KV 环境变量 > DATABASE_URL > SERVERLESS memory > file）；`StorageError` 统一异常 |
+| `storage.py` | **统一存储接口**：所有业务模块只通过模块级 `storage` 单例访问数据。`StorageBackend` 基类 + `SqliteBackend`（本地默认，SQLite 索引 + JSON 内容，见 `storage_sqlite.py`）/`FileBackend`/`MemoryBackend`/`UpstashBackend`（纯 urllib REST）/`PostgresBackend`（psycopg，表 `storage_kv`+`storage_notes`），接口为 `get/set/delete/list_keys` + 笔记专用方法 + 统一元数据/检索方法（`note_title`/`list_notes_detailed`/`search_notes`/`notes_stats`，基类退化实现、SQLite 覆盖为索引查询）+ `lock(name)` 跨实例互斥（file/sqlite 用 fcntl 文件锁、upstash 用 SET NX EX 自动过期、postgres 用 `pg_try_advisory_xact_lock`、memory 用线程锁）；`select_backend()` 自动识别（KV 环境变量 > DATABASE_URL > SERVERLESS memory > 本地 sqlite）；`StorageError` 统一异常 |
+| `storage_sqlite.py` | **SQLite + JSON 后端**：`SqliteBackend(FileBackend)` 在 `<DATA_DIR>/index.db`（WAL）维护 `kv_index`/`notes_index`/`images_index`/`attachments_index` 四张索引表，内容仍以 JSON/二进制落盘（`notes/<u>/<id>.json`、`<name>.json`、`images/`、`attachments/`）；首次启动自动导入旧版 `notes/*.txt`，默认数据目录切到 `data/` 时 `migrate_legacy_data_root()` 从旧根目录迁移 |
 | `config.py` | 加载 `config.json` 并导出全部全局常量（`MAX_CONTENT_BYTES`、各类限流参数、`ID_CHARSET`、`SHARE_TOKEN_CHARSET`/`SHARE_TOKEN_PATTERN`、密码策略 `PW_*`、`BENBEN_*`（含 `BENBEN_MAX_POSTS`）、会话/笔记过期、LaTeX、代理信任、Cookie 安全、`SERVERLESS` 平台检测、`data_path()` 等）。标记为 ADDED/BUG-x 的注释说明某常量的引入原因 |
 | `store.py` | 用户/会话/分享/犇犇的内存缓存 + 存储层持久化：`register_user`/`store_session`/`remove_session`/`delete_sessions_if`/`create_share`/`delete_share`/`add_benben_post` 均走「线程锁 + storage.lock + 重读合并 + 整值写入」；分享视图计数延迟批量持久化（`increment_share_views`/`flush_share_views`）；犇犇发布冷却（内存态）、分页读取（带周期重载） |
 | `auth.py` | PBKDF2-HMAC-SHA256 密码哈希（兼容旧单轮 SHA-256 可验证、登录后自然升级）、会话 token 生成/校验（存哈希）、过期会话清理、密码复杂度检查 |
@@ -140,5 +143,5 @@ upstash 后端所有键统一加 `rusin:` 前缀；memory 后端 get/set 带 dee
 - **改限流**：`config.json` 对应键 + 视图函数 `@limiter.limit` 字符串
 - **改数据格式**：留意 `store.py`/`auth.py` 中的旧数据兼容注释（BUG-7 损坏数据跳过等）；加字段时给 `get_*` 用 `.get()` 兜底
 - **新增可开关功能（#90）**：`feature_flags.py` 的 `FEATURES` 注册表登记（key/icon）+ i18n 加 `feature_<key>` zh/en 文案 + 视图加 `@require_feature(key)`（放 `@bp.route` 之后、`@cache.cached`/`@limiter.limit` 之前）+ config.json `features` 段加默认值；模板用 `feature_enabled(key)` 条件渲染
-- **新增存储键/后端**：键布局在 `storage.py`（`KV_FILE_MAP`/`_note_key`），file 后端新键需在 `KV_FILE_MAP` 登记路径；新增后端需实现 `StorageBackend` 全部方法并在 `select_backend()` 注册（postgres 后端新表需在 `_ensure_schema` 增加 DDL）
+- **新增存储键/后端**：键布局在 `storage.py`（`KV_FILE_MAP`/`_note_key`），sqlite/file 后端新键需在 `KV_FILE_MAP` 登记路径（否则 sqlite 落到 `kv/<hash>.json`）；新增后端需实现 `StorageBackend` 全部方法并在 `select_backend()` 注册（sqlite 在 `storage_sqlite.py`，postgres 后端新表需在 `_ensure_schema` 增加 DDL）
 - **写路径并发**：读改写必须「线程锁 → `storage.lock(键)`」再重读合并，顺序不可颠倒；纯整值覆盖（`write_note`）无需跨实例锁
