@@ -426,6 +426,9 @@ try:
 except (TypeError, ValueError):
     RECENT_SHARES_LIMIT = 5
 
+# 首页横幅：仓库根目录 NOTICE.txt 的第一行（文件缺失/内容为空时首页不展示）
+NOTICE_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "NOTICE.txt")
+
 # ---------- 工作台待办（TODO LIST）----------
 TODOS_CFG = config.get("todos", DEFAULT_CONFIG["todos"])
 TODO_MAX_ITEMS = TODOS_CFG.get("max_items", 100)
