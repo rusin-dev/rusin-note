@@ -27,6 +27,8 @@ jobs:
           filters: |
             python:
               - '**/*.py'
+              - 'requirements-dev.txt'
+              - 'pytest.ini'
             frontend:
               - '**/*.html'
               - '**/*.css'
@@ -67,7 +69,7 @@ jobs:
   test:
     runs-on: ubuntu-latest
     needs: changes
-    # 没有修改 Python 代码时，跳过服务 ping 测试
+    # 没有修改 Python 代码时，跳过 pytest 与健康检查
     if: ${{ needs.changes.outputs.python == 'true' }}
 
     steps:
