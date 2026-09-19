@@ -38,8 +38,10 @@ SKIP_DIRS = {
     "plugins", "log", "image", "images", "uploads",
 }
 
-SCRIPT_RE = re.compile(r"<script\b([^>]*)>(.*?)</script\s*>", re.S | re.I)
-STYLE_RE = re.compile(r"<style\b[^>]*>(.*?)</style\s*>", re.S | re.I)
+# HTML 结束标签允许 `</script` 与 `>` 之间存在空白/属性（如 `</script\t\n bar>`），
+# 用 `[^>]*` 而非 `\s*`，避免 CodeQL bad-tag-filter 告警与漏检。
+SCRIPT_RE = re.compile(r"<script\b([^>]*)>(.*?)</script\b[^>]*>", re.S | re.I)
+STYLE_RE = re.compile(r"<style\b[^>]*>(.*?)</style\b[^>]*>", re.S | re.I)
 SRC_ATTR_RE = re.compile(r"\bsrc\s*=", re.I)
 TYPE_ATTR_RE = re.compile(r"\btype\s*=\s*[\"']?([^\"'\s>]+)", re.I)
 JS_MIME_RE = re.compile(r"(java|ecma)script|^module$|^text/javascript$", re.I)
