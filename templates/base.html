@@ -71,6 +71,15 @@
             padding-bottom: 0;
         }
         .home-hero p { color: var(--muted); margin-top: 10px; font-size: 15px; }
+        /* 首页横幅：仓库根目录 NOTICE.txt 首行（内容为空时不渲染） */
+        .home-notice {
+            display: flex; align-items: center; gap: 10px;
+            padding: 11px 16px; margin-bottom: 20px;
+            background: var(--card-icon-bg); border: 1px solid var(--glow-ring);
+            border-radius: 10px; color: var(--text); font-size: 14px; line-height: 1.5;
+        }
+        .home-notice > i { flex-shrink: 0; color: var(--link); font-size: 15px; }
+        .home-notice-text { min-width: 0; word-break: break-word; }
         .home-recent-row { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 32px; }
         @media (max-width: 768px) { .home-recent-row { grid-template-columns: 1fr; } }
         .home-recent { }

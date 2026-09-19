@@ -755,6 +755,27 @@ def render_markdown_alerts_head() -> str:
     ).replace("__LABELS__", labels).replace("__ICONS__", icons)
 
 
+def read_notice_first_line() -> str:
+    """读取仓库根目录 NOTICE.txt 的第一行文本，供首页横幅展示。
+
+    NOTICE.txt 不存在、读取失败或整体内容为空时返回空串（首页不渲染横幅）；
+    返回前去掉首尾空白，并跳过最前面的空行，避免横幅出现空白条。
+    """
+    from . import config
+    try:
+        with open(config.NOTICE_FILE, "r", encoding="utf-8-sig") as f:
+            content = f.read()
+    except (OSError, IOError):
+        return ""
+    if not content.strip():
+        return ""
+    for line in content.splitlines():
+        line = line.strip()
+        if line:
+            return line
+    return ""
+
+
 def read_disclaimer(lang: str) -> str:
     """读取免责声明文件并渲染为 HTML"""
     import os

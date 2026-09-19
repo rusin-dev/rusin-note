@@ -1,5 +1,11 @@
 {% extends "base.html" %}
 {% block content %}
+{% if notice %}
+<div class="home-notice" role="status">
+    <i class="fa-solid fa-bullhorn" aria-hidden="true"></i>
+    <span class="home-notice-text">{{ notice|e }}</span>
+</div>
+{% endif %}
 {% if current_user %}
 {# ===== 工作台（VSCode 欢迎页风格）：最近编辑 + TODO LIST ===== #}
 <div class="wb-grid">

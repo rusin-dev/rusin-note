@@ -7,7 +7,7 @@ from ..feature_flags import feature_enabled, get_all_features, is_admin
 from ..i18n import t
 from ..notes import generate_random_id, get_stats, search_user_notes
 from ..todos import get_user_todos
-from ..utils import format_size, format_note_time, read_disclaimer
+from ..utils import format_size, format_note_time, read_disclaimer, read_notice_first_line
 from ._helpers import page_cache_key
 
 bp = Blueprint("home", __name__)
@@ -64,7 +64,7 @@ def index():
                            quick_actions=quick_actions, note_count=note_count,
                            share_count=share_count, share_views=share_views,
                            todos=todos, todo_max_length=config.TODO_MAX_LENGTH,
-                           todo_err=todo_err)
+                           todo_err=todo_err, notice=read_notice_first_line())
 
 
 @bp.route("/count")
