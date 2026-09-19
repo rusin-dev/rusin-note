@@ -11,8 +11,7 @@ from ..middleware import get_current_user
 from ..notes import (
     generate_random_id,
     get_note_mtime,
-    get_note_size,
-    list_user_notes,
+    list_user_notes_detailed,
     note_exists,
     read_note,
     validate_note_id,
@@ -133,13 +132,13 @@ def org_notes(org_name):
         abort(404)
     _require_org_member(org_name)
     username = _org_username(org_name)
-    notes = list_user_notes(username)
+    notes = list_user_notes_detailed(username)
     note_list = []
-    for nid in notes:
-        mtime = get_note_mtime(username, nid)
-        size = get_note_size(username, nid)
+    for row in notes:
+        mtime = row.get("mtime")
+        size = row.get("size")
         note_list.append({
-            "id": nid,
+            "id": row["id"],
             "mtime": format_note_time(mtime) if mtime else "",
             "size": format_size(size) if size is not None else "",
         })

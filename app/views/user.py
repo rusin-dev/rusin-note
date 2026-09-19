@@ -38,8 +38,8 @@ from ..middleware import get_current_user, get_session_token
 from ..notes import (
     generate_random_id,
     get_note_mtime,
-    get_note_size,
     list_user_notes,
+    list_user_notes_detailed,
     note_exists,
     read_note,
     search_user_notes,
@@ -98,7 +98,8 @@ def user_root(username):
     if not validate_username(username):
         abort(400)
     _require_auth(username)
-    notes = list_user_notes(username)
+    detailed = list_user_notes_detailed(username)
+    note_ids = {row["id"] for row in detailed}
     # 笔记标签 / 文件夹 / 置顶（仅私有笔记）：标签云 + ?tag= 筛选；
     # 文件夹以树状图呈现，?folder= 按子树筛选
     tags_enabled = feature_enabled("note_tags")
@@ -107,17 +108,18 @@ def user_root(username):
     user_tags = get_user_note_tags(username) if tags_enabled else {}
     user_folders = get_user_note_folders(username) if folders_enabled else {}
     user_pins = get_user_pins(username) if pins_enabled else {}
-    tag_cloud = count_user_tags(username, note_ids=set(notes)) if tags_enabled else []
+    tag_cloud = count_user_tags(username, note_ids=note_ids) if tags_enabled else []
     active_tag = (request.args.get("tag") or "").strip()[:config.MAX_TAG_LENGTH] if tags_enabled else ""
     active_folder = (request.args.get("folder") or "").strip()[:config.MAX_FOLDER_NAME_LENGTH] if folders_enabled else ""
     # 排序：置顶笔记在前（组内按置顶时间倒序），其余按修改时间倒序
     rows = []
-    for nid in notes:
+    for row in detailed:
+        nid = row["id"]
         if active_tag and active_tag not in user_tags.get(nid, []):
             continue
         if active_folder and not folder_in_subtree(user_folders.get(nid, ""), active_folder):
             continue
-        rows.append((nid, get_note_mtime(username, nid) or 0, get_note_size(username, nid)))
+        rows.append((nid, row.get("mtime") or 0, row.get("size")))
     rows.sort(key=lambda r: (1, user_pins.get(r[0], 0)) if r[0] in user_pins else (0, r[1]),
               reverse=True)
     items = []

@@ -195,7 +195,8 @@ Python 通用：`python -c "import secrets; print(secrets.token_hex(32))"` 或 `
 不要将 Volume 挂载到项目根目录，否则可能覆盖部署出来的应用代码。设置完成后，运行数据会保存在 `/data` 下：
 
 ```plaintext
-/data/notes/
+/data/index.db          # SQLite 索引：笔记 / KV / 图床 / 附件元数据（快速查找）
+/data/notes/<用户>/<ID>.json   # 笔记内容（JSON）
 /data/images/
 /data/attachments/
 /data/users.json
@@ -214,6 +215,10 @@ Python 通用：`python -c "import secrets; print(secrets.token_hex(32))"` 或 `
 /data/org_join_requests.json
 /data/log/
 ```
+
+> 本地/VPS 默认使用 `sqlite` 后端：SQLite（`index.db`）只保存索引元数据用于快速
+> 列表 / 排序 / 检索 / 统计，笔记与各集合的**具体内容仍以 JSON 落盘**；旧版纯
+> JSON 布局（`notes/<用户>/<ID>.txt` 等）在首次启动时自动迁移。
 
 #### Zeabur 启用 Redis（页面缓存 + 共享限流）
 
@@ -234,16 +239,17 @@ Zeabur 是 PaaS 平台，不需要也不建议在容器里 `apt install redis`�
 
 ### 存储后端说明（无服务器关键）
 
-存储层（`app/storage.py`）提供四种后端，由 `RUSIN_STORAGE` 环境变量显式指定，未指定时自动识别：
+存储层（`app/storage.py`）是项目的统一数据接口，提供五种后端，由 `RUSIN_STORAGE` 环境变量显式指定，未指定时自动识别：
 
 | 后端 | 启用方式 | 说明 |
 |---|---|---|
-| `file` | 默认（本地/VPS） | 数据写入 `RUSIN_DATA_DIR`（默认当前目录），布局与上表一致 |
+| `sqlite` | 默认（本地/VPS） | SQLite（`<DATA_DIR>/index.db`）保存索引用于快速查找，笔记与集合内容以 JSON 落盘到 `<DATA_DIR>/`；旧版 file 布局自动迁移 |
+| `file` | `RUSIN_STORAGE=file` | 纯 JSON/二进制文件落盘，兼容旧部署；数据写入 `RUSIN_DATA_DIR`，布局与上表一致 |
 | `upstash` | 设置 `KV_REST_API_URL` + `KV_REST_API_TOKEN`（Upstash Redis 的 REST 接口） | 数据存于外部 KV，多实例共享、冷启动不丢；纯 HTTPS 请求，任意支持 Python 的无服务器平台可用 |
 | `postgres` | 设置 `DATABASE_URL`（Neon / 任意 PostgreSQL，Vercel 绑定 Neon 后自动注入） | 数据存于 `storage_kv`、`storage_notes`、`storage_images`、`storage_attachments` 表，多实例共享、冷启动不丢；跨实例互斥用 PG advisory lock |
 | `memory` | `RUSIN_STORAGE=memory`（无服务器平台未配置上述存储时自动启用） | 纯内存，重启/冷启动清空，适合体验或临时部署 |
 
-自动识别优先级：显式 `RUSIN_STORAGE` > `KV_REST_API_URL`+`KV_REST_API_TOKEN`（upstash）> `DATABASE_URL`（postgres）> 无服务器平台（memory）> 本地（file）。
+自动识别优先级：显式 `RUSIN_STORAGE` > `KV_REST_API_URL`+`KV_REST_API_TOKEN`（upstash）> `DATABASE_URL`（postgres）> 无服务器平台（memory）> 本地（sqlite）。
 
 - 犇犇动态已从纯内存改为持久化（外部存储可用时重启不丢，最多保留 `benben.max_posts` 条，默认 200）。
 - 无服务器环境（检测到 `VERCEL` / `NETLIFY` / `AWS_LAMBDA_FUNCTION_NAME` 环境变量）不启动后台守护线程，清理任务改为请求内机会式执行；日志回退到 stderr（进入平台日志流）。
@@ -507,7 +513,7 @@ rusin-note:.
 - `RUSIN_DATA_DIR`：可选环境变量，用于指定运行数据目录，默认当前项目目录（仅 `file` 后端使用）。
 
     笔记、图片、附件及各业务 JSON 数据会写入该目录；完整布局见上方 Zeabur 示例。在自动部署平台上建议挂载持久化卷到 `/data`，并设置 `RUSIN_DATA_DIR=/data`，避免重新部署时清空数据。
-- `RUSIN_STORAGE`：可选环境变量，显式指定存储后端：`file`（本地/VPS，默认）、`memory`（纯内存）、`upstash`（外部 KV）、`postgres`（Neon/PostgreSQL）。未指定时自动识别：设置了 `KV_REST_API_URL` / `KV_REST_API_TOKEN` 用 `upstash`，设置了 `DATABASE_URL` 用 `postgres`，检测到无服务器平台环境变量用 `memory`，否则 `file`。详见上方「存储后端说明」。
+- `RUSIN_STORAGE`：可选环境变量，显式指定存储后端：`sqlite`（本地/VPS，默认）、`file`（纯 JSON 文件）、`memory`（纯内存）、`upstash`（外部 KV）、`postgres`（Neon/PostgreSQL）。未指定时自动识别：设置了 `KV_REST_API_URL` / `KV_REST_API_TOKEN` 用 `upstash`，设置了 `DATABASE_URL` 用 `postgres`，检测到无服务器平台环境变量用 `memory`，否则 `sqlite`。详见上方「存储后端说明」。
 - **多语言**：界面支持简体中文与 English。导航栏右侧提供语言切换链接（`/lang/zh` / `/lang/en`），选择后通过 Cookie（`rusin-lang`）记住偏好；未设置时自动按浏览器 `Accept-Language` 判断，默认中文。切换后全站文本（导航、按钮、提示、错误信息、犇犇预览等）即时切换语言。 
 - `benben` 犇犇动态（`/benben`，登录可发布、未登录只读）。
    - `max_length`：单条犇犇最大长度（单位：**字符**），默认 `1024`（约 1KB）；
@@ -525,4 +531,4 @@ rusin-note:.
    - `features`：各功能的**默认开关**，当前 `config.json` 显式配置 `world_notes`（公开笔记与短链）、`benben`（犇犇动态）、`share_links`（分享链接）、`open_register`（开放注册）、`note_tags`（笔记标签）、`note_folders`（笔记文件夹）、`note_pins`（笔记置顶）、`heading_anchors`（Markdown 标题锚点）、`markdown_alerts`（Markdown 提示卡片）、`note_images`（笔记图床）、`note_attachments`（笔记附件）和 `comments`（评论系统）。`orgs` 未显式配置时默认启用；历史功能（`note_refs`、`latex_render`、`code_highlight`、`avatar`、`note_images`、`note_attachments`、`comments`）的默认值沿用各自配置段；
    - `admin_users`：功能开关管理员用户名列表；也可用环境变量 `RUSIN_ADMIN` 指定（多个用户名逗号分隔，两者取并集）。
 
-   管理员登录后可在 `/admin/features` 用滑块开关切换各功能的启用状态，保存后立即生效（无需重启）：运行时状态持久化在存储后端（file 后端即数据目录下的 `feature_flags.json`），多实例部署经约 5 秒的缓存 TTL 自动收敛；停用的功能路由直接 404、导航与首页入口自动隐藏。全部功能开关状态会呈现在 `/count` 数据汇总页的「功能状态」区（未设管理员时该区对所有人可见，但无人能修改开关）。注意：无服务器 `memory` 后端不持久，实例冷启动后回退到 `config.json` 默认值。
+   管理员登录后可在 `/admin/features` 用滑块开关切换各功能的启用状态，保存后立即生效（无需重启）：运行时状态持久化在存储后端（`sqlite`/`file` 后端即数据目录下的 `feature_flags.json`），多实例部署经约 5 秒的缓存 TTL 自动收敛；停用的功能路由直接 404、导航与首页入口自动隐藏。全部功能开关状态会呈现在 `/count` 数据汇总页的「功能状态」区（未设管理员时该区对所有人可见，但无人能修改开关）。注意：无服务器 `memory` 后端不持久，实例冷启动后回退到 `config.json` 默认值。

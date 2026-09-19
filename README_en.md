@@ -177,7 +177,8 @@ When deploying from GitHub on Zeabur, the application directory is rebuilt on ea
 Do not mount the Volume to the project root, or it may hide the deployed application code. After setup, runtime data is stored under `/data`:
 
 ```plaintext
-/data/notes/
+/data/index.db          # SQLite index: note / KV / image / attachment metadata (fast lookup)
+/data/notes/<user>/<ID>.json   # note content (JSON)
 /data/images/
 /data/attachments/
 /data/users.json
@@ -197,20 +198,27 @@ Do not mount the Volume to the project root, or it may hide the deployed applica
 /data/log/
 ```
 
+> Local/VPS defaults to the `sqlite` backend: SQLite (`index.db`) stores only
+> index metadata for fast listing / sorting / searching / stats, while the actual
+> content of notes and collections is still persisted as JSON files. Legacy
+> pure-JSON layouts (`notes/<user>/<ID>.txt`, ...) are migrated automatically on
+> first startup.
+
 Benben posts are now persisted to the storage backend (up to `benben.max_posts`, default 200) instead of pure memory.
 
 ### Storage Backends (Key for Serverless)
 
-The storage layer (`app/storage.py`) provides four backends, selected explicitly via the `RUSIN_STORAGE` env var or auto-detected:
+The storage layer (`app/storage.py`) is the unified data interface and provides five backends, selected explicitly via the `RUSIN_STORAGE` env var or auto-detected:
 
 | Backend | How to enable | Notes |
 |---|---|---|
-| `file` | default (local/VPS) | Data under `RUSIN_DATA_DIR` (default: current dir), layout as above |
+| `sqlite` | default (local/VPS) | SQLite (`<DATA_DIR>/index.db`) stores an index for fast lookup; note and collection content is persisted as JSON under `<DATA_DIR>/`; legacy `file` layouts are migrated automatically |
+| `file` | `RUSIN_STORAGE=file` | Plain JSON/binary files, kept for backward compatibility; data under `RUSIN_DATA_DIR`, layout as above |
 | `upstash` | set `KV_REST_API_URL` + `KV_REST_API_TOKEN` (Upstash Redis REST API) | Data in external KV — shared across instances, survives cold starts; plain HTTPS requests, works on any Python serverless platform |
 | `postgres` | set `DATABASE_URL` (Neon or any PostgreSQL; injected automatically when Neon is attached on Vercel) | Data in `storage_kv`, `storage_notes`, `storage_images`, and `storage_attachments`; cross-instance mutual exclusion via PG advisory locks |
 | `memory` | `RUSIN_STORAGE=memory` (auto-enabled on serverless platforms without the above) | In-memory only, cleared on restart |
 
-Auto-detect priority: explicit `RUSIN_STORAGE` > `KV_REST_API_URL`+`KV_REST_API_TOKEN` (upstash) > `DATABASE_URL` (postgres) > serverless platform (memory) > local (file).
+Auto-detect priority: explicit `RUSIN_STORAGE` > `KV_REST_API_URL`+`KV_REST_API_TOKEN` (upstash) > `DATABASE_URL` (postgres) > serverless platform (memory) > local (sqlite).
 
 - Serverless environments (detected via `VERCEL` / `NETLIFY` / `AWS_LAMBDA_FUNCTION_NAME`) do not start background threads — cleanup runs opportunistically inside requests; logs fall back to stderr (platform log streams).
 - `RUSIN_SECRET_KEY` is strongly recommended on serverless platforms. If it is unset and the backend is persistent (file/upstash/postgres), a key is generated and stored automatically; otherwise a random per-instance key is used.
@@ -447,7 +455,7 @@ rusin-note:.
 - `RUSIN_DATA_DIR`: optional environment variable for the runtime data directory, defaulting to the current project directory (`file` backend only).
 
    Notes, images, attachments, and business-data JSON files are written under this directory; see the Zeabur layout above. On auto-deploy platforms, mount a persistent volume at `/data` and set `RUSIN_DATA_DIR=/data` to preserve data across deployments.
-- `RUSIN_STORAGE`: optional env var to force the storage backend: `file` (default, local/VPS), `memory` (in-memory), `upstash` (external KV for serverless), `postgres` (Neon/PostgreSQL). When unset: `KV_REST_API_URL`/`KV_REST_API_TOKEN` set → `upstash`; `DATABASE_URL` set → `postgres`; serverless platform env detected → `memory`; otherwise `file`. See "Storage Backends" above.
+- `RUSIN_STORAGE`: optional env var to force the storage backend: `sqlite` (default, local/VPS), `file` (plain JSON files), `memory` (in-memory), `upstash` (external KV for serverless), `postgres` (Neon/PostgreSQL). When unset: `KV_REST_API_URL`/`KV_REST_API_TOKEN` set → `upstash`; `DATABASE_URL` set → `postgres`; serverless platform env detected → `memory`; otherwise `sqlite`. See "Storage Backends" above.
 - **Multi-language**: The interface supports Simplified Chinese and English. Language switch links (`/lang/zh` / `/lang/en`) are provided on the right side of the navbar; the preference is remembered via a cookie (`rusin-lang`); when unset, it falls back to the browser's `Accept-Language`, defaulting to Chinese. After switching, all site text (navbar, buttons, hints, error messages, benben previews, etc.) switches language instantly.
 - `benben` (feed at `/benben`, logged-in users can post, anonymous read-only).
    - `max_length`: max length of a single feed post (in **characters**), default `1024` (~1KB);
@@ -465,4 +473,4 @@ rusin-note:.
    - `features`: **default** states. The current `config.json` explicitly enables `world_notes`, `benben`, `share_links`, `open_register`, `note_tags`, `note_folders`, `note_pins`, `heading_anchors`, `markdown_alerts`, `note_images`, `note_attachments`, and `comments`. `orgs` defaults to enabled when omitted. Legacy defaults for `note_refs`, `latex_render`, `code_highlight`, `avatar`, `note_images`, `note_attachments`, and `comments` come from their dedicated sections;
    - `admin_users`: usernames allowed to manage feature flags; can also be set via the `RUSIN_ADMIN` environment variable (comma-separated; the two are merged).
 
-   After logging in, an admin can toggle features at `/admin/features`; saving takes effect immediately (no restart needed): the runtime state is persisted in the storage backend (`feature_flags.json` under the data directory for the `file` backend), and multi-instance deployments converge within a ~5s cache TTL. Disabled features return 404 and their navbar/home entry points are hidden automatically. All feature states are presented in the "Feature Status" section of the `/count` stats page (visible to everyone when no admin is configured, but nobody can change the switches then). Note: the serverless `memory` backend is not persistent — after a cold start, flags fall back to the `config.json` defaults.
+   After logging in, an admin can toggle features at `/admin/features`; saving takes effect immediately (no restart needed): the runtime state is persisted in the storage backend (`feature_flags.json` under the data directory for the `sqlite`/`file` backends), and multi-instance deployments converge within a ~5s cache TTL. Disabled features return 404 and their navbar/home entry points are hidden automatically. All feature states are presented in the "Feature Status" section of the `/count` stats page (visible to everyone when no admin is configured, but nobody can change the switches then). Note: the serverless `memory` backend is not persistent — after a cold start, flags fall back to the `config.json` defaults.

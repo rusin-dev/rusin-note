@@ -13,22 +13,25 @@
 - 生产部署（VPS）：`gunicorn 'app.wsgi:app' -b 0.0.0.0:$PORT --workers 2 --threads 4`
 - 无服务器部署（Vercel）：`vercel.json` + `api/index.py` 已内置，绑定 Vercel KV 并设置 `RUSIN_SECRET_KEY` 即可
 - 无服务器部署（AWS Lambda）：入口 `lambda_handler.handler`（Mangum）
-- 数据目录：由环境变量 `RUSIN_DATA_DIR` 指定（默认 `.`，仅 file 后端）
+- 数据目录：由环境变量 `RUSIN_DATA_DIR` 指定（默认 `data`；仅本地 sqlite/file 后端使用）
 - 依赖安装：`pip install -r requirements.txt`
 - 前端语法检查：`python tests/frontend_check.py`（校验 Jinja2 模板语法、模板内联 JS/CSS、JSON；CI 中由 `check.yml` 的 `frontend` job 自动执行）
 - 端到端测试：统一放在 `tests/` 目录，使用 **pytest + logging**（`pip install -r requirements-dev.txt` 后运行 `pytest tests/`，如 `pytest tests/test_user_settings.py`）；`conftest.py` 会自动隔离临时 `RUSIN_DATA_DIR` 并清空运行时缓存
 
 ## 数据存储（重点：可插拔后端）
-存储层统一在 `app/storage.py`，后端由 `RUSIN_STORAGE` 显式指定或自动识别：
+存储层统一在 `app/storage.py`（**统一数据接口**，所有业务模块只通过 `storage` 单例访问数据），后端由 `RUSIN_STORAGE` 显式指定或自动识别：
 
 | 后端 | 启用 | 说明 |
 |---|---|---|
-| file | 默认（本地/VPS） | JSON 文件落盘于 `RUSIN_DATA_DIR`：`notes/`、`users.json`、`sessions.json`、`shares.json`、`benben.json`、`log/` |
+| sqlite | 默认（本地/VPS） | SQLite 索引（`<DATA_DIR>/index.db`）用于快速列表/排序/检索/统计，具体内容 JSON 落盘于 `RUSIN_DATA_DIR`（默认 `data/`）；笔记为 `notes/<用户>/<ID>.json`，集合为 `users.json` 等；实现见 `app/storage_sqlite.py`，旧版 file 布局首次启动自动迁移 |
+| file | `RUSIN_STORAGE=file` | 纯 JSON 文件落盘（兼容旧部署），布局同上但不含 `index.db` |
 | upstash | `KV_REST_API_URL` + `KV_REST_API_TOKEN` | Upstash Redis REST API（纯 urllib，无驱动依赖），键统一加 `rusin:` 前缀，多实例共享 |
 | postgres | `DATABASE_URL`（Neon / 任意 PostgreSQL，Vercel 绑定 Neon 自动注入） | psycopg 驱动，表 `storage_kv`（通用 KV）+ `storage_notes`（笔记）；跨实例互斥用 PG advisory lock |
 | memory | `RUSIN_STORAGE=memory`（无服务器且未配以上存储时自动） | 纯内存，重启清空 |
 
-自动识别优先级：显式 `RUSIN_STORAGE` > KV 环境变量（upstash）> `DATABASE_URL`（postgres）> 无服务器平台（memory）> 本地（file）。
+自动识别优先级：显式 `RUSIN_STORAGE` > KV 环境变量（upstash）> `DATABASE_URL`（postgres）> 无服务器平台（memory）> 本地（sqlite）。
+
+- 统一接口在基类 `StorageBackend` 提供笔记元数据/检索能力：`note_title`、`list_notes_detailed`、`search_notes`、`notes_stats`（与后端无关的退化实现），SQLite 后端覆盖为单次索引查询（`notes.py` 的 `search_user_notes`/`get_stats` 与列表页据此避免逐篇读取内容）。
 
 - 犇犇动态已改为持久化（最多 `benben.max_posts` 条，默认 200），不再纯内存。
 - 写路径统一锁序：**threading.Lock（进程内）→ storage.lock（跨进程/跨实例）**，顺序颠倒会死锁（见 `store.flush_share_views` 注释）。

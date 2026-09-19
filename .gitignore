@@ -26,6 +26,7 @@ log/
 attachments/
 
 # 本地运行时数据
+/data/
 /notes/
 sessions.json
 users.json

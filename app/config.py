@@ -189,7 +189,9 @@ def load_config():
 
 
 config = load_config()
-DATA_DIR = os.environ.get("RUSIN_DATA_DIR", ".")
+# 运行数据目录：默认落到项目下的 data/（JSON 内容 + SQLite 索引都在这里）。
+# 通过 RUSIN_DATA_DIR 覆盖，如 Zeabur 挂载持久卷时设为 /data。
+DATA_DIR = os.environ.get("RUSIN_DATA_DIR", "data")
 try:
     os.makedirs(DATA_DIR, exist_ok=True)
 except (OSError, IOError):

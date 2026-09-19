@@ -8,7 +8,7 @@ from . import config
 from .folders import delete_note_folder
 from .logger import create_logger
 from .pins import delete_note_pins
-from .storage import StorageError, storage
+from .storage import StorageError, storage, title_from_content
 from .store import count_benben_posts, get_user_count
 from .tags import delete_note_tags
 
@@ -137,46 +137,53 @@ def list_user_notes(username: str) -> list[str]:
         return []
 
 
+def list_user_notes_detailed(username: str) -> list[dict]:
+    """返回用户笔记的元数据列表 [{id, size, mtime(, title)}]，按修改时间倒序。
+
+    走统一数据接口 ``storage.list_notes_detailed``：SQLite 后端单次索引查询
+    即可拿到全部列表页所需元数据，避免逐篇查询/读取内容。
+    """
+    if not _namespace_ok(username):
+        return []
+    try:
+        rows = storage.list_notes_detailed(username)
+    except StorageError:
+        return []
+    return [row for row in rows if validate_note_id(row.get("id", ""))]
+
+
 # ---------- 快捷引用（#87：GitHub Issues 风格的 # 引用） ----------
-def title_from_content(content: str) -> str:
-    """笔记首行去掉常见 Markdown 标记后作为标题预览（最长 80 字符）"""
-    if not content:
-        return ""
-    first = content.split("\n", 1)[0].strip()
-    first = re.sub(r'^(?:#{1,6}\s*|>\s*|[-*+]\s+|\d+[.)]\s+)', '', first)
-    return first[:80]
-
-
 def note_title(username: str, note_id: str) -> str:
-    """返回笔记首行标题预览，读取失败或笔记不存在返回空串"""
-    return title_from_content(read_note(username, note_id))
+    """返回笔记首行标题预览（走统一数据接口；SQLite 后端直接查索引，
+    不读取内容文件），读取失败或笔记不存在返回空串。"""
+    if not _namespace_ok(username) or not validate_note_id(note_id):
+        return ""
+    try:
+        return storage.note_title(username, note_id)
+    except StorageError:
+        return ""
 
 
 def search_user_notes(username: str, query: str) -> list[dict]:
-    """快捷引用搜索：按修改时间倒序扫描用户笔记，ID 或首行标题包含 query
+    """快捷引用搜索：按修改时间倒序检索用户笔记，ID 或首行标题包含 query
     （大小写不敏感）即命中，返回 [{"id", "title", "mtime"}]，最多
     config.NOTE_REF_SEARCH_LIMIT 条、扫描 config.NOTE_REF_SCAN_LIMIT 篇。
 
     query 为空时返回最近编辑的笔记（对应只输入 # 还没打字的情况）。
+    走统一数据接口 ``storage.search_notes``：SQLite 后端基于索引检索，
+    无需读取内容文件；其它后端退化为逐篇读取。
     """
     from . import config
-    note_ids = list_user_notes(username)
-    scored = []
-    for nid in note_ids:
-        mtime = get_note_mtime(username, nid) or 0
-        scored.append((mtime, nid))
-    scored.sort(reverse=True)  # 最近编辑优先
-
-    query = (query or "").strip().lower()
-    results: list[dict] = []
-    for mtime, nid in scored[:config.NOTE_REF_SCAN_LIMIT]:
-        title = note_title(username, nid)
-        if query and query not in nid.lower() and query not in title.lower():
-            continue
-        results.append({"id": nid, "title": title, "mtime": mtime})
-        if len(results) >= config.NOTE_REF_SEARCH_LIMIT:
-            break
-    return results
+    if not _namespace_ok(username):
+        return []
+    try:
+        return storage.search_notes(
+            username, query,
+            limit=config.NOTE_REF_SEARCH_LIMIT,
+            scan_limit=config.NOTE_REF_SCAN_LIMIT,
+        )
+    except StorageError:
+        return []
 
 
 # ---------- 统计函数 ----------
@@ -199,14 +206,7 @@ def get_stats():
     private_size = 0
 
     try:
-        for username, note_id in storage.iter_all_notes():
-            size = get_note_size(username, note_id) or 0
-            if username == "public":
-                public_count += 1
-                public_size += size
-            else:
-                private_count += 1
-                private_size += size
+        public_count, public_size, private_count, private_size = storage.notes_stats()
     except StorageError:
         pass
 

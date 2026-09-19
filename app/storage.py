@@ -1,8 +1,12 @@
-"""统一存储层：file / memory / upstash / postgres 四种可插拔后端
+"""统一存储层：sqlite / file / memory / upstash / postgres 五种可插拔后端
 
-为无服务器部署（Vercel / AWS Lambda / Netlify 等）提供不依赖本机磁盘的持久化：
+为无服务器部署（Vercel / AWS Lambda / Netlify 等）提供不依赖本机磁盘的持久化，
+同时为本地/VPS 提供 SQLite 索引 + JSON 内容的高效本地存储：
 
-- file 后端（默认，本地/VPS）：保持原有 JSON 文件落盘布局不变；
+- sqlite 后端（本地/VPS 默认）：SQLite（`<DATA_DIR>/index.db`）保存笔记/KV/
+  图床/附件索引用于快速查找，具体内容以 JSON 落盘到 `<DATA_DIR>/`，见
+  `app/storage_sqlite.py`；旧版 file 布局首次启用时自动迁移；
+- file 后端：纯 JSON/二进制文件落盘，`RUSIN_STORAGE=file` 时启用（兼容旧部署）；
 - upstash 后端：Upstash Redis / Vercel KV 的 REST API（环境变量
   KV_REST_API_URL + KV_REST_API_TOKEN），多实例共享同一份数据，纯 HTTPS 请求，
   不依赖任何驱动，所有支持 Python 的无服务器平台通用；
@@ -10,12 +14,17 @@
   Vercel Marketplace 绑定 Neon 后自动注入连接串，零配置切换；
 - memory 后端：纯内存，任何平台可用，数据随实例销毁（冷启动清空）。
 
+本模块同时是项目的**统一数据接口**：所有业务模块只通过 `storage` 单例访问
+数据，后端可插拔；笔记的列表/元数据/标题检索/统计等公共能力在
+`StorageBackend` 基类给出与后端无关的实现，SQLite 后端覆盖为索引查询。
+
 选择优先级（RUSIN_STORAGE 显式指定 > KV 环境变量自动识别 > DATABASE_URL
-自动识别 > 无服务器平台默认 memory > 本地默认 file）。
+自动识别 > 无服务器平台默认 memory > 本地默认 sqlite）。
 """
 import base64
 import json
 import os
+import re
 import threading
 import time
 import urllib.error
@@ -109,6 +118,22 @@ def _json_loads(raw: str):
         raise StorageError("存储数据损坏（非法 JSON）")
 
 
+_TITLE_MARKUP_RE = re.compile(r'^(?:#{1,6}\s*|>\s*|[-*+]\s+|\d+[.)]\s+)')
+
+
+def title_from_content(content: str) -> str:
+    """笔记首行去掉常见 Markdown 标记后作为标题预览（最长 80 字符）。
+
+    统一数据接口的一部分：任何后端都能从内容推导标题，SQLite 后端则把
+    标题预先写进索引，检索时无需读取内容文件。
+    """
+    if not content:
+        return ""
+    first = content.split("\n", 1)[0].strip()
+    first = _TITLE_MARKUP_RE.sub('', first)
+    return first[:80]
+
+
 # ======================================================================
 # 后端基类
 # ======================================================================
@@ -148,6 +173,58 @@ class StorageBackend:
     def iter_all_notes(self):
         """遍历全部笔记，产出 (username, note_id)"""
         raise NotImplementedError
+
+    # ---------- 笔记元数据 / 检索（统一数据接口） ----------
+    # 基类提供与后端无关的退化实现；SQLite 后端覆盖为索引查询，避免读取
+    # 内容文件即可完成列表、排序、标题检索与统计。
+    def note_title(self, username: str, note_id: str) -> str:
+        """返回笔记首行标题（读取失败时为空串）"""
+        return title_from_content(self.read_note(username, note_id) or "")
+
+    def list_notes_detailed(self, username: str) -> list:
+        """返回该用户全部笔记的元数据 [{id, size, mtime}, ...]。
+        基类实现只取大小/时间，不读取内容；SQLite 后端额外附带 title。"""
+        rows = []
+        for note_id in self.list_notes(username):
+            rows.append({
+                "id": note_id,
+                "size": self.note_size(username, note_id),
+                "mtime": self.note_mtime(username, note_id),
+            })
+        return rows
+
+    def search_notes(self, username: str, query: str = "",
+                     limit: int = 8, scan_limit: int = 100) -> list:
+        """按修改时间倒序检索用户笔记（ID 或标题包含 query，大小写不敏感）。
+        返回 [{"id", "title", "mtime"}]，最多 limit 条、扫描 scan_limit 篇。"""
+        rows = self.list_notes_detailed(username)
+        rows.sort(key=lambda r: r.get("mtime") or 0, reverse=True)
+        needle = (query or "").strip().lower()
+        results = []
+        for row in rows[:scan_limit]:
+            note_id = row["id"]
+            title = row.get("title")
+            if title is None:
+                title = self.note_title(username, note_id)
+            if needle and needle not in note_id.lower() and needle not in title.lower():
+                continue
+            results.append({"id": note_id, "title": title, "mtime": row.get("mtime") or 0})
+            if len(results) >= limit:
+                break
+        return results
+
+    def notes_stats(self) -> tuple:
+        """返回 (public_count, public_size, private_count, private_size)。"""
+        public_count = public_size = private_count = private_size = 0
+        for username, note_id in self.iter_all_notes():
+            size = self.note_size(username, note_id) or 0
+            if username == "public":
+                public_count += 1
+                public_size += size
+            else:
+                private_count += 1
+                private_size += size
+        return public_count, public_size, private_count, private_size
 
     # ---------- 图片专用（图床：二进制） ----------
     # 基类默认实现：base64 进通用 KV（键 img:<username>:<image_id>，值
@@ -1156,15 +1233,24 @@ def select_backend() -> StorageBackend:
         return MemoryBackend()
     if mode == "file":
         return FileBackend()
+    if mode == "sqlite":
+        return _sqlite_backend()
     # 自动识别：配置了 KV 环境变量 → upstash；DATABASE_URL → postgres；
-    # 无服务器平台 → memory；否则 file
+    # 无服务器平台 → memory；否则本地默认 sqlite（SQLite 索引 + JSON 内容）
     if kv_url and kv_token:
         return UpstashBackend(kv_url, kv_token)
     if database_url:
         return PostgresBackend(database_url)
     if SERVERLESS:
         return MemoryBackend()
-    return FileBackend()
+    return _sqlite_backend()
+
+
+def _sqlite_backend() -> StorageBackend:
+    """构造本地默认后端，并在首次启用时迁移旧版根目录运行数据。"""
+    from .storage_sqlite import SqliteBackend, migrate_legacy_data_root
+    migrate_legacy_data_root()
+    return SqliteBackend()
 
 
 storage = select_backend()
