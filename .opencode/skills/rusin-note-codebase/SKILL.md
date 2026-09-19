@@ -74,7 +74,7 @@ upstash 后端所有键统一加 `rusin:` 前缀；memory 后端 get/set 带 dee
 | `i18n.py` | 中英双语：`STRINGS` 字典（zh/en 成对），`t(lang, key)` 取翻译（缺 key 返回 key 本身）；语言检测 Cookie `rusin-lang` > Accept-Language > zh；`register_i18n` 注入模板全局 `t`/`lang`/`theme`/`current_user`/`site_name` 等 |
 | `theme.py` | 暗色主题 CSS 变量（`THEME_VARS`）与切换脚本（Cookie + localStorage + 系统偏好）、favicon 内存缓存 |
 | `logger.py` | `create_logger(name)` 返回写入 `log/{timestamp}.log` 的 RotatingFileHandler 日志器；文件不可写（无服务器只读 FS）时回退 stderr |
-| `utils.py` | `format_size`/`format_note_time` 格式化、`render_markdown_html`（markdown + codehilite/Pygments 高亮+行号 + bleach 清洗防 XSS）、`render_pygments_head`（亮/暗两套高亮 CSS，注入 base）、`render_latex_head`（KaTeX CDN 引入）、`read_disclaimer` |
+| `utils.py` | `format_size`/`format_note_time` 格式化、`render_markdown_html`（markdown + codehilite/Pygments 高亮+行号 + bleach 清洗防 XSS；`markdown_alerts` 启用时把 `> [!NOTE]` 等引用块经 treeprocessor 转为可折叠 `<details>` 卡片）、`render_pygments_head`（亮/暗两套高亮 CSS，注入 base）、`render_markdown_alerts_head`（`window.MarkdownAlerts.apply`，供实时预览）、`render_latex_head`（KaTeX CDN 引入）、`read_disclaimer` |
 | `feature_flags.py` | **功能开关（#90）**：`FEATURES` 注册表（world_notes/benben/share_links/open_register/note_refs/latex_render/code_highlight/avatar）+ 运行时状态（KV 键 `feature_flags`，进程内 5s TTL 缓存）；`feature_enabled(key)` 查询、`set_flags` 整体写入、`require_feature(key)` 视图装饰器（停用→404，须放 `@bp.route` 后、缓存/限流装饰器前）、`is_admin`（`RUSIN_ADMIN` env + config `admin_users` 并集）；默认值：新功能读 `features` 段，历史功能沿用 latex_render/note_refs 等原配置段 |
 | `background.py` | 后台守护线程：会话清理、分享视图定期刷盘、过期笔记清理（`start_background_threads()` 一次性启动；`SERVERLESS` 时为无操作） |
 | `user_settings.py` | 用户设置业务：简洁模式（账号级偏好，存 users.json，`middleware` 注入 `g.simple_mode` 供服务端渲染）、修改密码（校验原密码/复杂度，注销其它会话）、修改用户名（先复制笔记/图床/附件到新命名空间，再迁移标签/文件夹/置顶/分享/犇犇/评论/组织等用户标识，最后删除旧数据） |
@@ -112,7 +112,7 @@ upstash 后端所有键统一加 `rusin:` 前缀；memory 后端 get/set 带 dee
 - **CSRF**：Flask-WTF 全站开启（`WTF_CSRF_TIME_LIMIT=None`）
 - **限流**：Flask-Limiter，key 为 `g.client_ip`。分层：全局 POST `rate_limit`（30/60s）、GET `get_rate_limit`（45/60s）、保存类 POST `save_rate_limit`（120/60s）、注册 `register_rate_limit`（1/120s）。视图函数上用 `@limiter.limit(lambda: f"...")` 显式标注
 - **代理头**：`trust_proxy_headers` 默认 false，限流一律用 TCP 直连 IP，防伪造头绕过；置 true 后 `CF-Connecting-IP` > `X-Real-IP` > XFF 最右项
-- **XSS**：Markdown 渲染后经 bleach 白名单清洗（`utils.render_markdown_html`）
+- **XSS**：Markdown 渲染后经 bleach 白名单清洗（`utils.render_markdown_html`）；提示卡片输出 `<details>/<summary>` 前同样过 bleach，新增标签/属性须同步 `allowed_tags`/`allowed_attrs`
 - **密码**：PBKDF2 10 万次迭代慢哈希 + 常量时间比较；`PW_MAX_LENGTH` 硬上限 128 防超长输入 CPU DoS
 - **路径穿越**：笔记 ID 正则 `^[a-zA-Z0-9_\-]+$` + realpath/commonpath 双重校验；用户名/ID 有保留名单（`RESERVED_USERNAMES`、`FORBIDDEN_NOTE_IDS`）
 - **Cookie**：session HttpOnly + SameSite=Lax，`secure_cookies` 开关控制 Secure 标志

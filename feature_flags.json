@@ -11,6 +11,7 @@
   "note_folders": true,
   "note_pins": true,
   "heading_anchors": true,
+  "markdown_alerts": true,
   "note_images": true,
   "note_attachments": true,
   "comments": true
