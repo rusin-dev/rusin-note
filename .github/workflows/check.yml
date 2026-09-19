@@ -3,19 +3,35 @@ name: CI
 on:
   push:
     branches: [ "dev" ]
-    paths-ignore:
-      - '**.md'
   pull_request:
     branches: [ "dev" ]
-    paths-ignore:
-      - '**.md'
 
 permissions:
   contents: read
 
 jobs:
+  # 检测本次变更中是否包含 Python 代码（.py 文件）
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      python: ${{ steps.filter.outputs.python }}
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 检测变更的文件后缀
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            python:
+              - '**/*.py'
+
   test:
     runs-on: ubuntu-latest
+    needs: changes
+    # 没有修改 Python 代码时，跳过服务 ping 测试
+    if: ${{ needs.changes.outputs.python == 'true' }}
 
     steps:
       - name: 检出代码
