@@ -23,20 +23,22 @@ class TestAlertRendering:
     """A/B：纯渲染函数（不依赖 HTTP）。"""
 
     def test_default_open_and_labels(self):
-        logger.info("=== [A] 类型、标题与默认展开 ===")
-        for kind, label in (
-            ("NOTE", "说明"),
-            ("TIP", "提示"),
-            ("IMPORTANT", "重要"),
-            ("WARNING", "警告"),
-            ("CAUTION", "注意"),
+        logger.info("=== [A] 类型、标题、图标与默认展开 ===")
+        for kind, label, icon in (
+            ("NOTE", "说明", "fa-circle-info"),
+            ("TIP", "提示", "fa-lightbulb"),
+            ("IMPORTANT", "重要", "fa-circle-exclamation"),
+            ("WARNING", "警告", "fa-triangle-exclamation"),
+            ("CAUTION", "注意", "fa-circle-xmark"),
         ):
             html = render_markdown_html(f"> [!{kind}]\n> body text")
             expect(f'class="md-alert md-alert-{kind.lower()}"' in html,
                    f"{kind} 生成对应卡片类名")
             expect("<details" in html and " open" in html, f"{kind} 默认展开")
-            expect(f'<summary class="md-alert-title">{label}</summary>' in html,
-                   f"{kind} 标题为「{label}」")
+            expect(f'fa-solid {icon}' in html and 'aria-hidden="true"' in html,
+                   f"{kind} 带有图标 {icon}")
+            expect(f'</i>{label}</summary>' in html,
+                   f"{kind} 标题为「{label}」且图标在标题内")
 
     def test_collapsed_and_explicit_open(self):
         logger.info("=== [B] 折叠记号 - / + ===")
@@ -115,8 +117,9 @@ class TestAlertE2E:
         expect("md-alert md-alert-warning" in html, "只读页渲染 warning 卡片")
         expect("这是一条重要说明" in html and "<strong>加粗</strong>" in html,
                "卡片正文正常渲染")
-        expect('<summary class="md-alert-title">重要</summary>' in html
-               and '<summary class="md-alert-title">警告</summary>' in html,
-               "卡片标题本地化")
+        expect('fa-solid fa-circle-exclamation' in html
+               and 'fa-solid fa-triangle-exclamation' in html, "卡片标题带有对应图标")
+        expect('md-alert-important' in html and '重要' in html
+               and 'md-alert-warning' in html and '警告' in html, "卡片标题本地化")
         expect("[!IMPORTANT]" not in html and "[!WARNING]" not in html,
                "标记已被消费")

@@ -158,6 +158,14 @@ ALERT_TYPES = {
     "warning": "md_alert_warning",
     "caution": "md_alert_caution",
 }
+# 每种卡片对应的 FontAwesome solid 图标（渲染为 <i class="fa-solid ...">）
+ALERT_ICONS = {
+    "note": "fa-circle-info",
+    "tip": "fa-lightbulb",
+    "important": "fa-circle-exclamation",
+    "warning": "fa-triangle-exclamation",
+    "caution": "fa-circle-xmark",
+}
 _ALERT_ALIASES = {"info": "note"}
 # 引用块首段以 [!TYPE][+-]? 开头即视为提示卡片；匹配含紧随的分隔空白/换行
 _ALERT_MARKER_RE = re.compile(
@@ -214,7 +222,10 @@ def _markdown_alert_extension(labels: dict):
                     details.set("open", "open")
                 summary = etree.SubElement(details, "summary")
                 summary.set("class", "md-alert-title")
-                summary.text = labels.get(kind) or kind
+                icon = etree.SubElement(summary, "i")
+                icon.set("class", f"fa-solid {ALERT_ICONS.get(kind, 'fa-circle-info')}")
+                icon.set("aria-hidden", "true")
+                icon.tail = labels.get(kind) or kind
                 body = etree.SubElement(details, "div")
                 body.set("class", "md-alert-body")
                 for node in list(child):
@@ -270,13 +281,14 @@ def render_markdown_html(content: str, ref_namespace: str | None = None,
                 'ul', 'ol', 'li', 'blockquote', 'pre', 'code',
                 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'hr',
                 'table', 'thead', 'tbody', 'tr', 'th', 'td',
-                'div', 'span', 'img', 'details', 'summary',
+                'div', 'span', 'img', 'i', 'details', 'summary',
             ]
             allowed_attrs = {
                 '*': ['class'],
                 'a': ['href', 'title', 'target'],
                 'img': ['src', 'alt', 'title', 'width', 'height'],
                 'details': ['open'],
+                'i': ['aria-hidden'],
             }
             return config.bleach.clean(
                 raw_html, tags=allowed_tags, attributes=allowed_attrs, strip=True
@@ -690,10 +702,12 @@ def render_markdown_alerts_head() -> str:
     from flask import g, has_request_context
     lang = getattr(g, "lang", "zh") if has_request_context() else "zh"
     labels = json.dumps(_alert_labels(lang), ensure_ascii=False, sort_keys=True)
+    icons = json.dumps(ALERT_ICONS, sort_keys=True)
     return (
         "<script>\n"
         "window.MarkdownAlerts = (function() {\n"
         "    var LABELS = __LABELS__;\n"
+        "    var ICONS = __ICONS__;\n"
         "    var RE = /^\\s*\\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION|INFO)\\]([+-]?)[ \\t]*\\n?/i;\n"
         "    function convert(bq) {\n"
         "        var first = bq.firstElementChild;\n"
@@ -713,7 +727,11 @@ def render_markdown_alerts_head() -> str:
         "        if (m[2] !== '-') details.setAttribute('open', '');\n"
         "        var summary = document.createElement('summary');\n"
         "        summary.className = 'md-alert-title';\n"
-        "        summary.textContent = LABELS[kind] || kind;\n"
+        "        var icon = document.createElement('i');\n"
+        "        icon.className = 'fa-solid ' + (ICONS[kind] || 'fa-circle-info');\n"
+        "        icon.setAttribute('aria-hidden', 'true');\n"
+        "        summary.appendChild(icon);\n"
+        "        summary.appendChild(document.createTextNode(LABELS[kind] || kind));\n"
         "        details.appendChild(summary);\n"
         "        var body = document.createElement('div');\n"
         "        body.className = 'md-alert-body';\n"
@@ -734,7 +752,7 @@ def render_markdown_alerts_head() -> str:
         "    return { apply: apply };\n"
         "})();\n"
         "</script>"
-    ).replace("__LABELS__", labels)
+    ).replace("__LABELS__", labels).replace("__ICONS__", icons)
 
 
 def read_disclaimer(lang: str) -> str:
