@@ -15,6 +15,7 @@
 </style>
 {{ latex_head|safe }}
 {{ code_highlight_head|safe }}
+{{ markdown_alerts_head|safe }}
 <script defer src="{{ config.GLOBAL_CDN }}/npm/marked@12.0.2/marked.min.js"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
@@ -42,6 +43,7 @@ document.addEventListener('DOMContentLoaded', function() {
         });
         pre.innerHTML = tmp.innerHTML;
         pre.style.display = 'block';
+        if (window.MarkdownAlerts) window.MarkdownAlerts.apply(pre);
         if (window.CodeHighlight) window.CodeHighlight.apply(pre);
         if (window.renderMathInElement) {
             try {

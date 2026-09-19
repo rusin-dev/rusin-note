@@ -142,6 +142,108 @@ def _note_ref_resolver(namespace: str):
     return resolve
 
 
+# ---------- GitHub 风格提示卡片（[!NOTE] / [!WARNING] ...，可折叠） ----------
+# 语法参考 GitHub Alerts（并兼容 Obsidian 的折叠记号）：
+#
+#     > [!WARNING]
+#     > 注意……
+#
+# 支持的卡片类型见 ALERT_TYPES；`[!INFO]` 是 `[!NOTE]` 的别名。默认展开，
+# 在标记后紧跟 `-`（如 `[!WARNING]-`）则默认折叠、`+` 则显式展开。
+# 渲染为 <details>/<summary> 结构，点击标题即可展开/收起。
+ALERT_TYPES = {
+    "note": "md_alert_note",
+    "tip": "md_alert_tip",
+    "important": "md_alert_important",
+    "warning": "md_alert_warning",
+    "caution": "md_alert_caution",
+}
+# 每种卡片对应的 FontAwesome solid 图标（渲染为 <i class="fa-solid ...">）
+ALERT_ICONS = {
+    "note": "fa-circle-info",
+    "tip": "fa-lightbulb",
+    "important": "fa-circle-exclamation",
+    "warning": "fa-triangle-exclamation",
+    "caution": "fa-circle-xmark",
+}
+_ALERT_ALIASES = {"info": "note"}
+# 引用块首段以 [!TYPE][+-]? 开头即视为提示卡片；匹配含紧随的分隔空白/换行
+_ALERT_MARKER_RE = re.compile(
+    r'^\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION|INFO)\]([+-]?)[ \t]*(?:\n)?',
+    re.IGNORECASE,
+)
+
+
+def _alert_labels(lang: str) -> dict:
+    """卡片标题的多语言文案（进程内不缓存：受语言影响，且仅在渲染时调用）。"""
+    from .i18n import t
+    return {kind: t(lang, key) for kind, key in ALERT_TYPES.items()}
+
+
+def _markdown_alert_extension(labels: dict):
+    """构造把 ``[!TYPE]`` 引用块改写为可折叠 <details> 卡片的 Markdown 扩展。
+
+    使用 treeprocessor 在 inline 处理（优先级 20）之前运行，直接改写 AST：
+    这样卡片正文里的 Markdown（列表、代码、链接等）仍会被后续内联处理正常渲染。
+    """
+    import xml.etree.ElementTree as etree
+    from markdown.extensions import Extension
+    from markdown.treeprocessors import Treeprocessor
+
+    class _AlertTreeprocessor(Treeprocessor):
+        def run(self, root):
+            self._walk(root)
+
+        def _walk(self, parent) -> None:
+            for child in list(parent):
+                if child.tag != "blockquote":
+                    self._walk(child)
+                    continue
+                first = child[0] if len(child) else None
+                # 仅当首个子块是段落、且以 [!TYPE] 标记开头时才转换
+                if first is None or first.tag != "p":
+                    self._walk(child)
+                    continue
+                text = first.text or ""
+                match = _ALERT_MARKER_RE.match(text)
+                if not match:
+                    self._walk(child)
+                    continue
+                kind = match.group(1).lower()
+                kind = _ALERT_ALIASES.get(kind, kind)
+                collapsed = match.group(2) == "-"
+                # 去掉首段开头的标记（含其后的换行/空格）
+                first.text = text[match.end():]
+                if not first.text and len(first) == 0:
+                    child.remove(first)
+                details = etree.Element("details")
+                details.set("class", f"md-alert md-alert-{kind}")
+                if not collapsed:
+                    details.set("open", "open")
+                summary = etree.SubElement(details, "summary")
+                summary.set("class", "md-alert-title")
+                icon = etree.SubElement(summary, "i")
+                icon.set("class", f"fa-solid {ALERT_ICONS.get(kind, 'fa-circle-info')}")
+                icon.set("aria-hidden", "true")
+                icon.tail = labels.get(kind) or kind
+                body = etree.SubElement(details, "div")
+                body.set("class", "md-alert-body")
+                for node in list(child):
+                    body.append(node)
+                index = list(parent).index(child)
+                parent.remove(child)
+                parent.insert(index, details)
+                self._walk(body)  # 允许卡片内再嵌套卡片
+
+    class _AlertExtension(Extension):
+        def extendMarkdown(self, md):
+            md.treeprocessors.register(
+                _AlertTreeprocessor(md), "rusin_md_alerts", 30
+            )
+
+    return _AlertExtension()
+
+
 def render_markdown_html(content: str, ref_namespace: str | None = None,
                          ref_url_prefix: str | None = None) -> str:
     """将 Markdown 安全渲染为 HTML（依赖 bleach 清洗防 XSS）
@@ -154,6 +256,9 @@ def render_markdown_html(content: str, ref_namespace: str | None = None,
     传入 ref_namespace（笔记所属命名空间：用户名或 "public"）与
     ref_url_prefix（引用链接前缀，如 "/user/alice" 或 "/world"）时，
     原文中的 ``#<笔记ID>`` 快捷引用会被展开为指向该笔记的链接（#87）。
+
+    启用 markdown_alerts 功能时，``> [!NOTE]`` 等 GitHub 风格提示卡片会被
+    渲染为可展开/收起的 <details> 卡片（详见 ALERT_TYPES 与 _markdown_alert_extension）。
     """
     from . import config
     from .feature_flags import feature_enabled
@@ -164,21 +269,26 @@ def render_markdown_html(content: str, ref_namespace: str | None = None,
                     content, ref_namespace, ref_url_prefix,
                     _note_ref_resolver(ref_namespace),
                 )
-            raw_html = config.markdown.markdown(
-                content, extensions=['extra', 'pymdownx.tilde']
-            )
+            extensions = ['extra', 'pymdownx.tilde']
+            if feature_enabled("markdown_alerts"):
+                from flask import g, has_request_context
+                lang = getattr(g, "lang", "zh") if has_request_context() else "zh"
+                extensions.append(_markdown_alert_extension(_alert_labels(lang)))
+            raw_html = config.markdown.markdown(content, extensions=extensions)
             raw_html = _highlight_code_blocks(raw_html)
             allowed_tags = [
                 'p', 'br', 'strong', 'em', 'u', 'del', 'strike', 'a',
                 'ul', 'ol', 'li', 'blockquote', 'pre', 'code',
                 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'hr',
                 'table', 'thead', 'tbody', 'tr', 'th', 'td',
-                'div', 'span', 'img',
+                'div', 'span', 'img', 'i', 'details', 'summary',
             ]
             allowed_attrs = {
                 '*': ['class'],
                 'a': ['href', 'title', 'target'],
                 'img': ['src', 'alt', 'title', 'width', 'height'],
+                'details': ['open'],
+                'i': ['aria-hidden'],
             }
             return config.bleach.clean(
                 raw_html, tags=allowed_tags, attributes=allowed_attrs, strip=True
@@ -575,6 +685,74 @@ def render_heading_anchors_head() -> str:
         "})();\n"
         "</script>"
     )
+
+
+def render_markdown_alerts_head() -> str:
+    """启用 GitHub 风格提示卡片所需的客户端脚本（服务端已渲染的只读页无需此脚本）。
+
+    编辑器 / 评论 / 犇犇的实时预览用 marked.js 在浏览器里渲染 Markdown，
+    这里暴露 ``window.MarkdownAlerts.apply(root)``：在渲染结果中查找以
+    ``[!TYPE]`` 开头的 <blockquote>，转换为与服务端一致的 <details> 卡片。
+    标题文案按当前语言嵌入。
+    """
+    from .feature_flags import feature_enabled
+    if not feature_enabled("markdown_alerts"):
+        return ""
+    import json
+    from flask import g, has_request_context
+    lang = getattr(g, "lang", "zh") if has_request_context() else "zh"
+    labels = json.dumps(_alert_labels(lang), ensure_ascii=False, sort_keys=True)
+    icons = json.dumps(ALERT_ICONS, sort_keys=True)
+    return (
+        "<script>\n"
+        "window.MarkdownAlerts = (function() {\n"
+        "    var LABELS = __LABELS__;\n"
+        "    var ICONS = __ICONS__;\n"
+        "    var RE = /^\\s*\\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION|INFO)\\]([+-]?)[ \\t]*\\n?/i;\n"
+        "    function convert(bq) {\n"
+        "        var first = bq.firstElementChild;\n"
+        "        if (!first || first.tagName !== 'P') return;\n"
+        "        var node = first.firstChild;\n"
+        "        if (!node || node.nodeType !== 3) return;\n"
+        "        var m = node.nodeValue.match(RE);\n"
+        "        if (!m) return;\n"
+        "        var kind = m[1].toLowerCase();\n"
+        "        if (kind === 'info') kind = 'note';\n"
+        "        node.nodeValue = node.nodeValue.slice(m[0].length);\n"
+        "        if (!first.textContent.trim() && !first.querySelector('*')) {\n"
+        "            first.parentNode.removeChild(first);\n"
+        "        }\n"
+        "        var details = document.createElement('details');\n"
+        "        details.className = 'md-alert md-alert-' + kind;\n"
+        "        if (m[2] !== '-') details.setAttribute('open', '');\n"
+        "        var summary = document.createElement('summary');\n"
+        "        summary.className = 'md-alert-title';\n"
+        "        var icon = document.createElement('i');\n"
+        "        icon.className = 'fa-solid ' + (ICONS[kind] || 'fa-circle-info');\n"
+        "        icon.setAttribute('aria-hidden', 'true');\n"
+        "        summary.appendChild(icon);\n"
+        "        summary.appendChild(document.createTextNode(LABELS[kind] || kind));\n"
+        "        details.appendChild(summary);\n"
+        "        var body = document.createElement('div');\n"
+        "        body.className = 'md-alert-body';\n"
+        "        while (bq.firstChild) body.appendChild(bq.firstChild);\n"
+        "        details.appendChild(body);\n"
+        "        bq.parentNode.replaceChild(details, bq);\n"
+        "    }\n"
+        "    function apply(root) {\n"
+        "        var scope = root || document;\n"
+        "        var list = [];\n"
+        "        if (scope.nodeType === 1 && scope.tagName === 'BLOCKQUOTE') list.push(scope);\n"
+        "        if (scope.querySelectorAll) {\n"
+        "            var found = scope.querySelectorAll('blockquote');\n"
+        "            for (var i = 0; i < found.length; i++) list.push(found[i]);\n"
+        "        }\n"
+        "        for (var j = 0; j < list.length; j++) convert(list[j]);\n"
+        "    }\n"
+        "    return { apply: apply };\n"
+        "})();\n"
+        "</script>"
+    ).replace("__LABELS__", labels).replace("__ICONS__", icons)
 
 
 def read_disclaimer(lang: str) -> str:

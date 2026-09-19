@@ -39,6 +39,7 @@ FEATURES = [
     {"key": "note_folders", "icon": "fa-folder"},       # 笔记文件夹（单归属归类 + 列表页筛选）
     {"key": "note_pins", "icon": "fa-thumbtack"},       # 笔记置顶（列表页图钉开关，置顶浮前）
     {"key": "heading_anchors", "icon": "fa-anchor"},    # Markdown 标题锚点（slug id + 页内 #链接 + 深链定位）
+    {"key": "markdown_alerts", "icon": "fa-circle-exclamation"},  # Markdown 提示卡片（[!NOTE] 等 GitHub 风格可折叠卡片）
     {"key": "note_images", "icon": "fa-image"},         # 笔记图床（编辑器粘贴/拖拽上传 + /image/<u>/<id> 服务）
     {"key": "note_attachments", "icon": "fa-paperclip"}, # 笔记附件（编辑器上传 + /attachment/<u>/<id> 服务）
     {"key": "comments", "icon": "fa-comments"},         # 评论系统（笔记/分享页面评论功能）

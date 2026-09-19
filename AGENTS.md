@@ -38,7 +38,7 @@
 ## 关键安全约定
 - **CSRF 防护**：全站启用，不要在任何表单中省略 `{{ csrf_token() }}`。
 - **限流**：基于 IP，使用 Flask-Limiter；新增路由时务必添加 `@limiter.limit` 装饰器。限流存储可用 `REDIS_URL` 切换为共享 Redis。
-- **XSS 防护**：所有 Markdown 渲染必须通过 `utils.render_markdown_html`（内部使用 bleach 清洗）。
+- **XSS 防护**：所有 Markdown 渲染必须通过 `utils.render_markdown_html`（内部使用 bleach 清洗）；GitHub 风格提示卡片（`> [!NOTE]` 等）在 utils 内以 treeprocessor 转为 `<details>`，输出前同样过 bleach——新增标签/属性时须同步 `allowed_tags`/`allowed_attrs` 白名单。
 - **路径安全**：笔记 ID 和用户名必须符合正则 `^[a-zA-Z0-9_\-]+$`，避免路径穿越；后端键由 storage 层统一构造，解析用 `parse_note_key`。
 - **Cookie**：生产环境应开启 `secure_cookies`（仓库 config.json 已默认开启，本地开发请关闭）。
 

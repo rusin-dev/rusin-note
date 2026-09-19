@@ -242,6 +242,12 @@ STRINGS = {
         "note_delete_confirm": "确定删除这篇笔记吗？此操作不可撤销。",
         # Markdown 标题锚点
         "note_anchor_title": "跳转到此标题",
+        # Markdown 提示卡片（[!NOTE] 等 GitHub 风格可折叠卡片）
+        "md_alert_note": "说明",
+        "md_alert_tip": "提示",
+        "md_alert_important": "重要",
+        "md_alert_warning": "警告",
+        "md_alert_caution": "注意",
         # 笔记图床
         "feature_note_images": "笔记图床",
         "user_images_link": "图床管理",
@@ -312,6 +318,7 @@ STRINGS = {
         "feature_note_pins": "笔记置顶",
         "feature_note_attachments": "笔记附件",
         "feature_heading_anchors": "Markdown 标题锚点",
+        "feature_markdown_alerts": "Markdown 提示卡片",
         "feature_latex_render": "LaTeX 公式渲染",
         "feature_code_highlight": "代码高亮",
         "feature_avatar": "用户头像",
@@ -650,6 +657,12 @@ STRINGS = {
         "note_delete_confirm": "Delete this note? This cannot be undone.",
         # Markdown heading anchors
         "note_anchor_title": "Link to this heading",
+        # Markdown alert cards ([!NOTE] etc., collapsible)
+        "md_alert_note": "Note",
+        "md_alert_tip": "Tip",
+        "md_alert_important": "Important",
+        "md_alert_warning": "Warning",
+        "md_alert_caution": "Caution",
         # Note image hosting
         "feature_note_images": "Note Image Hosting",
         "user_images_link": "Image Hosting",
@@ -720,6 +733,7 @@ STRINGS = {
         "feature_note_pins": "Note Pinning",
         "feature_note_attachments": "Note Attachments",
         "feature_heading_anchors": "Markdown Heading Anchors",
+        "feature_markdown_alerts": "Markdown Alerts",
         "feature_latex_render": "LaTeX Rendering",
         "feature_code_highlight": "Code Highlighting",
         "feature_avatar": "User Avatars",
@@ -875,7 +889,7 @@ def register_i18n(app: Flask) -> None:
     from .theme import THEME_VARS, get_theme_script
     from .utils import (
         get_avatar_url, render_code_highlight_head, render_heading_anchors_head,
-        render_pygments_head,
+        render_markdown_alerts_head, render_pygments_head,
     )
 
     @app.context_processor
@@ -904,6 +918,7 @@ def register_i18n(app: Flask) -> None:
             "site_name": _cfg.SITE_NAME,
             "code_highlight_head": render_code_highlight_head(),
             "heading_anchors_head": render_heading_anchors_head(),
+            "markdown_alerts_head": render_markdown_alerts_head(),
             "get_avatar": get_avatar_url,
             "feature_enabled": feature_enabled,
         }

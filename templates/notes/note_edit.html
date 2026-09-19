@@ -15,6 +15,7 @@
     {{ latex_head|safe }}
     {{ code_highlight_head|safe }}
     {{ heading_anchors_head|safe }}
+    {{ markdown_alerts_head|safe }}
     <style>
         {{ theme_vars|safe }}
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -596,10 +597,11 @@
                 if (window.DOMPurify) {
                     html = window.DOMPurify.sanitize(html, {
                         ALLOWED_TAGS: ['p','br','strong','em','u','del','strike','a','ul','ol','li','blockquote','pre','code','h1','h2','h3','h4','h5','h6','hr','table','thead','tbody','tr','th','td','div','span','img','input','dl','dt','dd','details','summary','abbr','sup','sub'],
-                        ALLOWED_ATTR: ['href','title','target','class','src','alt','rel','type','checked','disabled','id']
+                        ALLOWED_ATTR: ['href','title','target','class','src','alt','rel','type','checked','disabled','id','open']
                     });
                 }
                 previewBody.innerHTML = html;
+                if (window.MarkdownAlerts) window.MarkdownAlerts.apply(previewBody);
                 if (window.NoteRefs) window.NoteRefs.linkify(previewBody);
                 if (window.CodeHighlight) window.CodeHighlight.apply(previewBody);
                 if (window.HeadingAnchors) window.HeadingAnchors.apply(previewBody);
