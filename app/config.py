@@ -121,8 +121,9 @@ DEFAULT_CONFIG = {
     },
     "attachments": {                          # 笔记附件：编辑器上传，/attachment/<u>/<id> 公开访问
         "enabled": True,
-        "max_size_kb": 10240,                  # 单个附件上限（KB），默认 10 MB
-        "max_total_kb": 10240,                 # 每用户配额（KB），默认 10 MB
+        "max_size_kb": 50,                     # 单个附件上限（KB）
+        "max_per_note_kb": 500,                # 单个笔记引用附件总量上限（KB）
+        "max_total_kb": 10240,                 # 每用户配额（KB）
         "blocked_extensions": [                # 黑名单扩展名（不含点），可执行文件
             "exe", "bat", "cmd", "com", "msi", "scr", "pif",
             "vbs", "vbe", "js", "jse", "ws", "wsf", "wsc", "wsh",
@@ -457,9 +458,11 @@ MAX_IMAGE_TOTAL_BYTES = MAX_IMAGE_TOTAL_KB * 1024
 # ---------- 笔记附件配置 ----------
 ATTACHMENTS_CFG = config.get("attachments", DEFAULT_CONFIG["attachments"])
 ATTACHMENTS_ENABLED = bool(ATTACHMENTS_CFG.get("enabled", True))
-MAX_ATTACHMENT_SIZE_KB = ATTACHMENTS_CFG.get("max_size_kb", 10240)
+MAX_ATTACHMENT_SIZE_KB = ATTACHMENTS_CFG.get("max_size_kb", 50)
+MAX_ATTACHMENT_PER_NOTE_KB = ATTACHMENTS_CFG.get("max_per_note_kb", 500)
 MAX_ATTACHMENT_TOTAL_KB = ATTACHMENTS_CFG.get("max_total_kb", 10240)
 MAX_ATTACHMENT_SIZE_BYTES = MAX_ATTACHMENT_SIZE_KB * 1024
+MAX_ATTACHMENT_PER_NOTE_BYTES = MAX_ATTACHMENT_PER_NOTE_KB * 1024
 MAX_ATTACHMENT_TOTAL_BYTES = MAX_ATTACHMENT_TOTAL_KB * 1024
 ATTACHMENT_BLOCKED_EXTENSIONS = ATTACHMENTS_CFG.get("blocked_extensions", DEFAULT_CONFIG["attachments"]["blocked_extensions"])
 

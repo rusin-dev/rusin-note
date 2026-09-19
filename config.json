@@ -96,7 +96,8 @@
   },
   "attachments": {
     "enabled": true,
-    "max_size_kb": 10240,
+    "max_size_kb": 50,
+    "max_per_note_kb": 500,
     "max_total_kb": 10240,
     "blocked_extensions": [
       "exe", "bat", "cmd", "com", "msi", "scr", "pif",

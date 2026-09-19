@@ -23,6 +23,9 @@ logger = create_logger("attachments")
 # 附件 ID 正则：随机串 + . + 扩展名
 _ATTACHMENT_ID_RE = re.compile(r'^[a-zA-Z0-9_\-]+\.[a-zA-Z0-9_\-]+$')
 
+# 笔记内容中引用的附件链接：/attachment/<user>/<id>
+_ATTACHMENT_LINK_RE = re.compile(r'/attachment/([a-zA-Z0-9_\-]+)/([a-zA-Z0-9_\-]+\.[a-zA-Z0-9_\-]+)')
+
 # 构建黑名单集合（包含点，用于快速查找）
 _blocked_extensions_set = set()
 for _ext in config.ATTACHMENT_BLOCKED_EXTENSIONS:
@@ -182,3 +185,27 @@ def user_attachment_usage(username: str) -> int:
     except StorageError as e:
         logger.error(f"[错误] 统计附件用量 {username} 失败: {e}")
         return 0
+
+
+def note_attachment_usage(username: str, content: str) -> int:
+    """统计笔记内容中引用的该用户附件总大小（字节，同一附件只计一次）。"""
+    if not content:
+        return 0
+    total = 0
+    seen: set[str] = set()
+    for m in _ATTACHMENT_LINK_RE.finditer(content):
+        ref_user, attachment_id = m.group(1), m.group(2)
+        if ref_user != username or attachment_id in seen:
+            continue
+        if not validate_attachment_id(attachment_id):
+            continue
+        seen.add(attachment_id)
+        size = get_attachment_size(username, attachment_id)
+        if size:
+            total += size
+    return total
+
+
+def note_attachment_quota_ok(username: str, content: str, extra_bytes: int = 0) -> bool:
+    """判断「笔记已引用附件 + 额外字节」是否在单笔记配额内。"""
+    return note_attachment_usage(username, content) + extra_bytes <= config.MAX_ATTACHMENT_PER_NOTE_BYTES

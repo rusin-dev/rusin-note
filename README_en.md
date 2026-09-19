@@ -39,7 +39,7 @@
 - **Note folders**: Assign each note to one folder and filter the user note list by folder.
 - **Pinned notes**: Pin important notes from the note list so they remain at the top.
 - **Note image hosting**: Paste or drag PNG, JPEG, GIF, or WebP images into the editor. Formats are validated by file signature, images are referenced through Markdown, and defaults are 2MB per image and 50MB per user.
-- **Note attachments**: Upload arbitrary file types (executables blocked by default), configurable per-file size limit (default 10MB) and per-user quota (default 10MB), drag-drop upload on management page, referenced as links in notes.
+- **Note attachments**: Upload arbitrary file types (executables blocked by default), configurable per-file size limit (default 50KB) and per-note quota (default 500KB), drag-drop upload on management page, referenced as links in notes.
 - **Comment system**: Comment functionality for notes and share pages, supports anonymous comments, configurable max comments (default 200), cooldown time, paginated loading, similar posting wait mechanism to benben feed.
 - **Benben feed**: A persistent lightweight feed where logged-in users can post and anonymous users can read, with live preview, pagination, post cooldowns, and a Reply action that fills `|| @username: original content`.
 - **Feature flags**: Admins can toggle public notes, benben, share links, registration, references, tags, folders, pins, heading anchors, images, attachments, comments, LaTeX, highlighting, avatars, and organizations at `/admin/features`. Changes are persisted and take effect without restarting; disabled routes return 404 and their entry points are hidden.
@@ -425,7 +425,8 @@ rusin-note:.
     - PNG, JPEG, GIF, and WebP are accepted after file-signature validation; SVG is rejected.
 - `attachments`: note attachments (attachment button in editor uploads files, `/attachment/<u>/<id>` for public download).
     - `enabled`: enable attachments, default `true`; set `false` to hide the attachment button in the editor and return 404 on the management page;
-    - `max_size_kb`: max single file size (KB), default `10240` (10MB);
+    - `max_size_kb`: max single file size (KB), default `50`;
+    - `max_per_note_kb`: max total attachments referenced by one note (KB), default `500`;
     - `max_total_kb`: per-user total quota (KB), default `10240` (10MB);
     - `blocked_extensions`: list of blocked file extensions (blacklist mode), default includes `.exe`, `.bat`, `.sh`, `.zip` and other executables/archives.
 - `comments`: comment system (`/comments/<target_type>/<target_id>`, supports notes and share pages).

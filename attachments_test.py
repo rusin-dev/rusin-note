@@ -65,11 +65,15 @@ def create_note(client, username, content=""):
     return note_id, csrf
 
 
-def upload_attachment(client, username, csrf, data, filename="document.pdf"):
-    return client.post(f"/user/{username}/attachments", data={
+def upload_attachment(client, username, csrf, data, filename="document.pdf", content=None):
+    form = {
         "file": (io.BytesIO(data), filename, "application/octet-stream"),
         "csrf_token": csrf,
-    }, content_type="multipart/form-data")
+    }
+    if content is not None:
+        form["content"] = content
+    return client.post(f"/user/{username}/attachments", data=form,
+                       content_type="multipart/form-data")
 
 
 def main():
@@ -160,6 +164,29 @@ def main():
     r = client.get(f"/user/{USER}/attachments")
     check("/user/<u>/attachments 是管理页而非笔记", r.status_code == 200
           and "attachment-grid" in r.get_data(as_text=True))
+
+    # ===== D2. 单笔记附件配额 =====
+    print("[D2] 单笔记附件配额")
+    from app.attachments import note_attachment_usage
+    ref_content = f"[报告]({att_path})"
+    check("note_attachment_usage 统计引用附件大小",
+          note_attachment_usage(USER, ref_content) == len(PDF_DATA))
+    old_per_note = cfg.MAX_ATTACHMENT_PER_NOTE_BYTES
+    cfg.MAX_ATTACHMENT_PER_NOTE_BYTES = 10  # 已有附件 109 字节，必然超限
+    r = client.post(f"/user/{USER}/{note_id}", data={
+        "content": ref_content, "csrf_token": csrf})
+    try:
+        note_quota_err = json.loads(r.get_data(as_text=True)).get("error", "")
+    except ValueError:
+        note_quota_err = ""
+    check("保存时超单笔记配额 -> 400", r.status_code == 400
+          and "该笔记的附件" in note_quota_err)
+    r = upload_attachment(client, USER, csrf, b"x" * 10, "small.txt", content=ref_content)
+    check("上传时超单笔记配额 -> 400", r.status_code == 400)
+    cfg.MAX_ATTACHMENT_PER_NOTE_BYTES = old_per_note
+    r = client.post(f"/user/{USER}/{note_id}", data={
+        "content": ref_content, "csrf_token": csrf})
+    check("配额充足时保存成功", r.status_code == 302)
 
     # ===== E. Markdown 渲染（附件链接） =====
     print("[E] Markdown 渲染")
