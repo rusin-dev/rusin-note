@@ -465,6 +465,7 @@
                 const fd = new FormData();
                 fd.append('file', file, file.name || 'file');
                 fd.append(CSRF_FIELD, form.querySelector('input[name="' + CSRF_FIELD + '"]').value);
+                fd.append('content', textarea.value);
                 fetch(ATTACHMENTS_API, { method: 'POST', body: fd })
                     .then(r => r.json().then(j => {
                         if (!r.ok) throw new Error(j.error || ('HTTP ' + r.status));
@@ -559,14 +560,19 @@
                     body: body
                 })
                 .then(response => {
-                    isSaving = false;
                     if (response.ok) {
+                        isSaving = false;
                         showStatus(L10N.saved, '');
                         showHint(L10N.savedHint);
-                    } else {
-                        showStatus(L10N.failedStatus.replace('{status}', response.status), 'error');
-                        showHint(L10N.retryHint);
+                        return null;
                     }
+                    return response.json()
+                        .catch(function() { return {}; })
+                        .then(function(j) {
+                            isSaving = false;
+                            showStatus(L10N.failedStatus.replace('{status}', response.status), 'error');
+                            showHint(j.error || L10N.retryHint);
+                        });
                 })
                 .catch(error => {
                     isSaving = false;

@@ -26,6 +26,7 @@ from ..attachments import (
     get_attachment_mtime,
     get_attachment_size,
     list_user_attachments,
+    note_attachment_quota_ok,
     read_attachment_meta,
     user_attachment_usage,
     validate_attachment_id,
@@ -269,7 +270,8 @@ def attachments_page(username):
 @limiter.limit(lambda: f"{config.RATE_MAX} per {config.RATE_WINDOW} second")
 def attachments_upload(username):
     """编辑器上传附件（multipart，file 字段 + csrf_token）：
-    校验链 类型黑名单 → 单文件大小 → 用户配额，成功返回 JSON {url, name, id}。"""
+    校验链 类型黑名单 → 单文件大小 → 单笔记配额（携带编辑器内容时）→ 用户配额，
+    成功返回 JSON {url, name, id}。"""
     if not validate_username(username):
         abort(400)
     _require_auth(username)
@@ -295,6 +297,12 @@ def attachments_upload(username):
     if len(data) > config.MAX_ATTACHMENT_SIZE_BYTES:
         return jsonify({"error": t(lang, "err_attachment_too_large",
                                    max=config.MAX_ATTACHMENT_SIZE_KB)}), 400
+    
+    # 单笔记配额校验（编辑器上传会携带当前内容，用于估算插入后的附件总量）
+    editor_content = request.form.get("content", "")
+    if editor_content and not note_attachment_quota_ok(username, editor_content, len(data)):
+        return jsonify({"error": t(lang, "err_attachment_note_quota",
+                                   total=config.MAX_ATTACHMENT_PER_NOTE_KB)}), 400
     
     # 配额校验（用户总量）
     if user_attachment_usage(username) + len(data) > config.MAX_ATTACHMENT_TOTAL_BYTES:
@@ -488,6 +496,10 @@ def user_note_post(username, note_id):
     check_note_id(note_id)
     _require_auth(username)
     content = request.form.get("content", "")
+    # 单笔记附件配额：内容引用的附件总量不得超过限制
+    if content and feature_enabled("note_attachments") and not note_attachment_quota_ok(username, content):
+        return jsonify({"error": t(getattr(g, "lang", "zh"), "err_attachment_note_quota",
+                                   total=config.MAX_ATTACHMENT_PER_NOTE_KB)}), 400
     if not write_note(username, note_id, content):
         abort(500)
     # 标签与文件夹随内容一起保存；内容为空即删除笔记，两者已由 write_note
