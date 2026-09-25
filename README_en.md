@@ -40,7 +40,7 @@
 - **Note folders**: Assign each note to one folder and filter the user note list by folder.
 - **Pinned notes**: Pin important notes from the note list so they remain at the top.
 - **Note image hosting**: Paste or drag PNG, JPEG, GIF, or WebP images into the editor. Formats are validated by file signature, images are referenced through Markdown, and defaults are 2MB per image and 50MB per user.
-- **Note attachments**: Upload arbitrary file types (executables blocked by default), configurable per-file size limit (default 50KB) and per-note quota (default 500KB), drag-drop upload on management page, referenced as links in notes.
+- **Note attachments**: Upload arbitrary file types (executables blocked by default), configurable per-file size limit (default 50KB) and per-note quota (default 500KB), drag-drop upload on management page, referenced as links in notes. Downloads require a logged-in account by default (`/attachment/<u>/<id>` returns 401 for anonymous visitors), and per-user in-flight queues are capped ([#191](https://github.com/rusin-dev/rusin-note/issues/191): 1 concurrent download, 1 concurrent upload) so a thousand trickling (1KB/s) connections or 100 parallel download threads cannot occupy the workers or saturate egress bandwidth.
 - **Comment system**: Comment functionality for notes and share pages, supports anonymous comments, configurable max comments (default 200), cooldown time, paginated loading, similar posting wait mechanism to benben feed.
 - **Benben feed**: A persistent lightweight feed where logged-in users can post and anonymous users can read, with live preview, pagination, post cooldowns, and a Reply action that fills `|| @username: original content`.
 - **Feature flags**: Admins can toggle public notes, benben, share links, registration, references, tags, folders, pins, heading anchors, alert cards, images, attachments, comments, LaTeX, highlighting, avatars, and organizations at `/admin/features`. Changes are persisted and take effect without restarting; disabled routes return 404 and their entry points are hidden.
@@ -279,6 +279,7 @@ rusin-note:.
 │  │  auth.py (password hashing & session auth)
 │  │  background.py (background cleanup tasks)
 │  │  comments.py (comment validation and business API)
+│  │  concurrency.py (in-process concurrency gate: per-user in-flight request cap)
 │  │  config.py (configuration loading & global constants)
 │  │  extensions.py (Flask extension instances)
 │  │  feature_flags.py (feature registry and persisted runtime state)
@@ -466,11 +467,17 @@ Deployment notes: add `"cloudflare"` to `trusted_proxies` when Cloudflare is in 
     - `max_size_kb`: maximum image size, default `2048` (2MB);
     - `max_total_kb`: per-user image quota, default `51200` (50MB);
     - PNG, JPEG, GIF, and WebP are accepted after file-signature validation; SVG is rejected.
-- `attachments`: note attachments (attachment button in editor uploads files, `/attachment/<u>/<id>` for public download).
+- `attachments`: note attachments (attachment button in editor uploads files; `/attachment/<u>/<id>` requires login by default).
     - `enabled`: enable attachments, default `true`; set `false` to hide the attachment button in the editor and return 404 on the management page;
     - `max_size_kb`: max single file size (KB), default `50`;
     - `max_per_note_kb`: max total attachments referenced by one note (KB), default `500`;
     - `max_total_kb`: per-user total quota (KB), default `10240` (10MB);
+    - `allow_anonymous_download`: allow **anonymous** attachment downloads, default `false` — anonymous requests to `/attachment/<u>/<id>` get 401 (the error page asks the visitor to log in); set `true` to restore the old "anyone with the link can download" behaviour;
+    - `max_concurrent_downloads`: max **simultaneous downloads per user** (in-flight requests for one account), default `1` ([#191](https://github.com/rusin-dev/rusin-note/issues/191) "limit to 1 queue"); `0` disables the cap;
+    - `max_concurrent_uploads`: max **simultaneous uploads per user** (in-flight requests for one account), default `1`; `0` disables the cap;
+    - `download_rate_limit`: dedicated per-IP rate limit for the attachment download route, `window_seconds` (default `60`) and `max_requests` (default `120`);
+    - These concurrency caps stop "open a thousand connections and trickle each at 1KB/s" or "100 threads downloading 100 files" abuse, where the request rate stays under the limiter but workers stay occupied and egress bandwidth is saturated: over the cap, downloads return 429 with `Retry-After` and uploads return a 429 JSON error the editor can display. Over-limit requests are **rejected, not queued** (queueing would occupy workers just the same). Counting is **per process** (`app/concurrency.py`), so with N gunicorn workers the effective cap is about `N × value`; strict cross-instance counting would need an atomic counter in external storage, which this project does not use;
+    - Attachments are referenced as links by default; if one note embeds several attachment images (more concurrent requests than the cap), raise `max_concurrent_downloads` or set it to `0`;
     - `blocked_extensions`: list of blocked file extensions (blacklist mode), default includes `.exe`, `.bat`, `.sh`, `.zip` and other executables/archives.
 - `comments`: comment system (`/comments/<target_type>/<target_id>`, supports notes and share pages).
     - `enabled`: enable comments, default `true`; set `false` to return 404 on comment pages;

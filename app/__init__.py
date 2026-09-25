@@ -144,15 +144,15 @@ def create_app() -> Flask:
 
 
 def register_error_handlers(app: Flask) -> None:
-    from flask import abort, g, jsonify, request
+    from flask import abort, g, jsonify, make_response, request
 
     from flask_wtf.csrf import CSRFError
+    from .i18n import t
 
     @app.errorhandler(CSRFError)
     def err_csrf(e):
         if request.path.startswith("/user/") and request.method == "POST":
             lang = getattr(g, "lang", "zh")
-            from .i18n import t
             return jsonify({"error": t(lang, "err_csrf")}), 400
         return render_template("errors/400.html",
                                message=str(getattr(e, "description", "Bad Request"))), 400
@@ -168,7 +168,9 @@ def register_error_handlers(app: Flask) -> None:
         from flask import request
         if request.path.startswith("/user/") and "/shares" in request.path:
             shares = True
-        return render_template("errors/401.html", shares=shares), 401
+        # 附件下载等场景会带 description 说明具体原因（默认页面文案不带）
+        return render_template("errors/401.html", shares=shares,
+                               message=str(getattr(e, "description", "") or "")), 401
 
     @app.errorhandler(403)
     def err_403(e):
@@ -183,14 +185,28 @@ def register_error_handlers(app: Flask) -> None:
     def err_413(e):
         if request.path.startswith("/user/") and request.method == "POST":
             lang = getattr(g, "lang", "zh")
-            from .i18n import t
             from . import config as app_config
             return jsonify({"error": t(lang, "err_file_too_large", max=app_config.MAX_ATTACHMENT_SIZE_KB)}), 413
         return render_template("errors/400.html", message="Request body too large"), 413
 
     @app.errorhandler(429)
     def err_429(e):
-        return render_template("errors/429.html"), 429
+        """429 响应：附件上传接口返回 JSON（编辑器 fetch 需要），其余返回错误页。
+
+        ``Retry-After`` 提示客户端稍后重试；错误页文案取自
+        ``abort(429, description=...)``（如「单用户同时下载过多」，限流触发时可能为空）。
+        """
+        lang = getattr(g, "lang", "zh")
+        if (request.method == "POST" and request.path.startswith("/user/")
+                and request.path.endswith("/attachments")):
+            # 编辑器/管理页用 fetch 上传，限流触发时也必须是 JSON 才能展示原因
+            resp = jsonify({"error": t(lang, "err_too_many_requests")})
+            resp.headers["Retry-After"] = "1"
+            return resp, 429
+        message = str(getattr(e, "description", "") or "")
+        resp = make_response(render_template("errors/429.html", message=message), 429)
+        resp.headers["Retry-After"] = "1"
+        return resp
 
     @app.errorhandler(500)
     def err_500(e):

@@ -110,6 +110,13 @@
     "max_size_kb": 50,
     "max_per_note_kb": 500,
     "max_total_kb": 10240,
+    "allow_anonymous_download": false,
+    "max_concurrent_downloads": 1,
+    "max_concurrent_uploads": 1,
+    "download_rate_limit": {
+      "window_seconds": 60,
+      "max_requests": 120
+    },
     "blocked_extensions": [
       "exe", "bat", "cmd", "com", "msi", "scr", "pif",
       "vbs", "vbe", "js", "jse", "ws", "wsf", "wsc", "wsh",

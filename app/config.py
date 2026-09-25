@@ -129,11 +129,18 @@ DEFAULT_CONFIG = {
         "max_size_kb": 2048,                   # 单张图片上限（KB）
         "max_total_kb": 51200                  # 每用户配额（KB）
     },
-    "attachments": {                          # 笔记附件：编辑器上传，/attachment/<u>/<id> 公开访问
+    "attachments": {                          # 笔记附件：编辑器上传，/attachment/<u>/<id> 需登录后下载
         "enabled": True,
         "max_size_kb": 50,                     # 单个附件上限（KB）
         "max_per_note_kb": 500,                # 单个笔记引用附件总量上限（KB）
         "max_total_kb": 10240,                 # 每用户配额（KB）
+        "allow_anonymous_download": False,     # 是否允许匿名（未登录）下载附件，默认禁止
+        "max_concurrent_downloads": 1,         # 单用户同时下载附件上限（#191：限制 1 个队列；0 = 不限）
+        "max_concurrent_uploads": 1,           # 单用户同时上传附件上限（#191：限制 1 个队列；0 = 不限）
+        "download_rate_limit": {               # 附件下载路由的每 IP 限流
+            "window_seconds": 60,
+            "max_requests": 120
+        },
         "blocked_extensions": [                # 黑名单扩展名（不含点），可执行文件
             "exe", "bat", "cmd", "com", "msi", "scr", "pif",
             "vbs", "vbe", "js", "jse", "ws", "wsf", "wsc", "wsh",
@@ -510,6 +517,37 @@ MAX_ATTACHMENT_SIZE_BYTES = MAX_ATTACHMENT_SIZE_KB * 1024
 MAX_ATTACHMENT_PER_NOTE_BYTES = MAX_ATTACHMENT_PER_NOTE_KB * 1024
 MAX_ATTACHMENT_TOTAL_BYTES = MAX_ATTACHMENT_TOTAL_KB * 1024
 ATTACHMENT_BLOCKED_EXTENSIONS = ATTACHMENTS_CFG.get("blocked_extensions", DEFAULT_CONFIG["attachments"]["blocked_extensions"])
+
+# 附件下载权限：默认「不允许匿名用户下载」（未登录访问 /attachment/<u>/<id> 返回 401）；
+# 置 true 则放开为「知道链接即可下载」的旧行为。
+ATTACHMENTS_ALLOW_ANONYMOUS_DOWNLOAD = bool(ATTACHMENTS_CFG.get(
+    "allow_anonymous_download", DEFAULT_CONFIG["attachments"]["allow_anonymous_download"]))
+
+
+def _positive_int(value, default: int = 0) -> int:
+    """解析「并发上限」类整数配置：非法值回退默认，负数归一为 0（= 不限）。"""
+    try:
+        return max(0, int(value))
+    except (TypeError, ValueError):
+        return default
+
+
+# 单用户并发上限（同时在途的请求数）：慢速连接（如 1KB/s）会长期占用 worker，
+# 单纯限制「单位时间请求数」拦不住，因此对在途数量单独设闸（见 app/concurrency.py）。
+# 默认各 1 个（#191「单用户上传/下载队列限制 1 队列」）：同一账号同时只允许
+# 1 个下载 + 1 个上传在途，超出直接 429（不做排队等待——排队同样占用 worker）。
+MAX_CONCURRENT_ATTACHMENT_DOWNLOADS = _positive_int(ATTACHMENTS_CFG.get(
+    "max_concurrent_downloads", DEFAULT_CONFIG["attachments"]["max_concurrent_downloads"]), 1)
+MAX_CONCURRENT_ATTACHMENT_UPLOADS = _positive_int(ATTACHMENTS_CFG.get(
+    "max_concurrent_uploads", DEFAULT_CONFIG["attachments"]["max_concurrent_uploads"]), 1)
+
+# 附件下载路由的独立限流（与 GET 限流解耦：下载多为长连接，阈值可单独调）
+ATTACHMENT_DOWNLOAD_RATE_CFG = ATTACHMENTS_CFG.get(
+    "download_rate_limit", DEFAULT_CONFIG["attachments"]["download_rate_limit"])
+ATTACHMENT_DOWNLOAD_RATE_WINDOW = _positive_int(
+    ATTACHMENT_DOWNLOAD_RATE_CFG.get("window_seconds", 60), 60) or 60
+ATTACHMENT_DOWNLOAD_RATE_MAX = _positive_int(
+    ATTACHMENT_DOWNLOAD_RATE_CFG.get("max_requests", 120), 120) or 120
 
 # ---------- 评论系统配置 ----------
 COMMENTS_CFG = config.get("comments", DEFAULT_CONFIG["comments"])

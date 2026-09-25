@@ -105,6 +105,20 @@ def upload_image(client, username: str, csrf: str, data: bytes,
     }, content_type="multipart/form-data")
 
 
+def upload_attachment(client, username: str, csrf: str, data: bytes,
+                      filename: str = "doc.pdf", mime: str = "application/pdf",
+                      content: str | None = None):
+    """以 multipart 表单上传附件（可选携带编辑器内容，用于单笔记配额估算）。"""
+    payload = {
+        "file": (io.BytesIO(data), filename, mime),
+        "csrf_token": csrf,
+    }
+    if content is not None:
+        payload["content"] = content
+    return client.post(f"/user/{username}/attachments", data=payload,
+                       content_type="multipart/form-data")
+
+
 def pin_note(client, username: str, note_id: str, tag: str | None = None,
              folder: str | None = None, csrf: str | None = None):
     """切换笔记置顶状态（可在请求中保留筛选项）。"""

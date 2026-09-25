@@ -4,6 +4,7 @@
 - [#114 [Feature] 添加插件系统](https://github.com/rusin-dev/rusin-note/issues/114)（`app/plugins.py`，含 zip 安装 / auth_token 校验 / 命名空间检查 / 上游更新，详见 README「插件系统」）
 - [#87 [Feature] 快捷引用](https://github.com/rusin-dev/rusin-note/issues/87)（GitHub Issues 风格 `#` 引用：编辑器自动补全 + Markdown 渲染链接化，`tests/refs_test.py` 端到端测试，详见 README「产品特性」）
 - [#127 添加犇犇的 '@' 功能](https://github.com/rusin-dev/rusin-note/issues/127)
+- [#191 [Feature] 单用户上传/下载队列限制1队列](https://github.com/rusin-dev/rusin-note/issues/191)（`app/concurrency.py` 进程内并发闸门：每账号默认 1 个下载 + 1 个上传在途，超限 429 + `Retry-After`；同时 `/attachment/<u>/<id>` 默认禁止匿名下载，`tests/test_attachments.py` 端到端测试）
 
 ## 会实现
 
