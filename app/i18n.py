@@ -91,6 +91,7 @@ STRINGS = {
         "err_username_invalid": "用户名只能包含字母、数字、下划线、连字符",
         "err_password_mismatch": "两次密码不一致",
         "err_csrf": "CSRF 验证失败，请刷新页面后重试",
+        "err_ip_blocked": "你的 IP 已被本站封禁，无法访问",
         "err_password_weak": "密码不符合要求：{req}",
         "err_username_taken": "用户名不可用",
         # 用户设置
@@ -507,6 +508,7 @@ STRINGS = {
         "err_username_invalid": "Username may only contain letters, digits, underscores and hyphens",
         "err_password_mismatch": "Passwords do not match",
         "err_csrf": "CSRF verification failed, please refresh and try again",
+        "err_ip_blocked": "Your IP has been blocked from this site",
         "err_password_weak": "Password does not meet requirements: {req}",
         "err_username_taken": "Username unavailable",
         # User settings

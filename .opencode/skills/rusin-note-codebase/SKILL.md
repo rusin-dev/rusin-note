@@ -72,8 +72,9 @@ upstash 后端所有键统一加 `rusin:` 前缀；memory 后端 get/set 带 dee
 | `store.py` | 用户/会话/分享/犇犇的内存缓存 + 存储层持久化：`register_user`/`store_session`/`remove_session`/`delete_sessions_if`/`create_share`/`delete_share`/`add_benben_post` 均走「线程锁 + storage.lock + 重读合并 + 整值写入」；分享视图计数延迟批量持久化（`increment_share_views`/`flush_share_views`）；犇犇发布冷却（内存态）、分页读取（带周期重载） |
 | `auth.py` | PBKDF2-HMAC-SHA256 密码哈希（兼容旧单轮 SHA-256 可验证、登录后自然升级）、会话 token 生成/校验（存哈希）、过期会话清理、密码复杂度检查 |
 | `notes.py` | 笔记读写走 `storage` 后端（无路径穿越代码——校验交给 `validate_username`/`validate_note_id` 正则）、ID/用户名校验（含保留名单）、`note_exists`、统计（30s TTL 缓存）、随机 ID 生成、过期笔记清理 |
-| `middleware.py` | `before_request` 钩子：向 `flask.g` 写入 `client_ip`/`lang`/`theme`/`current_user`；`SERVERLESS` 时调用 `_opportunistic_cleanup()`（节流执行过期会话/笔记清理 + 视图刷盘）；`get_client_ip()` 按可信度取 `CF-Connecting-IP` > `X-Real-IP` > XFF 最右非空 > remote_addr（仅 `trust_proxy_headers` 开启时） |
-| `extensions.py` | CSRF（Flask-WTF）与 Limiter（Flask-Limiter）单例；限流 key 优先用 `g.client_ip`；`REDIS_URL` 环境变量切换限流共享存储 |
+| `middleware.py` | `before_request` 钩子：向 `flask.g` 写入 `client_ip`/`client_ip_source`/`lang`/`theme`/`current_user`/`rate_limit_exempt`；命中 `ip_blocklist` 直接 403；`SERVERLESS` 时调用 `_opportunistic_cleanup()`（节流执行过期会话/笔记清理 + 视图刷盘）；`get_client_ip()` 委托 `ip_utils.analyze_client_ip`（仅可信代理才采信代理头） |
+| `ip_utils.py` | **客户端 IP 安全解析（防 XFF 伪造）**：`parse_ip`（严格 IP 规范化，支持 `ip:port`/`[ipv6]:port`/IPv4-mapped）、`analyze_client_ip`（只有 TCP 直连对端命中 `trusted_proxies` 才采信代理头；XFF 从右往左、跳过可信代理取真实客户端；`"*"` 为按 `proxy_hops` 取值的兼容模式）、`ip_in_any`（CIDR + 预设 `loopback`/`private`/`cloudflare`，带解析缓存）、`note_ignored_proxy_headers`（伪造告警节流）、`clear_caches` |
+| `extensions.py` | CSRF（Flask-WTF）与 Limiter（Flask-Limiter）单例；限流 key 用安全解析后的 `g.client_ip`（`ip_allowlist` 命中时返回一次性键=免限流）；`default_limits` 为 `ip_rate_limit` 全局兜底；`on_breach` 记录审计日志；`REDIS_URL` 环境变量切换限流共享存储 |
 | `i18n.py` | 中英双语：`STRINGS` 字典（zh/en 成对），`t(lang, key)` 取翻译（缺 key 返回 key 本身）；语言检测 Cookie `rusin-lang` > Accept-Language > zh；`register_i18n` 注入模板全局 `t`/`lang`/`theme`/`current_user`/`site_name` 等 |
 | `theme.py` | 暗色主题 CSS 变量（`THEME_VARS`）与切换脚本（Cookie + localStorage + 系统偏好）、favicon 内存缓存 |
 | `logger.py` | `create_logger(name)` 返回写入 `log/{timestamp}.log` 的 RotatingFileHandler 日志器；文件不可写（无服务器只读 FS）时回退 stderr |
@@ -113,8 +114,8 @@ upstash 后端所有键统一加 `rusin:` 前缀；memory 后端 get/set 带 dee
 ## 安全与限流机制（改动时必须保持）
 
 - **CSRF**：Flask-WTF 全站开启（`WTF_CSRF_TIME_LIMIT=None`）
-- **限流**：Flask-Limiter，key 为 `g.client_ip`。分层：全局 POST `rate_limit`（30/60s）、GET `get_rate_limit`（45/60s）、保存类 POST `save_rate_limit`（120/60s）、注册 `register_rate_limit`（1/120s）。视图函数上用 `@limiter.limit(lambda: f"...")` 显式标注
-- **代理头**：`trust_proxy_headers` 默认 false，限流一律用 TCP 直连 IP，防伪造头绕过；置 true 后 `CF-Connecting-IP` > `X-Real-IP` > XFF 最右项
+- **限流**：Flask-Limiter，key 为安全解析后的客户端 IP。分层：全局 POST `rate_limit`（30/60s）、GET `get_rate_limit`（45/60s）、保存类 POST `save_rate_limit`（120/60s）、注册 `register_rate_limit`（1/120s）、**全站每 IP 总上限 `ip_rate_limit`（应用级作用域，300/60s，对所有路由累计生效）**。视图函数上用 `@limiter.limit(lambda: f"...")` 显式标注
+- **客户端 IP / 防 XFF 伪造**：`config.TRUST_PROXY_HEADERS` 默认 false（一律用 TCP 直连 IP）；置 true 后仍需 TCP 直连对端命中 `trusted_proxies`（默认 `["loopback","private"]`，可加 `"cloudflare"`；`"*"` 为不安全兼容模式）才采信代理头。头部值必须为合法 IP（超长/非法一律丢弃，XFF 最多 16 项），XFF 从右往左解析并逐层跳过可信代理。**不要使用 `ProxyFix`**（会被伪造 XFF 改写 `remote_addr`）。`ip_blocklist` 命中直接 403，`ip_allowlist` 命中免限流；环境变量 `RUSIN_TRUSTED_PROXIES`/`RUSIN_PROXY_HOPS`/`RUSIN_IP_ALLOWLIST`/`RUSIN_IP_BLOCKLIST` 可覆盖/追加。测试：`pytest tests/test_ip_limiter.py`
 - **XSS**：Markdown 渲染后经 bleach 白名单清洗（`utils.render_markdown_html`）；提示卡片输出 `<details>/<summary>` 前同样过 bleach，新增标签/属性须同步 `allowed_tags`/`allowed_attrs`
 - **密码**：PBKDF2 10 万次迭代慢哈希 + 常量时间比较；`PW_MAX_LENGTH` 硬上限 128 防超长输入 CPU DoS
 - **路径穿越**：笔记 ID 正则 `^[a-zA-Z0-9_\-]+$` + realpath/commonpath 双重校验；用户名/ID 有保留名单（`RESERVED_USERNAMES`、`FORBIDDEN_NOTE_IDS`）
@@ -123,8 +124,8 @@ upstash 后端所有键统一加 `rusin:` 前缀；memory 后端 get/set 带 dee
 ## 配置项（config.json 关键项）
 
 - `max_note_size_kb`（默认 512KB）、`sitename`
-- 限流四项：`rate_limit` / `get_rate_limit` / `save_rate_limit` / `register_rate_limit`
-- `trust_proxy_headers`、`secure_cookies`
+- 限流五项：`rate_limit` / `get_rate_limit` / `save_rate_limit` / `register_rate_limit` / `ip_rate_limit`（全站每 IP 总上限，应用级作用域，`max_requests` 置 0 关闭）
+- `trust_proxy_headers`、`trusted_proxies`（IP/CIDR 或预设 `loopback`/`private`/`cloudflare`/`"*"`）、`proxy_hops`、`ip_allowlist`（免限流）、`ip_blocklist`（403）、`secure_cookies`
 - `id_generation`（短链 ID 字符集/长度）、`share_token`（分享 token 长度 64/字符集）
 - `session_timeout`（会话超时，默认关）、`note_expiration`（笔记过期清理，默认关，每 30 分钟扫描）
 - `latex_render`（KaTeX CDN，默认 jsdelivr，可换 BootCDN）

@@ -46,7 +46,17 @@ DEFAULT_CONFIG = {
         "window_seconds": 120,
         "max_requests": 1
     },
+    "ip_rate_limit": {                      # 全站每 IP 总请求上限（应用级限流，对所有路由累计生效；max_requests=0 关闭）
+        "window_seconds": 60,
+        "max_requests": 300
+    },
     "trust_proxy_headers": False,           # 仅当部署在可信反向代理之后才置 True，否则一律用直连 IP
+    # 可信反向代理网段：仅「TCP 直连对端」命中该列表时才采信代理头（防伪造 XFF）。
+    # 元素可为 IP/CIDR，或预设名 loopback / private / cloudflare；"*" 表示信任任意对端（有伪造风险）
+    "trusted_proxies": ["loopback", "private"],
+    "proxy_hops": 1,                        # 兼容模式（trusted_proxies 为 "*"/留空）下 XFF 从右往左的代理跳数
+    "ip_allowlist": [],                     # 免限流 IP/CIDR 白名单（如监控、内网探活）
+    "ip_blocklist": [],                     # 直接拒绝（403）的 IP/CIDR 黑名单
     "secure_cookies": False,                # HTTPS 部署时置 True，为会话 Cookie 添加 Secure 标志
     "global_cdn": "https://cdn.jsdmirror.cn",  # 全局 CDN 基础地址，KaTeX / FontAwesome / marked 等前端资源均从该地址拼接
     "id_generation": {
@@ -232,8 +242,38 @@ REGISTER_RATE_CFG = config.get("register_rate_limit", DEFAULT_CONFIG["register_r
 REGISTER_RATE_WINDOW = REGISTER_RATE_CFG.get("window_seconds", 120)
 REGISTER_RATE_MAX = REGISTER_RATE_CFG.get("max_requests", 1)
 
+
+def _env_list(name: str) -> list:
+    """读取逗号/分号/空白分隔的列表型环境变量（无服务器平台只读盘时用）。"""
+    raw = os.environ.get(name, "")
+    for sep in (";", ",", " ", "\n", "\t"):
+        raw = raw.replace(sep, ",")
+    return [item.strip() for item in raw.split(",") if item.strip()]
+
+
+def _env_int(name: str, default: int) -> int:
+    try:
+        return int(os.environ.get(name, "") or default)
+    except (TypeError, ValueError):
+        return default
+
+
+# 全站每 IP 总请求上限（应用级作用域，叠加在各路由独立限流之上，max_requests=0 表示关闭）
+IP_RATE_CFG = config.get("ip_rate_limit", DEFAULT_CONFIG["ip_rate_limit"])
+IP_RATE_WINDOW = int(IP_RATE_CFG.get("window_seconds", 60) or 60)
+IP_RATE_MAX = int(IP_RATE_CFG.get("max_requests", 300) or 0)
+IP_RATE_ENABLED = bool(IP_RATE_CFG.get("enabled", True)) and IP_RATE_MAX > 0
+
 # 可信代理配置（BUG-3：默认不信任 X-Forwarded-For / X-Real-IP，防止伪造头绕过限流）
 TRUST_PROXY_HEADERS = bool(config.get("trust_proxy_headers", False))
+# 可信代理网段：仅当 TCP 直连对端命中该列表时才采信代理头；"*" 表示信任任意对端
+TRUSTED_PROXIES = _env_list("RUSIN_TRUSTED_PROXIES") or config.get(
+    "trusted_proxies", DEFAULT_CONFIG["trusted_proxies"])
+# 兼容模式下的 XFF 跳数（仅当 trusted_proxies 为 "*"/留空时生效）
+PROXY_HOPS = max(1, _env_int("RUSIN_PROXY_HOPS", int(config.get("proxy_hops", 1) or 1)))
+# IP 白名单（免限流）与黑名单（403），环境变量追加在配置文件之后
+IP_ALLOWLIST = list(config.get("ip_allowlist", []) or []) + _env_list("RUSIN_IP_ALLOWLIST")
+IP_BLOCKLIST = list(config.get("ip_blocklist", []) or []) + _env_list("RUSIN_IP_BLOCKLIST")
 
 # Cookie 安全配置（BUG-13）
 SECURE_COOKIES = bool(config.get("secure_cookies", False))

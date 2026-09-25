@@ -22,6 +22,7 @@ pytest tests/ -q -k images    # 按关键字筛选
 | `support.py` | 共享 HTTP 辅助（CSRF 解析、注册登录、建笔记、列表顺序、图床上传、置顶）与 `expect()`（logging + assert） |
 | `test_frontend.py` | 前端语法检查（复用 `frontend_check.py`）：Jinja2 + 内联 JS/CSS + JSON |
 | `test_folders.py` | 笔记文件夹树：路径规范化、树构建、`?folder=` 筛选、功能开关 |
+| `test_ip_limiter.py` | 客户端 IP 安全解析 / 防 XFF 伪造（对端校验、XFF 右起解析、非法值丢弃）、IP 白名单免限流、黑名单 403、全局 IP 兜底限流 |
 | `test_images.py` | 图床：魔数校验、上传/读取、大小/配额/格式校验、XSS 白名单 |
 | `test_org.py` | 组织：创建 / 加入 / 邀请审批 / 角色权限 / 组织笔记 |
 | `test_pins.py` | 笔记置顶：开关、排序、筛选联动、持久化 |
@@ -38,6 +39,9 @@ pytest tests/ -q -k images    # 按关键字筛选
 - **断言**：统一用 `support.expect(condition, message)`；它通过 `logging` 记录
   结果，失败时抛出 AssertionError，pytest 会给出清晰的失败信息。
 - **限流**：`app` fixture 已关闭限流（`limiter.enabled = False`），测试中可放心
-  多次注册 / 登录 / 保存。
+  多次注册 / 登录 / 保存。若需要测试限流本身，必须在 `create_app()` **之前** 把
+  `limiter.enabled` 置为 `True`（Flask-Limiter 在关闭状态下 `init_app` 会直接
+  返回、不注册任何中间件），并在测试结束后恢复——见 `test_ip_limiter.py` 的
+  `rl_client` fixture。
 
 新增测试请以 `test_*.py` 命名放入本目录，并复用 `conftest.py` / `support.py`。

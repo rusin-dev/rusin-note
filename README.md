@@ -165,13 +165,17 @@ Python 通用：`python -c "import secrets; print(secrets.token_hex(32))"` 或 `
             proxy_pass http://127.0.0.1:8080;
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
+            # 让 Nginx 补写 XFF（追加它看到的上游 IP），避免客户端自带的 XFF 被透传
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         }
     }
     ```
 
     > 使用 Nginx/Cloudflare 反代后，请将 `config.json` 中的 `trust_proxy_headers` 设为 `true`，
-    > 服务端才会信任代理头按真实客户端 IP 限流（默认关闭以杜绝伪造头绕过限流）。
-    > 代理头可信度从高到低：`CF-Connecting-IP`（Cloudflare 直连）→ `X-Real-IP`（Nginx）→ `X-Forwarded-For` 最右一项（Nginx 追加的真客户端），客户端伪造的 XFF 左侧项不会被采信。
+    > 并确认 `trusted_proxies` 包含反代来源网段（默认 `["loopback", "private"]` 覆盖同机 Nginx；
+    > 使用 Cloudflare 时追加 `"cloudflare"` 预设）。服务端会先用 `trusted_proxies` 校验直连对端，
+    > 再按「XFF 从右往左、跳过可信代理」的规则取真实客户端 IP，客户端伪造的 XFF 左侧项不会被采信；
+    > 对端不在可信列表时，所有代理头一律忽略（按直连 IP 限流）。详见「IP 限速与防 XFF 伪造」。
 
     > 注意：仓库内 `config.json` 默认已为无服务器平台开启 `trust_proxy_headers` 与
     > `secure_cookies`，VPS 部署请按需改回 `false`（HTTP 环境下 Secure Cookie 会被浏览器拒绝）。
@@ -406,6 +410,32 @@ rusin-note:.
 │          upstream-sync.yml（上游同步）
 ```
 
+### IP 限速与防 XFF 伪造
+
+限流的键是「真实客户端 IP」，而 `X-Forwarded-For`（XFF）、`X-Real-IP`、`CF-Connecting-IP` 都是**客户端可随意伪造的请求头**。若无条件采信，攻击者每次请求换一个假 IP 就能让限流完全失效。为此本项目的解析规则如下（实现见 `app/ip_utils.py`）：
+
+1. **对端校验**：只有 TCP 直连对端（`remote_addr`）命中 `trusted_proxies` 列表时才采信代理头；直接从公网访问时，所有代理头一律忽略，按直连 IP 计数。
+2. **严格解析**：头部值必须是合法 IP（支持 `1.2.3.4:80`、`[2001:db8::1]:443`、`::ffff:1.2.3.4`），非法值直接丢弃——避免用任意字符串制造海量限流桶；单个头部超过 256 字节、XFF 超过 16 项都会截断。
+3. **从右往左取 XFF**：XFF 是「左旧右新」追加的列表，右侧条目由可信代理写入，左侧可能是伪造的历史值。多级代理下逐层跳过可信代理地址，取第一个不可信的合法 IP。
+4. **疑似伪造留痕**：携带了代理头但直连对端不可信时，日志会输出 `检测到疑似伪造的代理头已忽略`（同一 IP 每 5 分钟最多一条），便于发现扫描行为与配置错误。
+
+部署要点：
+
+```nginx
+# Nginx 必须「改写」XFF（追加自身看到的上游地址）或设置 X-Real-IP，
+# 否则客户端自带的 XFF 会被原样透传
+proxy_set_header X-Real-IP $remote_addr;
+proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+```
+
+- 同机 / 同私有网络的 Nginx、Caddy：`trusted_proxies` 用默认的 `["loopback", "private"]` 即可。
+- Cloudflare（或 Cloudflare → Nginx）：追加 `"cloudflare"` 预设，此时会额外采信由 Cloudflare 强制覆写的 `CF-Connecting-IP`。
+- 应用端口**直接暴露公网**（含 Docker 直接映射端口时对端可能显示为网关私网地址）时，请把 `trusted_proxies` 收窄为具体反向代理 IP（或只保留 `["loopback"]`）——`private` 预设意味着该网段内任意主机都可伪造代理头。
+- 内网负载均衡但地址是公网 IP、或使用了名为 `private` 预设之外的网段：把对应 IP/CIDR 显式加进 `trusted_proxies`，否则代理头会被忽略，导致所有用户共用同一个限流桶（表现为「正常访问被限流」）。
+- 启动时会输出当前策略（`IP 策略：…` / `全站 IP 限流：…` / 黑白名单条数）到应用日志（`data/log/*.log`，无服务器环境回退 stderr），可据此确认配置是否符合预期。
+
+> 本项目不使用 Werkzeug 的 `ProxyFix`：它会用可伪造的 XFF 直接改写 `request.remote_addr`，使「可信代理」校验失去意义。
+
 ### 配置项解析
 
 - `max_note_size_kb`：笔记最大大小（单位：**KB**）默认 $512$（即 $0.5$ MB）。
@@ -431,9 +461,20 @@ rusin-note:.
    - `max_requests` ：请求数 $s$，默认 $1$;
 
    $t$ 秒内单个IP最多注册 $s$ 个账号，防止恶意批量注册。
+- `ip_rate_limit` 全站每 IP 总请求上限（**应用级**限流，对所有路由累计生效，叠加在各路由独立限流之上）。
+   - `window_seconds` ：时间 $t$，默认 $60$；
+   - `max_requests` ：请求数 $s$，默认 $300$（置 `0` 关闭全站兜底限流）；
 - `trust_proxy_headers`：是否信任反向代理传递的客户端 IP 头，当前仓库配置为 `true`，适用于无服务器平台或可信反向代理。
   
   **安全说明**：应用内置默认值为关闭；仅当部署在可信反向代理（如 Nginx、Vercel）之后才置为 `true`，否则客户端可能伪造请求头绕过限流。
+- `trusted_proxies`：**可信代理网段**（防伪造 `X-Forwarded-For` 的关键）。仅当 TCP 直连对端命中该列表时才会采信代理头；公网直连时所有代理头一律忽略，按直连 IP 限流。
+
+  元素可为 IP/CIDR，也可用预设名 `loopback`（回环）、`private`（RFC1918 / CGNAT / 链路本地）、`cloudflare`（Cloudflare 官方回源段），或用 `"*"` 信任任意对端（**有伪造风险**，仅建议临时排障使用）。默认 `["loopback", "private"]`。
+- `proxy_hops`：兼容模式（`trusted_proxies` 为 `"*"` 或留空）下 `X-Forwarded-For` 从右往左的代理跳数，默认 `1`。
+- `ip_allowlist`：免限流 IP/CIDR 白名单（如监控、内网探活），默认 `[]`。
+- `ip_blocklist`：直接拒绝（HTTP 403）的 IP/CIDR 黑名单，默认 `[]`。
+
+  以上 IP 相关配置也可用环境变量覆盖（无服务器平台配置文件只读时更方便）：`RUSIN_TRUSTED_PROXIES`、`RUSIN_PROXY_HOPS`、`RUSIN_IP_ALLOWLIST`、`RUSIN_IP_BLOCKLIST`（逗号分隔，名单类环境变量与配置文件取并集）。
 - `secure_cookies`：会话 Cookie 是否附加 `Secure` 标志，当前仓库配置为 `true`。
 
   **安全说明**：仅当通过 HTTPS 访问时置为 `true`，否则浏览器会拒绝在 HTTP 下回传 Cookie。

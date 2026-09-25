@@ -17,11 +17,22 @@
     "window_seconds": 120,
     "max_requests": 1
   },
+  "ip_rate_limit": {
+    "window_seconds": 60,
+    "max_requests": 300
+  },
   "todos": {
     "max_items": 100,
     "max_length": 200
   },
   "trust_proxy_headers": true,
+  "trusted_proxies": [
+    "loopback",
+    "private"
+  ],
+  "proxy_hops": 1,
+  "ip_allowlist": [],
+  "ip_blocklist": [],
   "secure_cookies": true,
   "global_cdn": "https://cdn.jsdmirror.cn",
   "id_generation": {

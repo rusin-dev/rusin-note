@@ -11,15 +11,17 @@ import os
 import secrets
 
 from flask import Flask, render_template
-from werkzeug.middleware.proxy_fix import ProxyFix
 
 from . import config
 from .background import start_background_threads
 from .extensions import csrf, limiter, cache
 from .i18n import register_i18n
+from .ip_utils import log_ip_policy
 from .middleware import register_request_hooks
 from .storage import StorageError, storage
 from .views import register_blueprints
+
+logger = logging.getLogger("rusin-note")
 
 
 def _load_or_create_secret_key() -> str:
@@ -81,7 +83,7 @@ def _init_cache_backend(app: Flask) -> None:
                 "CACHE_REDIS_URL": config.CACHE_REDIS_URL,
             })
             return
-        logging.getLogger("rusin-note").warning(
+        logger.warning(
             "Redis 缓存不可达（%s），已降级到 SimpleCache", config.CACHE_REDIS_URL)
     cache.init_app(app, config={
         "CACHE_TYPE": "SimpleCache",
@@ -116,13 +118,18 @@ def create_app() -> Flask:
         GLOBAL_CDN=config.GLOBAL_CDN,
     )
 
-    if config.TRUST_PROXY_HEADERS:
-        app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=0)
+    log_ip_policy()
 
+    # 说明：这里不使用 werkzeug 的 ProxyFix——它会用客户端可伪造的
+    # X-Forwarded-For 直接改写 request.remote_addr，使「可信代理」校验失去意义。
+    # 真实客户端 IP 统一由 middleware + ip_utils.analyze_client_ip 在可信代理
+    # 白名单（config.trusted_proxies）内安全解析，伪造头一律忽略。
     csrf.init_app(app)
+    # 请求钩子必须先于 limiter 注册：Flask-Limiter 的应用级限流（全站 IP 上限）
+    # 在 before_request 阶段执行，依赖 g.client_ip / g.rate_limit_exempt。
+    register_request_hooks(app)
     limiter.init_app(app)
     _init_cache_backend(app)
-    register_request_hooks(app)
     register_i18n(app)
     register_blueprints(app)
     register_error_handlers(app)
