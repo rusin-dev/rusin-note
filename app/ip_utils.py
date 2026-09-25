@@ -161,7 +161,7 @@ def _expand(tokens: Iterable[str]) -> tuple[tuple, bool, bool]:
     networks: list = []
     trust_all = False
     cloudflare = False
-    for token in tokens:
+    for index, token in enumerate(tokens, start=1):
         key = token.lower()
         if key in TRUST_ALL_TOKENS:
             trust_all = True
@@ -175,7 +175,11 @@ def _expand(tokens: Iterable[str]) -> tuple[tuple, bool, bool]:
         try:
             networks.append(ipaddress.ip_network(token, strict=False))
         except ValueError:
-            logger.warning("忽略无法解析的 IP/CIDR 配置项：%s", token)
+            # 不回显配置项原文（CodeQL py/clear-text-logging-sensitive-data）：
+            # 无效项可能是误粘贴到 IP 列表里的密钥，写进日志等于明文外泄；
+            # 只记录位置与长度，运维足以定位到具体是第几项。
+            logger.warning("忽略无法解析的 IP/CIDR 配置项：第 %d/%d 项（长度 %d）",
+                           index, len(tokens), len(token))
     return tuple(networks), trust_all, cloudflare
 
 
