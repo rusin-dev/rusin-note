@@ -40,15 +40,15 @@
 - **笔记文件夹**：支持将笔记归入文件夹（单归属），用户可在文件夹视图下管理自己的笔记，列表页支持按文件夹筛选。
 - **笔记置顶**：在笔记列表页可通过图钉图标将重要笔记置顶，置顶笔记始终显示在最前面。
 - **笔记图床**：编辑器支持粘贴/拖拽上传 PNG、JPEG、GIF 或 WebP 图片，按文件魔数校验格式并以 Markdown 语法引用；图片公开可读，默认单张 2MB、每用户 50MB 配额。
-- **笔记附件**：支持上传任意文件类型（可执行文件除外），默认单文件 50KB、每笔记 500KB 配额（可在 `config.json` 调整），附件管理页支持拖拽上传，笔记中以链接形式引用。附件**默认仅登录用户可下载**（`/attachment/<u>/<id>` 对匿名访客返回 401），并按「单用户同时在途队列数」设闸（[#191](https://github.com/rusin-dev/rusin-note/issues/191)：默认同时下载 1 个、同时上传 1 个），防止少量慢速连接（如 1KB/s）或用上百线程并发拉取长期占满 worker。
+- **笔记附件**：支持上传任意文件类型（可执行文件与压缩包等默认进黑名单），默认单文件 50KB、每笔记 500KB、每用户 10MB 配额（均可在 `config.json` 调整），附件管理页支持拖拽上传，笔记中以链接形式引用。附件**默认仅登录用户可下载**（`/attachment/<u>/<id>` 对匿名访客返回 401），并按「单用户同时在途队列数」设闸（[#191](https://github.com/rusin-dev/rusin-note/issues/191)：默认同时下载 1 个、同时上传 1 个），防止少量慢速连接（如 1KB/s）或用上百线程并发拉取长期占满 worker。
 - **评论系统**：笔记和分享页面支持评论功能，支持匿名评论，可配置最大评论数（默认 200 条）、冷却时间、分页加载，与犇犇动态类似的发布等待机制。
 - **犇犇动态**：内置持久化轻量动态流，登录用户可发布内容，未登录用户可浏览，支持实时预览、分页加载、发布冷却，以及点击动态右上角“回复”快速填充 `|| @用户名: 原内容`。
 - **功能开关（Feature Flags）**：管理员在 `/admin/features` 用滑块开关启用/停用站点功能（公开笔记、犇犇、分享链接、开放注册、快捷引用、笔记标签、笔记文件夹、笔记置顶、Markdown 标题锚点、Markdown 提示卡片、笔记图床、笔记附件、评论系统、LaTeX、代码高亮、头像、组织），保存后立即生效、无需重启；启用的功能会在 `/count` 数据汇总页呈现，停用的功能入口自动隐藏、路由直接 404。
 - **组织/团队协作**：创建组织并邀请成员加入，支持 Owner / Admin / Member 三级角色体系。组织笔记独立存储在 `_orgs/<org_name>/` 命名空间，与个人笔记完全隔离。三种加入方式：邀请制（生成邀请码分享）、公开加入（自由加入）、审批制（申请后由 Admin/Owner 审批）。Owner 可管理组织设置、添加/移除管理员、删除组织；Admin 可管理成员和邀请；Member 可创建和编辑组织笔记。
-- **首页公告横幅**：首页顶部展示仓库根目录 `NOTICE.txt` 的第一行内容作为站内公告；文件缺失或整体内容为空时自动隐藏，文本经 HTML 转义，无需额外配置。
+- **首页公告横幅**：首页顶部展示仓库根目录 `NOTICE.txt` 的第一个非空行（跳过前导空行）作为站内公告；文件缺失或整体内容为空时自动隐藏，文本经 HTML 转义，无需额外配置。
 - **首页工作台**：登录后首页呈现 VSCode 欢迎页风格的工作台——最近编辑的笔记列表（条数由 `home_page.recent_notes_limit` 控制）与**待办清单**（新增 / 勾选 / 删除 / 清除已完成，条目数与单条长度受 `todos` 配置约束）；开启简洁模式后首页直接跳转到新建笔记。
 - **多语言界面**：内置简体中文与 English，可手动切换，也可按浏览器语言自动选择。
-- **用户设置**：每位登录用户在 `/user/<username>/settings` 管理账号——可切换**简洁模式**（隐藏标签、置顶、犇犇、组织菜单与分享入口等高级功能，只保留笔记读写与预览，偏好随账号在所有设备一致生效，原导航栏切换按钮已并入此处）、修改密码（校验原密码与复杂度，并注销其它设备会话）以及修改登录用户名（笔记、图床、附件及标签/文件夹/置顶/分享/犇犇/评论/组织等数据自动迁移到新用户名）。
+- **用户设置**：每位登录用户在 `/user/<username>/settings` 管理账号——可切换**简洁模式**（隐藏标签、置顶、犇犇、组织菜单与分享入口等高级功能，编辑页还隐藏预览栏、附件与评论入口，只保留笔记读写，偏好随账号在所有设备一致生效，原导航栏切换按钮已并入此处）、修改密码（校验原密码与复杂度，并注销其它设备会话）以及修改登录用户名（笔记、图床、附件及标签/文件夹/置顶/待办/分享/犇犇/评论/组织等数据自动迁移到新用户名，当前登录会话同步改名、无需重新登录）。
 - **部署友好**：配置集中在 `config.json`，支持笔记过期清理、会话超时、密码策略、页面缓存、反向代理真实 IP、HTTPS Cookie 等常见部署选项。业务数据可使用本地 SQLite（索引）+ JSON 文件、Upstash Redis、Neon/PostgreSQL 或内存后端。
 - **基础防护完善**：包含 CSRF 防护、请求限流、保存限流、注册限流、内容安全清洗和代理头信任开关，降低公开部署风险。
 
@@ -86,7 +86,7 @@ python 版本 $\geq$ 3.10。
     ```bash
     pip install -r requirements-dev.txt
     pytest tests/               # 端到端测试（自动隔离到临时数据目录，不污染本地数据）
-    python tests/frontend_check.py   # 前端语法检查（Jinja2 + 内联 JS/CSS + JSON）
+    python tests/frontend_check.py   # 前端语法检查（Jinja2 + 内联 CSS/JSON；有 Node 时才校验内联 JS）
     ```
 
 ### 线上部署
@@ -112,7 +112,7 @@ Python 通用：`python -c "import secrets; print(secrets.token_hex(32))"` 或 `
 5. 点击 在 Vercel 项目面板左侧导航栏的 `Deployments`，切换到 Deployments 页面后点击右上角三个点，然后 `Create Deployment`，点击 `main` 分支的图标，最后点 `Deploy to Production` 即可。
 6. 部署完成后，你可以绑定自己的域名避免 Vercel 默认域名无法访问的问题。
 
-可选：设置 `REDIS_URL`（Redis 连接串，如 Upstash 或自建 Redis）后，页面缓存切换为共享 Redis、限流计数也在多实例间共享；不设置时页面缓存用进程内 SimpleCache、限流按实例内存计数（Zeabur 上的用法见下方章节）。
+可选：设置 `REDIS_URL`（Redis 连接串，如 Upstash 或自建 Redis）后，页面缓存切换为共享 Redis、限流计数也在多实例间共享；不设置时页面缓存会先尝试 `cache.redis_url`（仓库默认 `redis://localhost:6379/0`，无服务器平台上通常不可达），不可达即回退进程内 SimpleCache，限流按实例内存计数（Zeabur 上的用法见下方章节）。
 
 > 提示：无服务器平台默认 `trust_proxy_headers: true`、`secure_cookies: true`（已写入 `config.json`）。本地开发如需关闭请自行修改。
 
@@ -152,8 +152,9 @@ Python 通用：`python -c "import secrets; print(secrets.token_hex(32))"` 或 `
     # 后台运行
     nohup python3 -m app > app.log 2>&1 &
 
-    # 生产环境推荐（Linux，gunicorn，依赖已含在 requirements.txt 中）
-    gunicorn 'app.wsgi:app' -b 0.0.0.0:$PORT --workers 2 --threads 4
+    # 生产环境推荐（Linux，gunicorn；需另行安装：pip install gunicorn）
+    # 监听端口取环境变量 PORT，未设置时请自行写成 8080（须与下方 Nginx 反代目标一致）
+    gunicorn 'app.wsgi:app' -b 0.0.0.0:${PORT:-8080} --workers 2 --threads 4
     ```
 
 4. 配置 Nginx（可选）
@@ -187,8 +188,10 @@ Python 通用：`python -c "import secrets; print(secrets.token_hex(32))"` 或 `
     > 再按「XFF 从右往左、跳过可信代理」的规则取真实客户端 IP，客户端伪造的 XFF 左侧项不会被采信；
     > 对端不在可信列表时，所有代理头一律忽略（按直连 IP 限流）。详见「IP 限速与防 XFF 伪造」。
 
-    > 注意：仓库内 `config.json` 默认已为无服务器平台开启 `trust_proxy_headers` 与
-    > `secure_cookies`，VPS 部署请按需改回 `false`（HTTP 环境下 Secure Cookie 会被浏览器拒绝）。
+    > 注意：仓库内 `config.json` 默认为无服务器平台开启 `trust_proxy_headers` 与
+    > `secure_cookies`。位于 Nginx/Cloudflare 之后时两者保持 `true` 并配好 `trusted_proxies`；
+    > 本地 / VPS 走 HTTP 且**无反向代理**时才把两者改回 `false`（HTTP 下 Secure Cookie
+    > 会被浏览器拒绝，直连时也没有代理头需要采信）。
 
     ```bash
     # 启用并重载
@@ -234,8 +237,10 @@ Python 通用：`python -c "import secrets; print(secrets.token_hex(32))"` 或 `
 ```
 
 > 本地/VPS 默认使用 `sqlite` 后端：SQLite（`index.db`）只保存索引元数据用于快速
-> 列表 / 排序 / 检索 / 统计，笔记与各集合的**具体内容仍以 JSON 落盘**；旧版纯
-> JSON 布局（`notes/<用户>/<ID>.txt` 等）在首次启动时自动迁移。
+> 列表 / 排序 / 检索 / 统计，笔记与各集合的**具体内容仍以 JSON 落盘**。首次启动时
+> 会自动完成两套迁移：旧版纯文本笔记（`notes/<用户>/<ID>.txt` → `.json`）与散落在
+> 项目根目录的旧运行数据（→ `data/`）。另：键 `note_titles.json` 虽在存储层登记，
+> 但当前代码不读写，新部署不会生成该文件。
 
 #### Zeabur 启用 Redis（页面缓存 + 共享限流）
 
@@ -250,7 +255,7 @@ Zeabur 是 PaaS 平台，不需要也不建议在容器里 `apt install redis`�
    ```
 
    等价于 `redis://:密码@服务名:6379`。
-4. 重新部署服务。启动时应用会主动 `PING` Redis：连通则页面缓存（首页/笔记/犇犇等）切换为 Redis 共享后端、限流计数也存入 Redis（多实例共享）；未连通则日志输出 `Redis 缓存不可达，已降级到 SimpleCache` 并退回进程内缓存，不影响功能。
+4. 重新部署服务。启动时应用会主动 `PING` Redis：连通则页面缓存（首页/笔记/犇犇等）切换为 Redis 共享后端、限流计数也存入 Redis（多实例共享）；未连通则日志输出 `Redis 缓存不可达（…），已降级到 SimpleCache` 并退回进程内缓存，不影响功能。
 
 > 说明：Redis 只负责缓存与限流；剪贴板、用户、分享、犇犇等业务数据仍由上面挂载的 `/data` 卷（`file` 后端）保存，两者互不影响。若追求数据多实例共享 / 不丢，可改用 `postgres` 或 `upstash` 后端（见下节）。
 
@@ -261,7 +266,7 @@ Zeabur 是 PaaS 平台，不需要也不建议在容器里 `apt install redis`�
 | 后端 | 启用方式 | 说明 |
 |---|---|---|
 | `sqlite` | 默认（本地/VPS） | SQLite（`<DATA_DIR>/index.db`）保存索引用于快速查找，笔记与集合内容以 JSON 落盘到 `<DATA_DIR>/`；旧版 file 布局自动迁移 |
-| `file` | `RUSIN_STORAGE=file` | 纯 JSON/二进制文件落盘，兼容旧部署；数据写入 `RUSIN_DATA_DIR`，布局与上表一致 |
+| `file` | `RUSIN_STORAGE=file` | 兼容旧部署的纯文件落盘：笔记为 `notes/<用户>/<ID>.txt` 纯文本（非 JSON），集合与图床/附件布局同 sqlite 行、但没有 `index.db`；数据写入 `RUSIN_DATA_DIR` |
 | `upstash` | 设置 `KV_REST_API_URL` + `KV_REST_API_TOKEN`（Upstash Redis 的 REST 接口） | 数据存于外部 KV，多实例共享、冷启动不丢；纯 HTTPS 请求，任意支持 Python 的无服务器平台可用 |
 | `postgres` | 设置 `DATABASE_URL`（Neon / 任意 PostgreSQL，Vercel 绑定 Neon 后自动注入） | 数据存于 `storage_kv`、`storage_notes`、`storage_images`、`storage_attachments` 表，多实例共享、冷启动不丢；跨实例互斥用 PG advisory lock |
 | `memory` | `RUSIN_STORAGE=memory`（无服务器平台未配置上述存储时自动启用） | 纯内存，重启/冷启动清空，适合体验或临时部署 |
@@ -271,7 +276,7 @@ Zeabur 是 PaaS 平台，不需要也不建议在容器里 `apt install redis`�
 - 犇犇动态已从纯内存改为持久化（外部存储可用时重启不丢，最多保留 `benben.max_posts` 条，默认 200）。
 - 无服务器环境（检测到 `VERCEL` / `NETLIFY` / `AWS_LAMBDA_FUNCTION_NAME` 环境变量）不启动后台守护线程，清理任务改为请求内机会式执行；日志回退到 stderr（进入平台日志流）。
 - 无服务器平台强烈建议设置 `RUSIN_SECRET_KEY`；未设置时若后端可持久化（file/upstash/postgres）会自动生成并存储，否则退回随机密钥（重启后登录态失效）。
-- `.env.example` 提供 `RUSIN_SECRET_KEY` 与 `RUSIN_ADMIN` 示例；存储与缓存环境变量见上表和部署章节。
+- `.env.example` 提供 `RUSIN_STORAGE`、`RUSIN_DATA_DIR`、`RUSIN_SECRET_KEY`、`RUSIN_ADMIN` 四个示例；缓存相关环境变量见上表和部署章节。
 
 ## 插件系统
 
@@ -336,7 +341,9 @@ rusin-note:.
 │  Disclaimer-en.md（英文免责声明）
 │  Disclaimer.md（免责声明）
 │  favicon.ico
-│  NOTICE.txt（首页公告横幅内容，取第一行）
+│  LICENSE
+│  .gitignore
+│  NOTICE.txt（首页公告横幅内容，取第一个非空行）
 │  README.md
 │  README_en.md
 │  requirements.txt（Python 依赖）
@@ -367,6 +374,7 @@ rusin-note:.
 │  │  folders.py（笔记文件夹）
 │  │  i18n.py（多语言支持）
 │  │  images.py（图片校验、配额与存储接口）
+│  │  ip_utils.py（客户端 IP 安全解析：可信代理校验 / XFF 右起解析 / IP 名单）
 │  │  logger.py（日志记录）
 │  │  middleware.py（请求钩子与限流辅助）
 │  │  notes.py（笔记操作与统计）
@@ -417,6 +425,7 @@ rusin-note:.
 │  └─share（分享页面）
 │
 ├─tests（pytest 端到端测试与前端语法检查）
+│       README.md（测试约定与文件说明）
 │       conftest.py（环境隔离与共享 fixtures）
 │       support.py（共享 HTTP 辅助与断言）
 │       frontend_check.py（前端语法检查 CLI）
@@ -445,7 +454,7 @@ rusin-note:.
 限流的键是「真实客户端 IP」，而 `X-Forwarded-For`（XFF）、`X-Real-IP`、`CF-Connecting-IP` 都是**客户端可随意伪造的请求头**。若无条件采信，攻击者每次请求换一个假 IP 就能让限流完全失效。为此本项目的解析规则如下（实现见 `app/ip_utils.py`）：
 
 1. **对端校验**：只有 TCP 直连对端（`remote_addr`）命中 `trusted_proxies` 列表时才采信代理头；直接从公网访问时，所有代理头一律忽略，按直连 IP 计数。
-2. **严格解析**：头部值必须是合法 IP（支持 `1.2.3.4:80`、`[2001:db8::1]:443`、`::ffff:1.2.3.4`），非法值直接丢弃——避免用任意字符串制造海量限流桶；单个头部超过 256 字节、XFF 超过 16 项都会截断。
+2. **严格解析**：头部值必须是合法 IP（支持 `1.2.3.4:80`、`[2001:db8::1]:443`、`::ffff:1.2.3.4`），非法值直接丢弃——避免用任意字符串制造海量限流桶；单个头部超过 256 字节会被**整段丢弃**（不解析），XFF 超过 16 项只保留前 16 项。
 3. **从右往左取 XFF**：XFF 是「左旧右新」追加的列表，右侧条目由可信代理写入，左侧可能是伪造的历史值。多级代理下逐层跳过可信代理地址，取第一个不可信的合法 IP。
 4. **疑似伪造留痕**：携带了代理头但直连对端不可信时，日志会输出 `检测到疑似伪造的代理头已忽略`（同一 IP 每 5 分钟最多一条），便于发现扫描行为与配置错误。
 
@@ -466,9 +475,22 @@ proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
 
 > 本项目不使用 Werkzeug 的 `ProxyFix`：它会用可伪造的 XFF 直接改写 `request.remote_addr`，使「可信代理」校验失去意义。
 
+### 开发与测试
+
+```bash
+pip install -r requirements-dev.txt     # 安装 pytest（已包含 requirements.txt）
+pytest tests/                           # 运行全部端到端测试
+pytest tests/test_org.py -q             # 运行单个模块 / 按关键字筛选：pytest tests/ -q -k images
+python tests/frontend_check.py          # 前端语法检查（Jinja2 + 内联 CSS/JSON；本机有 Node 时才额外校验内联 JS，否则自动跳过）
+```
+
+- 测试统一用 **pytest + logging** 组织：`tests/conftest.py` 会固定 `RUSIN_STORAGE=file`、切换到临时 `RUSIN_DATA_DIR` 并清空各模块内存缓存，测试不会污染本地数据；测试环境默认关闭限流（需要测限流本身时见 `tests/test_ip_limiter.py`），完整约定见 `tests/README.md`。
+- 前端资源全部内联在 Jinja2 模板中（无 `static/` 目录），改动模板后请运行 `python tests/frontend_check.py`。
+- CI（`.github/workflows/check.yml`）在 push / PR 到 `dev` 分支时按变更范围触发：`frontend` job 执行前端语法检查，`test` job 执行 pytest 并启动服务做 HTTP 健康检查。
+
 ### 配置项解析
 
-- `max_note_size_kb`：笔记最大大小（单位：**KB**）默认 $512$（即 $0.5$ MB）。
+- `max_note_size_kb`：笔记最大大小（单位：**KB**）默认 $512$（即 $0.5$ MB，为仓库 `config.json` 的值；配置缺失时代码回退 $5120$）。
 - `sitename`：网页名称。填你的站点名。
 - `rate_limit` 速率限制。
    
@@ -480,12 +502,12 @@ proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
    - `window_seconds` ：时间 $t$，默认 $60$；
    - `max_requests` ：请求数 $s$，默认 $45$;
 
-   $t$ 秒内 GET 请求最大 $s$ 次（含页面加载、favicon 等）。
+   $t$ 秒内 GET 请求最大 $s$ 次（world / 笔记 / 用户列表等显式标注的路由；首页、`/count` 与静态资源未挂 GET 限流，只受下方 `ip_rate_limit` 约束）。
 - `save_rate_limit` 保存类 POST 独立限流（笔记保存/分享写回）。
    - `window_seconds` ：时间 $t$，默认 $60$；
    - `max_requests` ：请求数 $s$，默认 $120$;
 
-   $t$ 秒内保存笔记最多 $s$ 次，与全局 POST 限流（`rate_limit`）互不干扰，避免频繁保存被误伤。
+   $t$ 秒内保存笔记最多 $s$ 次；这是保存类路由专用的一档，与其它 POST 路由共用的 `rate_limit` 分开计数，避免频繁保存被误伤。
 - `register_rate_limit` 注册速率限制（单IP注册账号限制）。
    - `window_seconds` ：时间 $t$，默认 $120$；
    - `max_requests` ：请求数 $s$，默认 $1$;
@@ -494,13 +516,14 @@ proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
 - `ip_rate_limit` 全站每 IP 总请求上限（**应用级**限流，对所有路由累计生效，叠加在各路由独立限流之上）。
    - `window_seconds` ：时间 $t$，默认 $60$；
    - `max_requests` ：请求数 $s$，默认 $300$（置 `0` 关闭全站兜底限流）；
+   - `enabled` ：开关，默认 `true`，置 `false` 同样关闭兜底限流。
 - `trust_proxy_headers`：是否信任反向代理传递的客户端 IP 头，当前仓库配置为 `true`，适用于无服务器平台或可信反向代理。
   
   **安全说明**：应用内置默认值为关闭；仅当部署在可信反向代理（如 Nginx、Vercel）之后才置为 `true`，否则客户端可能伪造请求头绕过限流。
 - `trusted_proxies`：**可信代理网段**（防伪造 `X-Forwarded-For` 的关键）。仅当 TCP 直连对端命中该列表时才会采信代理头；公网直连时所有代理头一律忽略，按直连 IP 限流。
 
   元素可为 IP/CIDR，也可用预设名 `loopback`（回环）、`private`（RFC1918 / CGNAT / 链路本地）、`cloudflare`（Cloudflare 官方回源段），或用 `"*"` 信任任意对端（**有伪造风险**，仅建议临时排障使用）。默认 `["loopback", "private"]`。
-- `proxy_hops`：兼容模式（`trusted_proxies` 为 `"*"` 或留空）下 `X-Forwarded-For` 从右往左的代理跳数，默认 `1`。
+- `proxy_hops`：兼容模式（`trusted_proxies` 设为 `"*"` / `"any"` / `"all"`）下 `X-Forwarded-For` 从右往左的代理跳数，默认 `1`；列表为空**不**等于兼容模式，而是「不采信任何代理头」。
 - `ip_allowlist`：免限流 IP/CIDR 白名单（如监控、内网探活），默认 `[]`。
 - `ip_blocklist`：直接拒绝（HTTP 403）的 IP/CIDR 黑名单，默认 `[]`。
 
@@ -508,7 +531,7 @@ proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
 - `secure_cookies`：会话 Cookie 是否附加 `Secure` 标志，当前仓库配置为 `true`。
 
   **安全说明**：仅当通过 HTTPS 访问时置为 `true`，否则浏览器会拒绝在 HTTP 下回传 Cookie。
-- `id_generation` 随机 url 配置。
+- `id_generation` 随机 url 配置（下列为仓库 `config.json` 的值，配置缺失时代码回退为长度 $6$、大小写与数字全开）。
    - `length` ：长度，默认 $4$；
    - `use_uppercase` ：是否使用大写字母，默认 `false`；
    - `use_lowercase` ：是否使用小写字母，默认 `true`；
@@ -586,8 +609,8 @@ proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
    - `download_rate_limit` ：附件下载路由的独立每 IP 限流，`window_seconds`（默认 `60`）与 `max_requests`（默认 `120`）；
    - 并发上限用于拦截「发起上千个慢速连接（每个 1KB/s）、或用上百线程同时下载上百个文件」这类**请求数不超限但长期占用 worker / 打满出站带宽**的行为：超出时下载返回 429（带 `Retry-After`），上传返回 429 JSON（编辑器可直接展示提示）；**超限直接拒绝、不排队**（排队同样占用 worker）。闸门计数在**进程内**（`app/concurrency.py`），gunicorn 起 N 个 worker 时实际上限约为 `N × 该值`；跨实例严格计数需要外部存储原子自增，本项目未采用；
    - 附件在笔记中默认以链接形式引用；若一篇笔记内联了多个附件图片（同一账号并发请求 > 上限），可适当调高 `max_concurrent_downloads` 或置 `0`；
-   - `blocked_extensions` ：禁止上传的文件扩展名列表（黑名单模式），默认包含 `.exe`、`.bat`、`.sh`、`.zip` 等可执行文件与压缩包。  
-- `comments` 评论系统（/comments/<target_type>/<target_id>，支持笔记和分享页面评论）。
+   - `blocked_extensions` ：禁止上传的文件扩展名列表（黑名单模式），默认包含 `.exe`、`.bat`、`.sh`、`.zip` 等可执行文件与压缩包。**取值本身不带前导点**（`config.json` 里写 `exe`、`zip`，代码会自动补 `.`），自行添加时不要写成 `.exe`，否则永不命中。  
+- `comments` 评论系统（`/comments/<target_type>/<path:target_id>`，支持笔记和分享页面评论）。
    - `enabled` ：是否开启，默认 `true`；置 `false` 后评论页面返回 404；
    - `max_length` ：单条评论最大长度（字符），默认 `1024`（约 1KB）；
    - `max_comments` ：每个目标（笔记/分享）最多评论数，默认 `200`；
@@ -601,7 +624,7 @@ proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
    - `require_lowercase`：是否必须包含小写字母，默认 `true`；  
    - `require_digits`：是否必须包含数字，默认 `true`；  
    - `require_special`：是否必须包含特殊符号（不含 `/ \ ( ) " '`），默认 `true`； 
-- `RUSIN_DATA_DIR`：可选环境变量，用于指定运行数据目录，默认 `data`（即项目下的 `data/`；仅本地 `sqlite` / `file` 后端使用，外部后端无此目录）。
+- `RUSIN_DATA_DIR`：可选环境变量，用于指定运行数据目录，默认 `data`（即项目下的 `data/`）。**内容数据**（笔记 / 图片 / 附件 / 各集合 JSON）仅本地 `sqlite` / `file` 后端写入该目录；日志 `log/` 与插件 `plugins/` 目录则始终建在该目录下、与后端无关（无服务器平台日志回退 stderr）。
 
     笔记、图片、附件及各业务 JSON 数据会写入该目录；完整布局见上方 Zeabur 示例。在自动部署平台上建议挂载持久化卷到 `/data`，并设置 `RUSIN_DATA_DIR=/data`，避免重新部署时清空数据。
 - `RUSIN_STORAGE`：可选环境变量，显式指定存储后端：`sqlite`（本地/VPS，默认）、`file`（纯 JSON 文件）、`memory`（纯内存）、`upstash`（外部 KV）、`postgres`（Neon/PostgreSQL）。未指定时自动识别：设置了 `KV_REST_API_URL` / `KV_REST_API_TOKEN` 用 `upstash`，设置了 `DATABASE_URL` 用 `postgres`，检测到无服务器平台环境变量用 `memory`，否则 `sqlite`。详见上方「存储后端说明」。
@@ -630,4 +653,4 @@ proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
    - `path_pattern`：日志文件路径模板，默认 `log/{timestamp}.log`，相对数据目录解析（即 `<RUSIN_DATA_DIR>/log/`）；
 
     日志文件不可创建时（如无服务器只读文件系统）自动回退到 stderr，进入平台日志流。
-- `debug`：调试开关，默认 `false`。仅影响 `app/*` 模块日志的记录级别，**不会**开启 Flask 调试模式；生产环境请保持 `false`。
+- `debug`：日志详细程度开关，默认 `false`。**不会**开启 Flask 调试模式；取值与日志级别的对应关系是——`false` 记录 `INFO` 及以上（详细），`true` 只记录 `ERROR`（精简）。生产环境请保持 `false`。

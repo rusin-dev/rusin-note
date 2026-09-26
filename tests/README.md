@@ -20,7 +20,8 @@ pytest tests/ -q -k images    # 按关键字筛选
 |---|---|
 | `conftest.py` | 环境隔离与共享 fixtures：导入 app 前固定 `RUSIN_STORAGE=file` 与临时数据目录；`reset_runtime_state()` 清空 app 各模块的全部内存缓存；提供 `data_dir` / `app` / `client` / `anon` / `ctx` fixtures |
 | `support.py` | 共享 HTTP 辅助（CSRF 解析、注册登录、建笔记、列表顺序、图床上传、置顶）与 `expect()`（logging + assert） |
-| `test_frontend.py` | 前端语法检查（复用 `frontend_check.py`）：Jinja2 + 内联 JS/CSS + JSON |
+| `test_attachments.py` | 附件（`pytest tests/test_attachments.py`）：并发闸门 `ConcurrencyLimiter`（超限拒绝 / `limit<=0` 不限 / 槽位幂等释放 / 客户端断开归还）、默认禁止匿名下载（401 + 登录提示、缓存 `private`）、单用户下载/上传在途上限（超限 429，带 `Retry-After` / JSON） |
+| `test_frontend.py` | 前端语法检查（复用 `frontend_check.py`）：Jinja2 + 内联 CSS/JSON + 内联 JS（需 Node，缺失时跳过 JS 部分） |
 | `test_folders.py` | 笔记文件夹树：路径规范化、树构建、`?folder=` 筛选、功能开关 |
 | `test_ip_limiter.py` | 客户端 IP 安全解析 / 防 XFF 伪造（对端校验、XFF 右起解析、非法值丢弃）、IP 白名单免限流、黑名单 403、全局 IP 兜底限流 |
 | `test_images.py` | 图床：魔数校验、上传/读取、大小/配额/格式校验、XSS 白名单 |
