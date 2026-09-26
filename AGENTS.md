@@ -1,17 +1,18 @@
 # Rusin-Note 项目指南
 
 ## 项目简介
-基于 Flask 的轻量级云端剪贴板，支持公开短链笔记、用户私有笔记、分享链接和动态（犇犇）。可部署在 VPS（file 后端）或 Vercel / AWS Lambda 等无服务器平台（upstash 后端接入外部 KV）。
+基于 Flask 的轻量级云端剪贴板，支持公开短链笔记、用户私有笔记、分享链接、动态（犇犇）、评论、首页工作台待办与组织/团队协作。可部署在 VPS（sqlite/file 后端）或 Vercel / AWS Lambda 等无服务器平台（upstash / postgres 后端接入外部存储）。
 
 ## 技术栈
-- Python 3.10+, Flask 3, Flask-WTF, Flask-Limiter, waitress/gunicorn, mangum（Lambda 适配）
-- Markdown 渲染：markdown + bleach（防 XSS）+ Pygments（代码高亮、行号）
-- 前端：Jinja2 模板，支持中英双语（i18n）
+- Python 3.10+, Flask 3, Flask-WTF, Flask-Limiter, Flask-Caching, waitress/gunicorn, mangum（Lambda 适配）
+- Markdown 渲染：markdown + pymdown-extensions + bleach（防 XSS）+ Pygments（服务端代码着色）；客户端 highlight.js 兜底未识别语言并生成行号
+- 数据校验/处理：psycopg（PostgreSQL）、redis（可选缓存/限流共享）；图片格式校验用自研魔数嗅探（`app/images.py`，不依赖 Pillow）
+- 前端：Jinja2 模板，支持中英双语（i18n），无独立 JS/CSS 文件
 
 ## 常用命令
-- 开发运行：`python3 -m app`（监听 8080，file 后端）
+- 开发运行：`python3 -m app`（监听 8080，默认 sqlite 后端）
 - 生产部署（VPS）：`gunicorn 'app.wsgi:app' -b 0.0.0.0:$PORT --workers 2 --threads 4`
-- 无服务器部署（Vercel）：`vercel.json` + `api/index.py` 已内置，绑定 Vercel KV 并设置 `RUSIN_SECRET_KEY` 即可
+- 无服务器部署（Vercel）：`vercel.json` + `api/index.py` 已内置，绑定 Neon（自动注入 `DATABASE_URL` → postgres 后端）或 Upstash（`KV_REST_API_URL` + `KV_REST_API_TOKEN`），并设置 `RUSIN_SECRET_KEY` 即可
 - 无服务器部署（AWS Lambda）：入口 `lambda_handler.handler`（Mangum）
 - 数据目录：由环境变量 `RUSIN_DATA_DIR` 指定（默认 `data`；仅本地 sqlite/file 后端使用）
 - 依赖安装：`pip install -r requirements.txt`
@@ -26,10 +27,12 @@
 | sqlite | 默认（本地/VPS） | SQLite 索引（`<DATA_DIR>/index.db`）用于快速列表/排序/检索/统计，具体内容 JSON 落盘于 `RUSIN_DATA_DIR`（默认 `data/`）；笔记为 `notes/<用户>/<ID>.json`，集合为 `users.json` 等；实现见 `app/storage_sqlite.py`，旧版 file 布局首次启动自动迁移 |
 | file | `RUSIN_STORAGE=file` | 纯 JSON 文件落盘（兼容旧部署），布局同上但不含 `index.db` |
 | upstash | `KV_REST_API_URL` + `KV_REST_API_TOKEN` | Upstash Redis REST API（纯 urllib，无驱动依赖），键统一加 `rusin:` 前缀，多实例共享 |
-| postgres | `DATABASE_URL`（Neon / 任意 PostgreSQL，Vercel 绑定 Neon 自动注入） | psycopg 驱动，表 `storage_kv`（通用 KV）+ `storage_notes`（笔记）；跨实例互斥用 PG advisory lock |
+| postgres | `DATABASE_URL`（Neon / 任意 PostgreSQL，Vercel 绑定 Neon 自动注入） | psycopg 驱动，表 `storage_kv`（通用 KV）+ `storage_notes`（笔记）+ `storage_images` / `storage_attachments`（二进制）；跨实例互斥用 PG advisory lock |
 | memory | `RUSIN_STORAGE=memory`（无服务器且未配以上存储时自动） | 纯内存，重启清空 |
 
 自动识别优先级：显式 `RUSIN_STORAGE` > KV 环境变量（upstash）> `DATABASE_URL`（postgres）> 无服务器平台（memory）> 本地（sqlite）。
+
+- 集合类 KV 键在 `storage.py` 的 `KV_FILE_MAP` 登记落盘文件名（`users.json`、`sessions.json`、`shares.json`、`benben.json`、`comments.json`、`note_tags.json`、`note_folders.json`、`note_pins.json`、`note_titles.json`、`todos.json`、`feature_flags.json`、`orgs.json`、`org_members.json`、`org_invites.json`、`org_join_requests.json`、`.secret_key`）；笔记键为 `note:<用户>:<ID>`，图床/附件键为 `img:` / `att:` 前缀（file/postgres 后端走原生二进制文件）。
 
 - 统一接口在基类 `StorageBackend` 提供笔记元数据/检索能力：`note_title`、`list_notes_detailed`、`search_notes`、`notes_stats`（与后端无关的退化实现），SQLite 后端覆盖为单次索引查询（`notes.py` 的 `search_user_notes`/`get_stats` 与列表页据此避免逐篇读取内容）。
 
@@ -54,8 +57,12 @@
 - 路由蓝图：home, auth, benben, static_routes, world, user, share, admin（`/admin/features` 功能开关管理）, **插件蓝图（在 views.register_blueprints 内注册）**, world_short（注意最后注册 catch-all）
 - 用户设置（`/user/<u>/settings`，`app/user_settings.py`）：简洁模式（原导航栏切换按钮已并入，账号级偏好存 users.json，`middleware` 注入 `g.simple_mode` 服务端渲染 `<html class="simple-mode">`，页面缓存键含该标志）、修改密码（注销其它会话）、修改用户名（先复制笔记/图床/附件再迁移各存储用户标识，最后删旧数据）。端到端测试：`pytest tests/test_user_settings.py`
 - 首页公告横幅：`app/views/home.py` 的 `index` 读取 `config.NOTICE_FILE`（仓库根目录 `NOTICE.txt`）首行并传入 `home.html`，内容非空时渲染 `.home-notice` 横幅（文本经 HTML 转义）；读取逻辑见 `utils.read_notice_first_line`，端到端测试 `pytest tests/test_home_notice.py`
-- 功能开关（`app/feature_flags.py`，#90）：管理员（`RUSIN_ADMIN` 环境变量或 config.json `admin_users`）在 `/admin/features` 用滑块切换；运行时状态存 KV 键 `feature_flags`（file 后端即 `feature_flags.json`），进程内 5s TTL 缓存；停用功能路由 404、导航/首页入口隐藏，状态呈现于 `/count`。新增可开关功能：在 `FEATURES` 注册表登记 + 视图加 `@require_feature(key)`（必须放 `@bp.route` 之后、`@cache.cached`/`@limiter.limit` 之前）。端到端测试：`python tests/flags_test.py`
-- 插件系统（`app/plugins.py`；无服务器只读盘环境自动禁用）：`*.plugin.zip` 投放到 `RUSIN_DATA_DIR` 自动解压安装到 `plugins/<namespace>/` 并删除包；desc.json 缺 `auth_token` 须 `--skip-auth`（或 `RUSIN_PLUGIN_SKIP_AUTH=1`）放行；命名空间冲突非同源且未声明 OVERRIDE 拒绝；后台线程每 `plugins.update_interval_hours`（默认 6h）检查，`last_update` 超过 `update_stale_days`（默认 3 天）则请求 `upstream_repo`（3s 超时）后重跑安装。端到端测试：`python tests/plugin_test.py`
+- 功能开关（`app/feature_flags.py`，#90）：管理员（`RUSIN_ADMIN` 环境变量或 config.json `admin_users`）在 `/admin/features` 用滑块切换；运行时状态存 KV 键 `feature_flags`（file 后端即 `feature_flags.json`），进程内 5s TTL 缓存；停用功能路由 404、导航/首页入口隐藏，状态呈现于 `/count`。新增可开关功能：在 `FEATURES` 注册表登记 + 视图加 `@require_feature(key)`（必须放 `@bp.route` 之后、`@cache.cached`/`@limiter.limit` 之前）。
+- 插件系统（`app/plugins.py`；无服务器只读盘环境自动禁用）：`*.plugin.zip` 投放到 `RUSIN_DATA_DIR` 自动解压安装到 `plugins/<namespace>/` 并删除包；desc.json 缺 `auth_token` 须 `--skip-auth`（或 `RUSIN_PLUGIN_SKIP_AUTH=1`）放行；命名空间冲突非同源且未声明 OVERRIDE 拒绝；后台线程每 `plugins.update_interval_hours`（默认 6h）检查，`last_update` 超过 `update_stale_days`（默认 3 天）则请求 `upstream_repo`（3s 超时）后重跑安装。
+- 组织/团队协作（`app/views/org.py` + `store.py` 组织段）：组织笔记以 `_orgs/<org_name>` 作为存储用户名命名空间，与个人笔记完全隔离；Owner / Admin / Member 三级角色，加入方式支持邀请码 / 公开加入 / 审批制，受 `orgs` 功能开关控制。端到端测试：`pytest tests/test_org.py`
+- 评论系统（`app/comments.py` + `views/comments.py`）：目标类型为 `note` / `share`，统一存 KV 键 `comments:all`（file 后端即 `comments.json`），受 `comments` 功能开关与 `comments` 配置段（长度 / 上限 / 冷却 / 分页）控制。
+- 首页工作台（`app/views/home.py` + `app/todos.py`）：登录态首页展示最近编辑笔记（`home_page.recent_notes_limit`）与待办清单（KV 键 `todos`，受 `todos.max_items` / `todos.max_length` 约束）；简洁模式下首页 302 直接跳到新建笔记。
+- 测试清单：`tests/` 覆盖 `test_org` / `test_user_settings` / `test_images` / `test_pins` / `test_folders` / `test_sqlite_storage` / `test_markdown_alerts` / `test_home_notice` / `test_frontend`，统一 `pytest tests/` 运行。
 - 模板：Jinja2，支持 `{{ t('key') }}` 多语言
 - 无服务器默认存储：Vercel 绑定 Neon 后 `DATABASE_URL` 自动注入 → 自动切到 postgres 后端
 - 前端检查：前端资源全部内联在 Jinja2 模板中，无独立 JS/CSS 文件；`tests/frontend_check.py` 做静态语法检查（Jinja2 `Environment.parse` + Node `--check` 校验内联 JS + CSS 括号配平 + JSON 解析），由 `.github/workflows/check.yml` 的 `frontend` job 在前端文件变更时运行
