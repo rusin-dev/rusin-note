@@ -15,6 +15,7 @@ import random
 import re
 
 from . import config
+from .concurrency import ConcurrencyLimiter, Slot
 from .logger import create_logger
 from .storage import StorageError, storage
 
@@ -209,3 +210,56 @@ def note_attachment_usage(username: str, content: str) -> int:
 def note_attachment_quota_ok(username: str, content: str, extra_bytes: int = 0) -> bool:
     """判断「笔记已引用附件 + 额外字节」是否在单笔记配额内。"""
     return note_attachment_usage(username, content) + extra_bytes <= config.MAX_ATTACHMENT_PER_NOTE_BYTES
+
+
+# ---------- 单用户并发闸门（防慢速连接占满 worker） ----------
+# 背景（#191）：附件下载 / 上传都是长连接。攻击者可以「发起上千个队列、每个以
+# 1KB/s 传输」，请求数远低于 IP 限流阈值，却长期占满 worker 线程（有人用 100 线程
+# 下载 100 个文件，出站带宽被打到 100Mbps）。因此对**同时在途**的附件请求按用户
+# （未登录按 IP）单独设闸，默认各 1 个队列，上限见 config：
+# MAX_CONCURRENT_ATTACHMENT_DOWNLOADS / MAX_CONCURRENT_ATTACHMENT_UPLOADS（0 = 不限）。
+download_guard = ConcurrencyLimiter("attachment_download")
+upload_guard = ConcurrencyLimiter("attachment_upload")
+
+# 附件下载的分块大小：分块产出，客户端中断时可及时释放并发槽位
+ATTACHMENT_CHUNK_BYTES = 64 * 1024
+
+
+def concurrency_key(user: str | None, client_ip: str | None) -> str:
+    """并发闸门 key：登录用户按账号（同一账号多端合并计数），匿名按 IP。"""
+    if user:
+        return f"user:{user}"
+    return f"ip:{client_ip or 'unknown'}"
+
+
+def try_acquire_download(user: str | None, client_ip: str | None) -> Slot | None:
+    """尝试占用一个「附件下载」并发槽位；超出单用户上限时返回 None（并记日志）。"""
+    key = concurrency_key(user, client_ip)
+    slot = download_guard.try_acquire(key, config.MAX_CONCURRENT_ATTACHMENT_DOWNLOADS)
+    if slot is None:
+        logger.warning("单用户并发下载超限：key=%s limit=%s",
+                       key, config.MAX_CONCURRENT_ATTACHMENT_DOWNLOADS)
+    return slot
+
+
+def try_acquire_upload(username: str) -> Slot | None:
+    """尝试占用一个「附件上传」并发槽位；超出单用户上限时返回 None（并记日志）。"""
+    key = f"user:{username}"
+    slot = upload_guard.try_acquire(key, config.MAX_CONCURRENT_ATTACHMENT_UPLOADS)
+    if slot is None:
+        logger.warning("单用户并发上传超限：key=%s limit=%s",
+                       key, config.MAX_CONCURRENT_ATTACHMENT_UPLOADS)
+    return slot
+
+
+def stream_attachment(data: bytes, slot: Slot, chunk_size: int = ATTACHMENT_CHUNK_BYTES):
+    """分块产出附件字节；迭代结束（或被客户端断开而 close）时释放并发槽位。
+
+    Slot 的释放是幂等的，因此可以与 ``Response.call_on_close`` 同时挂载，
+    保证「正常传完」与「中途断开」两条路径都会归还名额。
+    """
+    try:
+        for offset in range(0, len(data), chunk_size):
+            yield data[offset:offset + chunk_size]
+    finally:
+        slot.release()

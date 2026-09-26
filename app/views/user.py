@@ -28,6 +28,7 @@ from ..attachments import (
     list_user_attachments,
     note_attachment_quota_ok,
     read_attachment_meta,
+    try_acquire_upload,
     user_attachment_usage,
     validate_attachment_id,
     validate_attachment_type,
@@ -273,57 +274,71 @@ def attachments_page(username):
 def attachments_upload(username):
     """编辑器上传附件（multipart，file 字段 + csrf_token）：
     校验链 类型黑名单 → 单文件大小 → 单笔记配额（携带编辑器内容时）→ 用户配额，
-    成功返回 JSON {url, name, id}。"""
+    成功返回 JSON {url, name, id}。
+
+    #191：读取请求体（慢速上传的耗时段）之前先占用「单用户并发上传」槽位（默认 1 个），
+    慢速连接（如 1KB/s）会长期占用 worker，仅靠单位时间请求数限流拦不住；
+    超出并发上限时中止读取并直接返回 429 JSON（供编辑器 fetch 展示）。"""
     if not validate_username(username):
         abort(400)
     _require_auth(username)
     lang = getattr(g, "lang", "zh")
-    file = request.files.get("file")
-    if not file or not file.filename:
-        return jsonify({"error": t(lang, "err_attachment_no_file")}), 400
-    
-    from werkzeug.utils import secure_filename
-    filename = secure_filename(file.filename) or "unnamed"
-    
-    # 类型校验（黑名单）
-    is_valid, error_key = validate_attachment_type(filename)
-    if not is_valid:
-        return jsonify({"error": t(lang, error_key)}), 400
-    
-    # 读取数据
-    data = file.read()
-    if not data:
-        return jsonify({"error": t(lang, "err_attachment_empty")}), 400
-    
-    # 大小校验（单个文件）
-    if len(data) > config.MAX_ATTACHMENT_SIZE_BYTES:
-        return jsonify({"error": t(lang, "err_attachment_too_large",
-                                   max=config.MAX_ATTACHMENT_SIZE_KB)}), 400
-    
-    # 单笔记配额校验（编辑器上传会携带当前内容，用于估算插入后的附件总量）
-    editor_content = request.form.get("content", "")
-    if editor_content and not note_attachment_quota_ok(username, editor_content, len(data)):
-        return jsonify({"error": t(lang, "err_attachment_note_quota",
-                                   total=config.MAX_ATTACHMENT_PER_NOTE_KB)}), 400
-    
-    # 配额校验（用户总量）
-    if user_attachment_usage(username) + len(data) > config.MAX_ATTACHMENT_TOTAL_BYTES:
-        return jsonify({"error": t(lang, "err_attachment_quota",
-                                   total=f"{config.MAX_ATTACHMENT_TOTAL_KB} KB")}), 400
-    
-    # 生成 ID
-    attachment_id = generate_attachment_id(filename)
-    
-    # 写入存储
-    content_type = attachment_content_type(filename)
-    if not write_attachment(username, attachment_id, data, filename, content_type):
-        return jsonify({"error": t(lang, "err_attachment_upload")}), 500
-    
-    return jsonify({
-        "url": attachment_url(username, attachment_id),
-        "name": filename,
-        "id": attachment_id,
-    })
+    slot = try_acquire_upload(username)
+    if slot is None:
+        # 直接返回 JSON（编辑器 fetch 需要），并提示客户端稍后重试
+        resp = jsonify({"error": t(lang, "err_attachment_upload_busy",
+                                   max=config.MAX_CONCURRENT_ATTACHMENT_UPLOADS)})
+        resp.headers["Retry-After"] = "1"
+        return resp, 429
+    try:
+        file = request.files.get("file")
+        if not file or not file.filename:
+            return jsonify({"error": t(lang, "err_attachment_no_file")}), 400
+
+        from werkzeug.utils import secure_filename
+        filename = secure_filename(file.filename) or "unnamed"
+
+        # 类型校验（黑名单）
+        is_valid, error_key = validate_attachment_type(filename)
+        if not is_valid:
+            return jsonify({"error": t(lang, error_key)}), 400
+
+        # 读取数据
+        data = file.read()
+        if not data:
+            return jsonify({"error": t(lang, "err_attachment_empty")}), 400
+
+        # 大小校验（单个文件）
+        if len(data) > config.MAX_ATTACHMENT_SIZE_BYTES:
+            return jsonify({"error": t(lang, "err_attachment_too_large",
+                                       max=config.MAX_ATTACHMENT_SIZE_KB)}), 400
+
+        # 单笔记配额校验（编辑器上传会携带当前内容，用于估算插入后的附件总量）
+        editor_content = request.form.get("content", "")
+        if editor_content and not note_attachment_quota_ok(username, editor_content, len(data)):
+            return jsonify({"error": t(lang, "err_attachment_note_quota",
+                                       total=config.MAX_ATTACHMENT_PER_NOTE_KB)}), 400
+
+        # 配额校验（用户总量）
+        if user_attachment_usage(username) + len(data) > config.MAX_ATTACHMENT_TOTAL_BYTES:
+            return jsonify({"error": t(lang, "err_attachment_quota",
+                                       total=f"{config.MAX_ATTACHMENT_TOTAL_KB} KB")}), 400
+
+        # 生成 ID
+        attachment_id = generate_attachment_id(filename)
+
+        # 写入存储
+        content_type = attachment_content_type(filename)
+        if not write_attachment(username, attachment_id, data, filename, content_type):
+            return jsonify({"error": t(lang, "err_attachment_upload")}), 500
+
+        return jsonify({
+            "url": attachment_url(username, attachment_id),
+            "name": filename,
+            "id": attachment_id,
+        })
+    finally:
+        slot.release()
 
 
 @bp.route("/user/<username>/attachments/delete", methods=["POST"])

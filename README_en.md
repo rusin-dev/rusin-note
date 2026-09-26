@@ -38,7 +38,7 @@
 - **Note folders**: Assign each note to one folder and filter the user note list by folder.
 - **Pinned notes**: Pin important notes from the note list so they remain at the top.
 - **Note image hosting**: Paste or drag PNG, JPEG, GIF, or WebP images into the editor. Formats are validated by file signature, images are referenced through Markdown, and defaults are 2MB per image and 50MB per user.
-- **Note attachments**: Upload arbitrary file types (executables and archives are blacklisted by default), with a default 50KB per-file limit, 500KB per-note quota, and 10MB per-user quota (all configurable in `config.json`), drag-drop upload on the management page, referenced as links in notes.
+- **Note attachments**: Upload arbitrary file types (executables blocked by default), configurable per-file size limit (default 50KB) and per-note quota (default 500KB), drag-drop upload on management page, referenced as links in notes. Downloads require a logged-in account by default (`/attachment/<u>/<id>` returns 401 for anonymous visitors), and per-user in-flight queues are capped ([#191](https://github.com/rusin-dev/rusin-note/issues/191): 1 concurrent download, 1 concurrent upload) so a thousand trickling (1KB/s) connections or 100 parallel download threads cannot occupy the workers or saturate egress bandwidth.
 - **Comment system**: Comment functionality for notes and share pages, supports anonymous comments, configurable max comments (default 200), cooldown time, paginated loading, similar posting wait mechanism to benben feed.
 - **Benben feed**: A persistent lightweight feed where logged-in users can post and anonymous users can read, with live preview, pagination, post cooldowns, and a Reply action that fills `|| @username: original content`.
 - **Feature flags**: Admins can toggle public notes, benben, share links, registration, references, tags, folders, pins, heading anchors, alert cards, images, attachments, comments, LaTeX, highlighting, avatars, and organizations at `/admin/features`. Changes are persisted and take effect without restarting; disabled routes return 404 and their entry points are hidden.
@@ -46,9 +46,9 @@
 - **Homepage notice banner**: The top of the homepage shows the first line of `NOTICE.txt` in the repository root as a site notice. It hides automatically when the file is missing or empty, the text is HTML-escaped, and no extra configuration is required.
 - **Homepage workbench**: When signed in, the homepage becomes a VSCode-welcome-style workbench — recently edited notes (count controlled by `home_page.recent_notes_limit`) and a **to-do list** (add / toggle / delete / clear completed, bounded by the `todos` config). With simple mode enabled, the homepage jumps straight to a new note.
 - **Multi-language UI**: Simplified Chinese and English are built in, with manual switching and browser-language fallback.
-- **User settings**: Every signed-in user manages their account at `/user/<username>/settings` — toggle **simple mode** (hides tags, pins, benben, the org menu and the share entry, keeping only note editing and preview; the preference is tied to the account and applies on all devices, and the old navbar toggle has moved here), change the password (verifies the current password and complexity, and signs out other devices), and change the login username (notes, images, attachments and tag/folder/pin/share/benben/comment/org data are automatically migrated to the new username).
-- **Deployment-friendly configuration**: Common options live in `config.json`, including note expiration, session timeout, password policy, trusted proxy IP handling, and HTTPS cookies. Business data can live in local SQLite (index) + JSON files, Upstash Redis, Neon/PostgreSQL, or in-memory storage.
-- **Practical baseline protection**: Includes CSRF protection, request rate limits, save limits, registration limits, content sanitization, and a proxy-header trust switch for safer public deployments.
+- **User settings**: Every signed-in user manages their account at `/user/<username>/settings` — toggle **simple mode** (hides tags, pins, benben and other advanced features, keeping only note editing and preview; the preference is tied to the account and applies on all devices, and the old navbar toggle has moved here), change the password (verifies the current password and complexity, and signs out other devices), and change the login username (notes, images, attachments and tag/folder/pin/share/benben/comment/org data are automatically migrated to the new username).
+- **Deployment-friendly configuration**: Common options live in `config.json`, including note expiration, session timeout, password policy, trusted proxy IP handling, and HTTPS cookies. For serverless deployment, data can go to external storage (Upstash Redis / Neon PostgreSQL), surviving cold starts.
+- **Practical baseline protection**: Includes CSRF protection, request rate limits, save limits, registration limits, a global per-IP fallback limit, IP allow/block lists, content sanitization, and X-Forwarded-For forgery protection for safer public deployments.
 
 ## Quick Start
 
@@ -160,16 +160,19 @@ Connect to your server, then:
             proxy_pass http://127.0.0.1:8080;
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
+            # Let Nginx (re)write XFF by appending the peer it saw, so a client-supplied XFF is not passed through
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         }
     }
     ```
 
     > After setting up the Nginx/Cloudflare reverse proxy, set `trust_proxy_headers` to `true` in
-    > `config.json` so the server trusts proxy headers and rate-limits by the real client IP
-    > (the built-in fallback is `false` to prevent header-forging bypasses). Header trust order,
-    > from most to least trusted: `CF-Connecting-IP` (direct Cloudflare) → `X-Real-IP` (Nginx) →
-    > the rightmost `X-Forwarded-For` entry (the real client appended by Nginx); forged entries
-    > on the left side of XFF are never used.
+    > `config.json` and make sure `trusted_proxies` covers the proxy address (the default
+    > `["loopback", "private"]` handles a same-host Nginx; add the `"cloudflare"` preset when
+    > Cloudflare is in front). The server first validates the direct TCP peer against
+    > `trusted_proxies`, then resolves the real client IP by walking `X-Forwarded-For` from right
+    > to left while skipping trusted proxies — forged left-hand entries are never used. If the peer
+    > is not trusted, all proxy headers are ignored and the direct IP is used.
 
     ```bash
     # Enable and reload
@@ -311,6 +314,7 @@ rusin-note:.
 │  │  auth.py (password hashing & session auth)
 │  │  background.py (background cleanup tasks)
 │  │  comments.py (comment validation and business API)
+│  │  concurrency.py (in-process concurrency gate: per-user in-flight request cap)
 │  │  config.py (configuration loading & global constants)
 │  │  extensions.py (Flask extension instances)
 │  │  feature_flags.py (feature registry and persisted runtime state)
@@ -390,18 +394,16 @@ rusin-note:.
 │          upstream-sync.yml (upstream sync)
 ```
 
-### Development & Testing
+### IP Rate Limiting and XFF Forgery Protection
 
-```bash
-pip install -r requirements-dev.txt     # installs pytest (pulls in requirements.txt)
-pytest tests/                           # run the whole end-to-end suite
-pytest tests/test_org.py -q             # single module / keyword filter: pytest tests/ -q -k images
-python tests/frontend_check.py          # front-end syntax check (Jinja2 + inline JS/CSS + JSON; needs Node)
-```
+Rate limiting keys on the *real client IP*, while `X-Forwarded-For` (XFF), `X-Real-IP` and `CF-Connecting-IP` are request headers any client can forge — trusting them blindly lets an attacker rotate fake IPs and bypass every limit. The rules implemented in `app/ip_utils.py` are:
 
-- Tests are organized with **pytest + logging**: `tests/conftest.py` pins `RUSIN_STORAGE=file`, switches to a temporary `RUSIN_DATA_DIR`, and clears every module-level runtime cache, so tests never touch your local data; rate limiting is disabled inside tests. See `tests/README.md` for the full conventions.
-- All front-end assets are inlined in the Jinja2 templates (there is no `static/` directory), so run `python tests/frontend_check.py` after touching templates.
-- CI (`.github/workflows/check.yml`) runs on push / PR to `dev` and is path-filtered: the `frontend` job runs the syntax check, the `test` job runs pytest and then starts the server for an HTTP health check.
+1. **Peer validation**: proxy headers are honoured only when the direct TCP peer (`remote_addr`) matches `trusted_proxies`; for direct public traffic all proxy headers are ignored.
+2. **Strict parsing**: a header value must be a valid IP (`1.2.3.4:80`, `[2001:db8::1]:443`, `::ffff:1.2.3.4` are accepted); anything else is dropped so arbitrary strings can never create limiter buckets. Header values longer than 256 bytes and XFF chains longer than 16 entries are truncated.
+3. **XFF resolved from the right**: XFF is an append-only list, so the right-most entries are written by trusted proxies and the left-hand part may be forged. Trusted proxy addresses are skipped layer by layer (Cloudflare → Nginx) and the first untrusted valid IP wins.
+4. **Visibility**: when proxy headers arrive from an untrusted peer, a throttled `检测到疑似伪造的代理头已忽略` warning is logged (at most once per IP per 5 minutes).
+
+Deployment notes: add `"cloudflare"` to `trusted_proxies` when Cloudflare is in front; narrow `trusted_proxies` to the concrete proxy IP (or just `["loopback"]`) when the app port is exposed directly to the internet (including directly mapped Docker ports, where the peer may look like a gateway private address), since the `private` preset lets any host inside those ranges forge proxy headers; add the explicit IP/CIDR when the load balancer address is not covered by `private` (otherwise proxy headers are ignored and all users share one limit bucket). The effective policy is written to the application log (`data/log/*.log`, falling back to stderr on serverless) at startup. This project intentionally does **not** use Werkzeug's `ProxyFix`, which would let a forged XFF rewrite `request.remote_addr`.
 
 ### Configuration Options
 
@@ -428,9 +430,25 @@ python tests/frontend_check.py          # front-end syntax check (Jinja2 + inlin
 
 - `register_rate_limit`: Per-IP registration rate limit, default one registration per 120 seconds.
 
+- `ip_rate_limit`: Application-wide total request cap per IP, accumulated across every route and applied on top of the per-route limits.
+    - `window_seconds`: Time window $t$, default `60`.
+    - `max_requests`: Maximum number of requests $s$, default `300` (set to `0` to disable).
+
 - `trust_proxy_headers`: Whether to trust proxy client-IP headers. The repository configuration currently sets it to `true` for serverless/reverse-proxy deployments; set it to `false` when requests can reach the application directly.
 
     **Security note**: The built-in fallback is `false`. Only use `true` behind a trusted reverse proxy such as Nginx or Vercel; otherwise clients may forge proxy headers to bypass IP-based limits.
+
+- `trusted_proxies`: **Trusted proxy networks** — the key defense against forged `X-Forwarded-For`. Proxy headers are honoured only when the direct TCP peer matches this list; for direct public traffic all proxy headers are ignored and the direct IP is used.
+
+    Entries may be IPs/CIDRs, the presets `loopback` / `private` (RFC1918, CGNAT, link-local) / `cloudflare` (official Cloudflare ranges), or `"*"` to trust any peer (**forgeable**, for troubleshooting only). Default: `["loopback", "private"]`.
+
+- `proxy_hops`: Number of proxy hops counted from the right of `X-Forwarded-For` in the legacy mode (`trusted_proxies` set to `"*"` or empty), default `1`.
+
+- `ip_allowlist`: IP/CIDR allowlist that is exempt from rate limiting (monitoring, internal health checks), default `[]`.
+
+- `ip_blocklist`: IP/CIDR blocklist rejected with HTTP 403, default `[]`.
+
+    All of the IP-related settings can also be supplied through environment variables (handy when the config file is read-only on serverless platforms): `RUSIN_TRUSTED_PROXIES`, `RUSIN_PROXY_HOPS`, `RUSIN_IP_ALLOWLIST`, `RUSIN_IP_BLOCKLIST` (comma separated; allow/block lists are merged with the config file).
 
 - `secure_cookies`: Whether to add the `Secure` flag to the session cookie. The repository configuration currently sets it to `true`; disable it for plain HTTP local/VPS use.
 
@@ -505,11 +523,17 @@ python tests/frontend_check.py          # front-end syntax check (Jinja2 + inlin
     - `max_size_kb`: maximum image size, default `2048` (2MB);
     - `max_total_kb`: per-user image quota, default `51200` (50MB);
     - PNG, JPEG, GIF, and WebP are accepted after file-signature validation; SVG is rejected.
-- `attachments`: note attachments (attachment button in editor uploads files, `/attachment/<u>/<id>` for public download).
+- `attachments`: note attachments (attachment button in editor uploads files; `/attachment/<u>/<id>` requires login by default).
     - `enabled`: enable attachments, default `true`; set `false` to hide the attachment button in the editor and return 404 on the management page;
     - `max_size_kb`: max single file size (KB), default `50`;
     - `max_per_note_kb`: max total attachments referenced by one note (KB), default `500`;
     - `max_total_kb`: per-user total quota (KB), default `10240` (10MB);
+    - `allow_anonymous_download`: allow **anonymous** attachment downloads, default `false` — anonymous requests to `/attachment/<u>/<id>` get 401 (the error page asks the visitor to log in); set `true` to restore the old "anyone with the link can download" behaviour;
+    - `max_concurrent_downloads`: max **simultaneous downloads per user** (in-flight requests for one account), default `1` ([#191](https://github.com/rusin-dev/rusin-note/issues/191) "limit to 1 queue"); `0` disables the cap;
+    - `max_concurrent_uploads`: max **simultaneous uploads per user** (in-flight requests for one account), default `1`; `0` disables the cap;
+    - `download_rate_limit`: dedicated per-IP rate limit for the attachment download route, `window_seconds` (default `60`) and `max_requests` (default `120`);
+    - These concurrency caps stop "open a thousand connections and trickle each at 1KB/s" or "100 threads downloading 100 files" abuse, where the request rate stays under the limiter but workers stay occupied and egress bandwidth is saturated: over the cap, downloads return 429 with `Retry-After` and uploads return a 429 JSON error the editor can display. Over-limit requests are **rejected, not queued** (queueing would occupy workers just the same). Counting is **per process** (`app/concurrency.py`), so with N gunicorn workers the effective cap is about `N × value`; strict cross-instance counting would need an atomic counter in external storage, which this project does not use;
+    - Attachments are referenced as links by default; if one note embeds several attachment images (more concurrent requests than the cap), raise `max_concurrent_downloads` or set it to `0`;
     - `blocked_extensions`: list of blocked file extensions (blacklist mode), default includes `.exe`, `.bat`, `.sh`, `.zip` and other executables/archives.
 - `comments`: comment system (`/comments/<target_type>/<target_id>`, supports notes and share pages).
     - `enabled`: enable comments, default `true`; set `false` to return 404 on comment pages;

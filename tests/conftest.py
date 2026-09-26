@@ -60,6 +60,7 @@ def reset_runtime_state(data_dir) -> None:
     """
     from app import config as app_config
     from app import store, tags, folders, pins, todos, notes, feature_flags
+    from app import concurrency
     from app.extensions import cache, limiter
 
     app_config.DATA_DIR = str(data_dir)
@@ -102,6 +103,8 @@ def reset_runtime_state(data_dir) -> None:
         limiter.reset()
     except Exception:  # pragma: no cover - 不同版本 API 兜底
         pass
+    # ---- 并发闸门（附件下载/上传）在途计数清零，避免跨测试类泄漏 ----
+    concurrency.reset_all()
     try:
         cache.clear()
     except Exception:  # pragma: no cover - 尚未绑定 Flask app 时忽略
