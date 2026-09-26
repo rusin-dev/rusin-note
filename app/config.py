@@ -46,7 +46,17 @@ DEFAULT_CONFIG = {
         "window_seconds": 120,
         "max_requests": 1
     },
+    "ip_rate_limit": {                      # 全站每 IP 总请求上限（应用级限流，对所有路由累计生效；max_requests=0 关闭）
+        "window_seconds": 60,
+        "max_requests": 300
+    },
     "trust_proxy_headers": False,           # 仅当部署在可信反向代理之后才置 True，否则一律用直连 IP
+    # 可信反向代理网段：仅「TCP 直连对端」命中该列表时才采信代理头（防伪造 XFF）。
+    # 元素可为 IP/CIDR，或预设名 loopback / private / cloudflare；"*" 表示信任任意对端（有伪造风险）
+    "trusted_proxies": ["loopback", "private"],
+    "proxy_hops": 1,                        # 兼容模式（trusted_proxies 为 "*"/留空）下 XFF 从右往左的代理跳数
+    "ip_allowlist": [],                     # 免限流 IP/CIDR 白名单（如监控、内网探活）
+    "ip_blocklist": [],                     # 直接拒绝（403）的 IP/CIDR 黑名单
     "secure_cookies": False,                # HTTPS 部署时置 True，为会话 Cookie 添加 Secure 标志
     "global_cdn": "https://cdn.jsdmirror.cn",  # 全局 CDN 基础地址，KaTeX / FontAwesome / marked 等前端资源均从该地址拼接
     "id_generation": {
@@ -119,11 +129,18 @@ DEFAULT_CONFIG = {
         "max_size_kb": 2048,                   # 单张图片上限（KB）
         "max_total_kb": 51200                  # 每用户配额（KB）
     },
-    "attachments": {                          # 笔记附件：编辑器上传，/attachment/<u>/<id> 公开访问
+    "attachments": {                          # 笔记附件：编辑器上传，/attachment/<u>/<id> 需登录后下载
         "enabled": True,
         "max_size_kb": 50,                     # 单个附件上限（KB）
         "max_per_note_kb": 500,                # 单个笔记引用附件总量上限（KB）
         "max_total_kb": 10240,                 # 每用户配额（KB）
+        "allow_anonymous_download": False,     # 是否允许匿名（未登录）下载附件，默认禁止
+        "max_concurrent_downloads": 1,         # 单用户同时下载附件上限（#191：限制 1 个队列；0 = 不限）
+        "max_concurrent_uploads": 1,           # 单用户同时上传附件上限（#191：限制 1 个队列；0 = 不限）
+        "download_rate_limit": {               # 附件下载路由的每 IP 限流
+            "window_seconds": 60,
+            "max_requests": 120
+        },
         "blocked_extensions": [                # 黑名单扩展名（不含点），可执行文件
             "exe", "bat", "cmd", "com", "msi", "scr", "pif",
             "vbs", "vbe", "js", "jse", "ws", "wsf", "wsc", "wsh",
@@ -232,8 +249,38 @@ REGISTER_RATE_CFG = config.get("register_rate_limit", DEFAULT_CONFIG["register_r
 REGISTER_RATE_WINDOW = REGISTER_RATE_CFG.get("window_seconds", 120)
 REGISTER_RATE_MAX = REGISTER_RATE_CFG.get("max_requests", 1)
 
+
+def _env_list(name: str) -> list:
+    """读取逗号/分号/空白分隔的列表型环境变量（无服务器平台只读盘时用）。"""
+    raw = os.environ.get(name, "")
+    for sep in (";", ",", " ", "\n", "\t"):
+        raw = raw.replace(sep, ",")
+    return [item.strip() for item in raw.split(",") if item.strip()]
+
+
+def _env_int(name: str, default: int) -> int:
+    try:
+        return int(os.environ.get(name, "") or default)
+    except (TypeError, ValueError):
+        return default
+
+
+# 全站每 IP 总请求上限（应用级作用域，叠加在各路由独立限流之上，max_requests=0 表示关闭）
+IP_RATE_CFG = config.get("ip_rate_limit", DEFAULT_CONFIG["ip_rate_limit"])
+IP_RATE_WINDOW = int(IP_RATE_CFG.get("window_seconds", 60) or 60)
+IP_RATE_MAX = int(IP_RATE_CFG.get("max_requests", 300) or 0)
+IP_RATE_ENABLED = bool(IP_RATE_CFG.get("enabled", True)) and IP_RATE_MAX > 0
+
 # 可信代理配置（BUG-3：默认不信任 X-Forwarded-For / X-Real-IP，防止伪造头绕过限流）
 TRUST_PROXY_HEADERS = bool(config.get("trust_proxy_headers", False))
+# 可信代理网段：仅当 TCP 直连对端命中该列表时才采信代理头；"*" 表示信任任意对端
+TRUSTED_PROXIES = _env_list("RUSIN_TRUSTED_PROXIES") or config.get(
+    "trusted_proxies", DEFAULT_CONFIG["trusted_proxies"])
+# 兼容模式下的 XFF 跳数（仅当 trusted_proxies 为 "*"/留空时生效）
+PROXY_HOPS = max(1, _env_int("RUSIN_PROXY_HOPS", int(config.get("proxy_hops", 1) or 1)))
+# IP 白名单（免限流）与黑名单（403），环境变量追加在配置文件之后
+IP_ALLOWLIST = list(config.get("ip_allowlist", []) or []) + _env_list("RUSIN_IP_ALLOWLIST")
+IP_BLOCKLIST = list(config.get("ip_blocklist", []) or []) + _env_list("RUSIN_IP_BLOCKLIST")
 
 # Cookie 安全配置（BUG-13）
 SECURE_COOKIES = bool(config.get("secure_cookies", False))
@@ -470,6 +517,37 @@ MAX_ATTACHMENT_SIZE_BYTES = MAX_ATTACHMENT_SIZE_KB * 1024
 MAX_ATTACHMENT_PER_NOTE_BYTES = MAX_ATTACHMENT_PER_NOTE_KB * 1024
 MAX_ATTACHMENT_TOTAL_BYTES = MAX_ATTACHMENT_TOTAL_KB * 1024
 ATTACHMENT_BLOCKED_EXTENSIONS = ATTACHMENTS_CFG.get("blocked_extensions", DEFAULT_CONFIG["attachments"]["blocked_extensions"])
+
+# 附件下载权限：默认「不允许匿名用户下载」（未登录访问 /attachment/<u>/<id> 返回 401）；
+# 置 true 则放开为「知道链接即可下载」的旧行为。
+ATTACHMENTS_ALLOW_ANONYMOUS_DOWNLOAD = bool(ATTACHMENTS_CFG.get(
+    "allow_anonymous_download", DEFAULT_CONFIG["attachments"]["allow_anonymous_download"]))
+
+
+def _positive_int(value, default: int = 0) -> int:
+    """解析「并发上限」类整数配置：非法值回退默认，负数归一为 0（= 不限）。"""
+    try:
+        return max(0, int(value))
+    except (TypeError, ValueError):
+        return default
+
+
+# 单用户并发上限（同时在途的请求数）：慢速连接（如 1KB/s）会长期占用 worker，
+# 单纯限制「单位时间请求数」拦不住，因此对在途数量单独设闸（见 app/concurrency.py）。
+# 默认各 1 个（#191「单用户上传/下载队列限制 1 队列」）：同一账号同时只允许
+# 1 个下载 + 1 个上传在途，超出直接 429（不做排队等待——排队同样占用 worker）。
+MAX_CONCURRENT_ATTACHMENT_DOWNLOADS = _positive_int(ATTACHMENTS_CFG.get(
+    "max_concurrent_downloads", DEFAULT_CONFIG["attachments"]["max_concurrent_downloads"]), 1)
+MAX_CONCURRENT_ATTACHMENT_UPLOADS = _positive_int(ATTACHMENTS_CFG.get(
+    "max_concurrent_uploads", DEFAULT_CONFIG["attachments"]["max_concurrent_uploads"]), 1)
+
+# 附件下载路由的独立限流（与 GET 限流解耦：下载多为长连接，阈值可单独调）
+ATTACHMENT_DOWNLOAD_RATE_CFG = ATTACHMENTS_CFG.get(
+    "download_rate_limit", DEFAULT_CONFIG["attachments"]["download_rate_limit"])
+ATTACHMENT_DOWNLOAD_RATE_WINDOW = _positive_int(
+    ATTACHMENT_DOWNLOAD_RATE_CFG.get("window_seconds", 60), 60) or 60
+ATTACHMENT_DOWNLOAD_RATE_MAX = _positive_int(
+    ATTACHMENT_DOWNLOAD_RATE_CFG.get("max_requests", 120), 120) or 120
 
 # ---------- 评论系统配置 ----------
 COMMENTS_CFG = config.get("comments", DEFAULT_CONFIG["comments"])

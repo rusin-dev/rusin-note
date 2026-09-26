@@ -42,7 +42,7 @@
 - **笔记文件夹**：支持将笔记归入文件夹（单归属），用户可在文件夹视图下管理自己的笔记，列表页支持按文件夹筛选。
 - **笔记置顶**：在笔记列表页可通过图钉图标将重要笔记置顶，置顶笔记始终显示在最前面。
 - **笔记图床**：编辑器支持粘贴/拖拽上传 PNG、JPEG、GIF 或 WebP 图片，按文件魔数校验格式并以 Markdown 语法引用；图片公开可读，默认单张 2MB、每用户 50MB 配额。
-- **笔记附件**：支持上传任意文件类型（可执行文件除外），默认单文件 50KB、每笔记 500KB 配额（可在 `config.json` 调整），附件管理页支持拖拽上传，笔记中以链接形式引用。
+- **笔记附件**：支持上传任意文件类型（可执行文件除外），默认单文件 50KB、每笔记 500KB 配额（可在 `config.json` 调整），附件管理页支持拖拽上传，笔记中以链接形式引用。附件**默认仅登录用户可下载**（`/attachment/<u>/<id>` 对匿名访客返回 401），并按「单用户同时在途队列数」设闸（[#191](https://github.com/rusin-dev/rusin-note/issues/191)：默认同时下载 1 个、同时上传 1 个），防止少量慢速连接（如 1KB/s）或用上百线程并发拉取长期占满 worker。
 - **评论系统**：笔记和分享页面支持评论功能，支持匿名评论，可配置最大评论数（默认 200 条）、冷却时间、分页加载，与犇犇动态类似的发布等待机制。
 - **犇犇动态**：内置持久化轻量动态流，登录用户可发布内容，未登录用户可浏览，支持实时预览、分页加载、发布冷却，以及点击动态右上角“回复”快速填充 `|| @用户名: 原内容`。
 - **功能开关（Feature Flags）**：管理员在 `/admin/features` 用滑块开关启用/停用站点功能（公开笔记、犇犇、分享链接、开放注册、快捷引用、笔记标签、笔记文件夹、笔记置顶、Markdown 标题锚点、Markdown 提示卡片、笔记图床、笔记附件、评论系统、LaTeX、代码高亮、头像、组织），保存后立即生效、无需重启；启用的功能会在 `/count` 数据汇总页呈现，停用的功能入口自动隐藏、路由直接 404。
@@ -165,13 +165,17 @@ Python 通用：`python -c "import secrets; print(secrets.token_hex(32))"` 或 `
             proxy_pass http://127.0.0.1:8080;
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
+            # 让 Nginx 补写 XFF（追加它看到的上游 IP），避免客户端自带的 XFF 被透传
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         }
     }
     ```
 
     > 使用 Nginx/Cloudflare 反代后，请将 `config.json` 中的 `trust_proxy_headers` 设为 `true`，
-    > 服务端才会信任代理头按真实客户端 IP 限流（默认关闭以杜绝伪造头绕过限流）。
-    > 代理头可信度从高到低：`CF-Connecting-IP`（Cloudflare 直连）→ `X-Real-IP`（Nginx）→ `X-Forwarded-For` 最右一项（Nginx 追加的真客户端），客户端伪造的 XFF 左侧项不会被采信。
+    > 并确认 `trusted_proxies` 包含反代来源网段（默认 `["loopback", "private"]` 覆盖同机 Nginx；
+    > 使用 Cloudflare 时追加 `"cloudflare"` 预设）。服务端会先用 `trusted_proxies` 校验直连对端，
+    > 再按「XFF 从右往左、跳过可信代理」的规则取真实客户端 IP，客户端伪造的 XFF 左侧项不会被采信；
+    > 对端不在可信列表时，所有代理头一律忽略（按直连 IP 限流）。详见「IP 限速与防 XFF 伪造」。
 
     > 注意：仓库内 `config.json` 默认已为无服务器平台开启 `trust_proxy_headers` 与
     > `secure_cookies`，VPS 部署请按需改回 `false`（HTTP 环境下 Secure Cookie 会被浏览器拒绝）。
@@ -338,6 +342,7 @@ rusin-note:.
 │  │  attachments.py（附件校验、配额与存储接口）
 │  │  background.py（后台清理任务）
 │  │  comments.py（评论校验与业务接口）
+│  │  concurrency.py（进程内并发闸门：单用户同时在途请求上限）
 │  │  config.py（配置加载与全局常量）
 │  │  extensions.py（Flask 扩展实例）
 │  │  feature_flags.py（功能开关注册表与持久化状态）
@@ -406,6 +411,32 @@ rusin-note:.
 │          upstream-sync.yml（上游同步）
 ```
 
+### IP 限速与防 XFF 伪造
+
+限流的键是「真实客户端 IP」，而 `X-Forwarded-For`（XFF）、`X-Real-IP`、`CF-Connecting-IP` 都是**客户端可随意伪造的请求头**。若无条件采信，攻击者每次请求换一个假 IP 就能让限流完全失效。为此本项目的解析规则如下（实现见 `app/ip_utils.py`）：
+
+1. **对端校验**：只有 TCP 直连对端（`remote_addr`）命中 `trusted_proxies` 列表时才采信代理头；直接从公网访问时，所有代理头一律忽略，按直连 IP 计数。
+2. **严格解析**：头部值必须是合法 IP（支持 `1.2.3.4:80`、`[2001:db8::1]:443`、`::ffff:1.2.3.4`），非法值直接丢弃——避免用任意字符串制造海量限流桶；单个头部超过 256 字节、XFF 超过 16 项都会截断。
+3. **从右往左取 XFF**：XFF 是「左旧右新」追加的列表，右侧条目由可信代理写入，左侧可能是伪造的历史值。多级代理下逐层跳过可信代理地址，取第一个不可信的合法 IP。
+4. **疑似伪造留痕**：携带了代理头但直连对端不可信时，日志会输出 `检测到疑似伪造的代理头已忽略`（同一 IP 每 5 分钟最多一条），便于发现扫描行为与配置错误。
+
+部署要点：
+
+```nginx
+# Nginx 必须「改写」XFF（追加自身看到的上游地址）或设置 X-Real-IP，
+# 否则客户端自带的 XFF 会被原样透传
+proxy_set_header X-Real-IP $remote_addr;
+proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+```
+
+- 同机 / 同私有网络的 Nginx、Caddy：`trusted_proxies` 用默认的 `["loopback", "private"]` 即可。
+- Cloudflare（或 Cloudflare → Nginx）：追加 `"cloudflare"` 预设，此时会额外采信由 Cloudflare 强制覆写的 `CF-Connecting-IP`。
+- 应用端口**直接暴露公网**（含 Docker 直接映射端口时对端可能显示为网关私网地址）时，请把 `trusted_proxies` 收窄为具体反向代理 IP（或只保留 `["loopback"]`）——`private` 预设意味着该网段内任意主机都可伪造代理头。
+- 内网负载均衡但地址是公网 IP、或使用了名为 `private` 预设之外的网段：把对应 IP/CIDR 显式加进 `trusted_proxies`，否则代理头会被忽略，导致所有用户共用同一个限流桶（表现为「正常访问被限流」）。
+- 启动时会输出当前策略（`IP 策略：…` / `全站 IP 限流：…` / 黑白名单条数）到应用日志（`data/log/*.log`，无服务器环境回退 stderr），可据此确认配置是否符合预期。
+
+> 本项目不使用 Werkzeug 的 `ProxyFix`：它会用可伪造的 XFF 直接改写 `request.remote_addr`，使「可信代理」校验失去意义。
+
 ### 配置项解析
 
 - `max_note_size_kb`：笔记最大大小（单位：**KB**）默认 $512$（即 $0.5$ MB）。
@@ -431,9 +462,20 @@ rusin-note:.
    - `max_requests` ：请求数 $s$，默认 $1$;
 
    $t$ 秒内单个IP最多注册 $s$ 个账号，防止恶意批量注册。
+- `ip_rate_limit` 全站每 IP 总请求上限（**应用级**限流，对所有路由累计生效，叠加在各路由独立限流之上）。
+   - `window_seconds` ：时间 $t$，默认 $60$；
+   - `max_requests` ：请求数 $s$，默认 $300$（置 `0` 关闭全站兜底限流）；
 - `trust_proxy_headers`：是否信任反向代理传递的客户端 IP 头，当前仓库配置为 `true`，适用于无服务器平台或可信反向代理。
   
   **安全说明**：应用内置默认值为关闭；仅当部署在可信反向代理（如 Nginx、Vercel）之后才置为 `true`，否则客户端可能伪造请求头绕过限流。
+- `trusted_proxies`：**可信代理网段**（防伪造 `X-Forwarded-For` 的关键）。仅当 TCP 直连对端命中该列表时才会采信代理头；公网直连时所有代理头一律忽略，按直连 IP 限流。
+
+  元素可为 IP/CIDR，也可用预设名 `loopback`（回环）、`private`（RFC1918 / CGNAT / 链路本地）、`cloudflare`（Cloudflare 官方回源段），或用 `"*"` 信任任意对端（**有伪造风险**，仅建议临时排障使用）。默认 `["loopback", "private"]`。
+- `proxy_hops`：兼容模式（`trusted_proxies` 为 `"*"` 或留空）下 `X-Forwarded-For` 从右往左的代理跳数，默认 `1`。
+- `ip_allowlist`：免限流 IP/CIDR 白名单（如监控、内网探活），默认 `[]`。
+- `ip_blocklist`：直接拒绝（HTTP 403）的 IP/CIDR 黑名单，默认 `[]`。
+
+  以上 IP 相关配置也可用环境变量覆盖（无服务器平台配置文件只读时更方便）：`RUSIN_TRUSTED_PROXIES`、`RUSIN_PROXY_HOPS`、`RUSIN_IP_ALLOWLIST`、`RUSIN_IP_BLOCKLIST`（逗号分隔，名单类环境变量与配置文件取并集）。
 - `secure_cookies`：会话 Cookie 是否附加 `Secure` 标志，当前仓库配置为 `true`。
 
   **安全说明**：仅当通过 HTTPS 访问时置为 `true`，否则浏览器会拒绝在 HTTP 下回传 Cookie。
@@ -491,11 +533,17 @@ rusin-note:.
    - `max_size_kb`：单张图片上限，默认 `2048`（2MB）；
    - `max_total_kb`：每用户图片总配额，默认 `51200`（50MB）；
    - 支持 PNG、JPEG、GIF、WebP，并按文件魔数校验；SVG 不允许上传。
-- `attachments` 笔记附件（编辑器附件按钮上传，/attachment/<u>/<id> 公开下载）。
+- `attachments` 笔记附件（编辑器附件按钮上传，`/attachment/<u>/<id>` 默认**需登录**下载）。
    - `enabled` ：是否开启，默认 `true`；置 `false` 后编辑器不显示附件按钮、附件管理页返回 404；
    - `max_size_kb` ：单个附件上限（KB），默认 `50`；
    - `max_per_note_kb` ：单个笔记引用附件总量上限（KB），默认 `500`；
    - `max_total_kb` ：每用户附件总配额（KB），默认 `10240`（10MB）；
+   - `allow_anonymous_download` ：是否允许**匿名（未登录）**下载附件，默认 `false`：未登录访问 `/attachment/<u>/<id>` 返回 401（错误页提示先登录）；置 `true` 回到「知道链接即可下载」的旧行为；
+   - `max_concurrent_downloads` ：**单用户同时下载**上限（同一账号在途的下载请求数），默认 `1`（[#191](https://github.com/rusin-dev/rusin-note/issues/191)「限制 1 队列」），`0` 表示不限；
+   - `max_concurrent_uploads` ：**单用户同时上传**上限（同一账号在途的上传请求数），默认 `1`（同上），`0` 表示不限；
+   - `download_rate_limit` ：附件下载路由的独立每 IP 限流，`window_seconds`（默认 `60`）与 `max_requests`（默认 `120`）；
+   - 并发上限用于拦截「发起上千个慢速连接（每个 1KB/s）、或用上百线程同时下载上百个文件」这类**请求数不超限但长期占用 worker / 打满出站带宽**的行为：超出时下载返回 429（带 `Retry-After`），上传返回 429 JSON（编辑器可直接展示提示）；**超限直接拒绝、不排队**（排队同样占用 worker）。闸门计数在**进程内**（`app/concurrency.py`），gunicorn 起 N 个 worker 时实际上限约为 `N × 该值`；跨实例严格计数需要外部存储原子自增，本项目未采用；
+   - 附件在笔记中默认以链接形式引用；若一篇笔记内联了多个附件图片（同一账号并发请求 > 上限），可适当调高 `max_concurrent_downloads` 或置 `0`；
    - `blocked_extensions` ：禁止上传的文件扩展名列表（黑名单模式），默认包含 `.exe`、`.bat`、`.sh`、`.zip` 等可执行文件与压缩包。  
 - `comments` 评论系统（/comments/<target_type>/<target_id>，支持笔记和分享页面评论）。
    - `enabled` ：是否开启，默认 `true`；置 `false` 后评论页面返回 404；

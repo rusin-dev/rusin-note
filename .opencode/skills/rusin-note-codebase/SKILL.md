@@ -72,8 +72,10 @@ upstash 后端所有键统一加 `rusin:` 前缀；memory 后端 get/set 带 dee
 | `store.py` | 用户/会话/分享/犇犇的内存缓存 + 存储层持久化：`register_user`/`store_session`/`remove_session`/`delete_sessions_if`/`create_share`/`delete_share`/`add_benben_post` 均走「线程锁 + storage.lock + 重读合并 + 整值写入」；分享视图计数延迟批量持久化（`increment_share_views`/`flush_share_views`）；犇犇发布冷却（内存态）、分页读取（带周期重载） |
 | `auth.py` | PBKDF2-HMAC-SHA256 密码哈希（兼容旧单轮 SHA-256 可验证、登录后自然升级）、会话 token 生成/校验（存哈希）、过期会话清理、密码复杂度检查 |
 | `notes.py` | 笔记读写走 `storage` 后端（无路径穿越代码——校验交给 `validate_username`/`validate_note_id` 正则）、ID/用户名校验（含保留名单）、`note_exists`、统计（30s TTL 缓存）、随机 ID 生成、过期笔记清理 |
-| `middleware.py` | `before_request` 钩子：向 `flask.g` 写入 `client_ip`/`lang`/`theme`/`current_user`；`SERVERLESS` 时调用 `_opportunistic_cleanup()`（节流执行过期会话/笔记清理 + 视图刷盘）；`get_client_ip()` 按可信度取 `CF-Connecting-IP` > `X-Real-IP` > XFF 最右非空 > remote_addr（仅 `trust_proxy_headers` 开启时） |
-| `extensions.py` | CSRF（Flask-WTF）与 Limiter（Flask-Limiter）单例；限流 key 优先用 `g.client_ip`；`REDIS_URL` 环境变量切换限流共享存储 |
+| `middleware.py` | `before_request` 钩子：向 `flask.g` 写入 `client_ip`/`client_ip_source`/`lang`/`theme`/`current_user`/`rate_limit_exempt`；命中 `ip_blocklist` 直接 403；`SERVERLESS` 时调用 `_opportunistic_cleanup()`（节流执行过期会话/笔记清理 + 视图刷盘）；`get_client_ip()` 委托 `ip_utils.analyze_client_ip`（仅可信代理才采信代理头） |
+| `ip_utils.py` | **客户端 IP 安全解析（防 XFF 伪造）**：`parse_ip`（严格 IP 规范化，支持 `ip:port`/`[ipv6]:port`/IPv4-mapped）、`analyze_client_ip`（只有 TCP 直连对端命中 `trusted_proxies` 才采信代理头；XFF 从右往左、跳过可信代理取真实客户端；`"*"` 为按 `proxy_hops` 取值的兼容模式）、`ip_in_any`（CIDR + 预设 `loopback`/`private`/`cloudflare`，带解析缓存）、`note_ignored_proxy_headers`（伪造告警节流）、`clear_caches` |
+| `concurrency.py` | **进程内并发闸门**（防慢速长连接占满 worker，#191）：`ConcurrencyLimiter.try_acquire(key, limit)` 返回 `Slot`（超限返回 `None`，`limit<=0` 返回不计数的一次性 Slot），`Slot.release()` **幂等**（可同时挂在生成器 `finally` 与 `Response.call_on_close`）；`active/total_active/peak/rejected/reset` + `reset_all()`（测试隔离用）。实例在 `attachments.py`：`download_guard`/`upload_guard`，key 为 `user:<名>`（未登录按 `ip:<ip>`），上限默认各 1 个在途队列 |
+| `extensions.py` | CSRF（Flask-WTF）与 Limiter（Flask-Limiter）单例；限流 key 用安全解析后的 `g.client_ip`（`ip_allowlist` 命中时返回一次性键=免限流）；`default_limits` 为 `ip_rate_limit` 全局兜底；`on_breach` 记录审计日志；`REDIS_URL` 环境变量切换限流共享存储 |
 | `i18n.py` | 中英双语：`STRINGS` 字典（zh/en 成对），`t(lang, key)` 取翻译（缺 key 返回 key 本身）；语言检测 Cookie `rusin-lang` > Accept-Language > zh；`register_i18n` 注入模板全局 `t`/`lang`/`theme`/`current_user`/`site_name` 等 |
 | `theme.py` | 暗色主题 CSS 变量（`THEME_VARS`）与切换脚本（Cookie + localStorage + 系统偏好）、favicon 内存缓存 |
 | `logger.py` | `create_logger(name)` 返回写入 `log/{timestamp}.log` 的 RotatingFileHandler 日志器；文件不可写（无服务器只读 FS）时回退 stderr |
@@ -96,7 +98,7 @@ upstash 后端所有键统一加 `rusin:` 前缀；memory 后端 get/set 带 dee
 | share | `share.py` | `/share/<token>`（可编辑则进编辑页、只读则进 Markdown 页；每次访问 `increment_share_views`）、POST 写回分享者原笔记（可编辑才允许，否则 403）、`/share/<token>/md` 与 `/share/<token>.md`；全部受 `share_links` 开关控制 |
 | benben | `benben.py` | `/benben` GET 分页查看（新→旧，`page` 参数）、POST 发布（需登录 + 内容长度 + 单用户冷却 + 限流）；受 `benben` 开关控制 |
 | admin | `admin.py` | `/admin/features` GET/POST 功能开关滑块管理页（仅管理员，非管理员 404；POST 保存后 `cache.clear()`） |
-| static_routes | `static_routes.py` | `/favicon.ico`（内存缓存） |
+| static_routes | `static_routes.py` | `/favicon.ico`（内存缓存）、`/image/<name>`（仓库 `image/` 内置静态资源）、`/image/<u>/<id>`（用户图床，公开 + `public, max-age=86400`）、`/attachment/<u>/<id>`（用户附件：**默认禁止匿名下载**（未登录 401，`attachments.allow_anonymous_download` 可放开）、单用户同时下载上限（超限 429 + `Retry-After`）、按块流式产出并在结束/断开时释放并发槽位、缓存 `private`、路由带 `download_rate_limit` 每 IP 限流） |
 | — | `_helpers.py` | 共享：`check_note_id()`（非法 ID 分情况 400/404）、`build_note_context()`（构造 note_edit/note_md 模板上下文） |
 
 ## 模板（templates/，Jinja2）
@@ -113,8 +115,10 @@ upstash 后端所有键统一加 `rusin:` 前缀；memory 后端 get/set 带 dee
 ## 安全与限流机制（改动时必须保持）
 
 - **CSRF**：Flask-WTF 全站开启（`WTF_CSRF_TIME_LIMIT=None`）
-- **限流**：Flask-Limiter，key 为 `g.client_ip`。分层：全局 POST `rate_limit`（30/60s）、GET `get_rate_limit`（45/60s）、保存类 POST `save_rate_limit`（120/60s）、注册 `register_rate_limit`（1/120s）。视图函数上用 `@limiter.limit(lambda: f"...")` 显式标注
-- **代理头**：`trust_proxy_headers` 默认 false，限流一律用 TCP 直连 IP，防伪造头绕过；置 true 后 `CF-Connecting-IP` > `X-Real-IP` > XFF 最右项
+- **限流**：Flask-Limiter，key 为安全解析后的客户端 IP。分层：全局 POST `rate_limit`（30/60s）、GET `get_rate_limit`（45/60s）、保存类 POST `save_rate_limit`（120/60s）、注册 `register_rate_limit`（1/120s）、**全站每 IP 总上限 `ip_rate_limit`（应用级作用域，300/60s，对所有路由累计生效）**。视图函数上用 `@limiter.limit(lambda: f"...")` 显式标注
+- **客户端 IP / 防 XFF 伪造**：`config.TRUST_PROXY_HEADERS` 默认 false（一律用 TCP 直连 IP）；置 true 后仍需 TCP 直连对端命中 `trusted_proxies`（默认 `["loopback","private"]`，可加 `"cloudflare"`；`"*"` 为不安全兼容模式）才采信代理头。头部值必须为合法 IP（超长/非法一律丢弃，XFF 最多 16 项），XFF 从右往左解析并逐层跳过可信代理。**不要使用 `ProxyFix`**（会被伪造 XFF 改写 `remote_addr`）。`ip_blocklist` 命中直接 403，`ip_allowlist` 命中免限流；环境变量 `RUSIN_TRUSTED_PROXIES`/`RUSIN_PROXY_HOPS`/`RUSIN_IP_ALLOWLIST`/`RUSIN_IP_BLOCKLIST` 可覆盖/追加。测试：`pytest tests/test_ip_limiter.py`
+- **单用户并发闸门（长连接防护，#191）**：IP 限流只算「单位时间请求数」，拦不住「少量请求、超长时间占用」（如发起上千个队列、每个 1KB/s，或用 100 线程下载 100 个文件打满出站带宽）。附件下载/上传因此在限流之外再经 `app/concurrency.py` 限制**单用户同时在途数**（`attachments.max_concurrent_downloads` 默认 1、`max_concurrent_uploads` 默认 1，即每账号 1 个下载队列 + 1 个上传队列，`0` = 不限）：超限即拒绝、不排队；下载 `abort(429, description=...)`（全局 429 处理器补 `Retry-After`），上传直接返回 429 JSON（`/user/*/attachments` 的 POST 在全局处理器里也走 JSON 分支）。槽位必须在正常结束（生成器 `finally`）、客户端断开（`Response.call_on_close`）两条路径归还，`Slot` 幂等可双重挂载；视图内任何异常/404 也要先释放。计数在进程内，N 个 worker ≈ `N × 上限`。测试：`pytest tests/test_attachments.py`
+- **附件下载权限**：`/attachment/<u>/<id>` 默认仅登录可下载（未登录 401 + 登录提示文案），响应缓存为 `private`（`public` 会让共享缓存把附件回放给匿名访客）；当前策略为「登录用户凭链接即可下载」，如需「仅本人可下载」须在视图中补所有权校验（测试 B3 记录了当前语义）
 - **XSS**：Markdown 渲染后经 bleach 白名单清洗（`utils.render_markdown_html`）；提示卡片输出 `<details>/<summary>` 前同样过 bleach，新增标签/属性须同步 `allowed_tags`/`allowed_attrs`
 - **密码**：PBKDF2 10 万次迭代慢哈希 + 常量时间比较；`PW_MAX_LENGTH` 硬上限 128 防超长输入 CPU DoS
 - **路径穿越**：笔记 ID 正则 `^[a-zA-Z0-9_\-]+$` + realpath/commonpath 双重校验；用户名/ID 有保留名单（`RESERVED_USERNAMES`、`FORBIDDEN_NOTE_IDS`）
@@ -123,8 +127,8 @@ upstash 后端所有键统一加 `rusin:` 前缀；memory 后端 get/set 带 dee
 ## 配置项（config.json 关键项）
 
 - `max_note_size_kb`（默认 512KB）、`sitename`
-- 限流四项：`rate_limit` / `get_rate_limit` / `save_rate_limit` / `register_rate_limit`
-- `trust_proxy_headers`、`secure_cookies`
+- 限流五项：`rate_limit` / `get_rate_limit` / `save_rate_limit` / `register_rate_limit` / `ip_rate_limit`（全站每 IP 总上限，应用级作用域，`max_requests` 置 0 关闭）
+- `trust_proxy_headers`、`trusted_proxies`（IP/CIDR 或预设 `loopback`/`private`/`cloudflare`/`"*"`）、`proxy_hops`、`ip_allowlist`（免限流）、`ip_blocklist`（403）、`secure_cookies`
 - `id_generation`（短链 ID 字符集/长度）、`share_token`（分享 token 长度 64/字符集）
 - `session_timeout`（会话超时，默认关）、`note_expiration`（笔记过期清理，默认关，每 30 分钟扫描）
 - `latex_render`（KaTeX CDN，默认 jsdelivr，可换 BootCDN）
@@ -133,6 +137,7 @@ upstash 后端所有键统一加 `rusin:` 前缀；memory 后端 get/set 带 dee
 - `note_editor`（`live_preview_default` 编辑页实时渲染默认值，默认 false，访客可手动开、以 localStorage 记住）
 - `avatar`（用户头像：`enabled` 默认 true；`url_template` 默认 cn.cravatar.com，占位符 `{hash}`=md5(用户名)、`{username}`=URL 编码用户名；`size` 备用值）
 - `max_note_id_length`（250）、`logger`（日志大小/路径）、`debug`
+- `images`（图床：`enabled`/`max_size_kb` 2048/`max_total_kb` 51200，公开读取）、`attachments`（附件：`enabled`/`max_size_kb` 50/`max_per_note_kb` 500/`max_total_kb` 10240/`blocked_extensions` + `allow_anonymous_download`（默认 false，禁匿名下载）/`max_concurrent_downloads`（1，#191）/`max_concurrent_uploads`（1，#191）/`download_rate_limit`（60s/120 次））
 - `features`（功能开关默认值：world_notes/benben/share_links/open_register，#90）、`admin_users`（功能开关管理员，与环境变量 `RUSIN_ADMIN` 取并集）
 
 ## 常见改动点

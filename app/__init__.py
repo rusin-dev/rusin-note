@@ -11,15 +11,17 @@ import os
 import secrets
 
 from flask import Flask, render_template
-from werkzeug.middleware.proxy_fix import ProxyFix
 
 from . import config
 from .background import start_background_threads
 from .extensions import csrf, limiter, cache
 from .i18n import register_i18n
+from .ip_utils import log_ip_policy
 from .middleware import register_request_hooks
 from .storage import StorageError, storage
 from .views import register_blueprints
+
+logger = logging.getLogger("rusin-note")
 
 
 def _load_or_create_secret_key() -> str:
@@ -81,7 +83,7 @@ def _init_cache_backend(app: Flask) -> None:
                 "CACHE_REDIS_URL": config.CACHE_REDIS_URL,
             })
             return
-        logging.getLogger("rusin-note").warning(
+        logger.warning(
             "Redis 缓存不可达（%s），已降级到 SimpleCache", config.CACHE_REDIS_URL)
     cache.init_app(app, config={
         "CACHE_TYPE": "SimpleCache",
@@ -116,13 +118,18 @@ def create_app() -> Flask:
         GLOBAL_CDN=config.GLOBAL_CDN,
     )
 
-    if config.TRUST_PROXY_HEADERS:
-        app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=0)
+    log_ip_policy()
 
+    # 说明：这里不使用 werkzeug 的 ProxyFix——它会用客户端可伪造的
+    # X-Forwarded-For 直接改写 request.remote_addr，使「可信代理」校验失去意义。
+    # 真实客户端 IP 统一由 middleware + ip_utils.analyze_client_ip 在可信代理
+    # 白名单（config.trusted_proxies）内安全解析，伪造头一律忽略。
     csrf.init_app(app)
+    # 请求钩子必须先于 limiter 注册：Flask-Limiter 的应用级限流（全站 IP 上限）
+    # 在 before_request 阶段执行，依赖 g.client_ip / g.rate_limit_exempt。
+    register_request_hooks(app)
     limiter.init_app(app)
     _init_cache_backend(app)
-    register_request_hooks(app)
     register_i18n(app)
     register_blueprints(app)
     register_error_handlers(app)
@@ -137,15 +144,15 @@ def create_app() -> Flask:
 
 
 def register_error_handlers(app: Flask) -> None:
-    from flask import abort, g, jsonify, request
+    from flask import abort, g, jsonify, make_response, request
 
     from flask_wtf.csrf import CSRFError
+    from .i18n import t
 
     @app.errorhandler(CSRFError)
     def err_csrf(e):
         if request.path.startswith("/user/") and request.method == "POST":
             lang = getattr(g, "lang", "zh")
-            from .i18n import t
             return jsonify({"error": t(lang, "err_csrf")}), 400
         return render_template("errors/400.html",
                                message=str(getattr(e, "description", "Bad Request"))), 400
@@ -161,7 +168,9 @@ def register_error_handlers(app: Flask) -> None:
         from flask import request
         if request.path.startswith("/user/") and "/shares" in request.path:
             shares = True
-        return render_template("errors/401.html", shares=shares), 401
+        # 附件下载等场景会带 description 说明具体原因（默认页面文案不带）
+        return render_template("errors/401.html", shares=shares,
+                               message=str(getattr(e, "description", "") or "")), 401
 
     @app.errorhandler(403)
     def err_403(e):
@@ -176,14 +185,28 @@ def register_error_handlers(app: Flask) -> None:
     def err_413(e):
         if request.path.startswith("/user/") and request.method == "POST":
             lang = getattr(g, "lang", "zh")
-            from .i18n import t
             from . import config as app_config
             return jsonify({"error": t(lang, "err_file_too_large", max=app_config.MAX_ATTACHMENT_SIZE_KB)}), 413
         return render_template("errors/400.html", message="Request body too large"), 413
 
     @app.errorhandler(429)
     def err_429(e):
-        return render_template("errors/429.html"), 429
+        """429 响应：附件上传接口返回 JSON（编辑器 fetch 需要），其余返回错误页。
+
+        ``Retry-After`` 提示客户端稍后重试；错误页文案取自
+        ``abort(429, description=...)``（如「单用户同时下载过多」，限流触发时可能为空）。
+        """
+        lang = getattr(g, "lang", "zh")
+        if (request.method == "POST" and request.path.startswith("/user/")
+                and request.path.endswith("/attachments")):
+            # 编辑器/管理页用 fetch 上传，限流触发时也必须是 JSON 才能展示原因
+            resp = jsonify({"error": t(lang, "err_too_many_requests")})
+            resp.headers["Retry-After"] = "1"
+            return resp, 429
+        message = str(getattr(e, "description", "") or "")
+        resp = make_response(render_template("errors/429.html", message=message), 429)
+        resp.headers["Retry-After"] = "1"
+        return resp
 
     @app.errorhandler(500)
     def err_500(e):
