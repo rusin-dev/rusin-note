@@ -24,6 +24,8 @@
     </p>
 </div>
 
+![Screenshot](https://github.com/rusin-dev/rusin-note/blob/main/image/screenshots1.png)
+
 ## Features
 
 - **Cloud clipboard that works out of the box**: A lightweight Flask implementation for VPS or serverless (Vercel / AWS Lambda) deployment, letting you save and access text quickly from any browser.
@@ -38,16 +40,16 @@
 - **Note folders**: Assign each note to one folder and filter the user note list by folder.
 - **Pinned notes**: Pin important notes from the note list so they remain at the top.
 - **Note image hosting**: Paste or drag PNG, JPEG, GIF, or WebP images into the editor. Formats are validated by file signature, images are referenced through Markdown, and defaults are 2MB per image and 50MB per user.
-- **Note attachments**: Upload arbitrary file types (executables blocked by default), configurable per-file size limit (default 50KB) and per-note quota (default 500KB), drag-drop upload on management page, referenced as links in notes. Downloads require a logged-in account by default (`/attachment/<u>/<id>` returns 401 for anonymous visitors), and per-user in-flight queues are capped ([#191](https://github.com/rusin-dev/rusin-note/issues/191): 1 concurrent download, 1 concurrent upload) so a thousand trickling (1KB/s) connections or 100 parallel download threads cannot occupy the workers or saturate egress bandwidth.
+- **Note attachments**: Upload arbitrary file types (executables and archives are blacklisted by default), with a default 50KB per-file limit, 500KB per-note quota, and 10MB per-user quota (all configurable in `config.json`), drag-drop upload on the management page, referenced as links in notes. Downloads require a logged-in account by default (`/attachment/<u>/<id>` returns 401 for anonymous visitors), and per-user in-flight queues are capped ([#191](https://github.com/rusin-dev/rusin-note/issues/191): 1 concurrent download, 1 concurrent upload) so a thousand trickling (1KB/s) connections or 100 parallel download threads cannot occupy the workers or saturate egress bandwidth.
 - **Comment system**: Comment functionality for notes and share pages, supports anonymous comments, configurable max comments (default 200), cooldown time, paginated loading, similar posting wait mechanism to benben feed.
 - **Benben feed**: A persistent lightweight feed where logged-in users can post and anonymous users can read, with live preview, pagination, post cooldowns, and a Reply action that fills `|| @username: original content`.
 - **Feature flags**: Admins can toggle public notes, benben, share links, registration, references, tags, folders, pins, heading anchors, alert cards, images, attachments, comments, LaTeX, highlighting, avatars, and organizations at `/admin/features`. Changes are persisted and take effect without restarting; disabled routes return 404 and their entry points are hidden.
-- **Organizations and collaboration**: Create organizations with isolated notes and Owner / Admin / Member roles. Membership can use invitation codes, public joining, or approval requests; owners and admins can manage settings, members, invitations, and requests according to role.
-- **Homepage notice banner**: The top of the homepage shows the first line of `NOTICE.txt` in the repository root as a site notice. It hides automatically when the file is missing or empty, the text is HTML-escaped, and no extra configuration is required.
+- **Organizations and collaboration**: Create organizations and invite members, with Owner / Admin / Member roles. Organization notes live in the isolated `_orgs/<org_name>/` storage namespace, completely separate from personal notes. Three join modes: invitation codes, public joining, and approval requests (Admin/Owner decides). Owners manage organization settings, add/remove admins, and delete the organization; admins manage members and invitations; members create and edit organization notes.
+- **Homepage notice banner**: The top of the homepage shows the first non-empty line of `NOTICE.txt` in the repository root (leading blank lines are skipped) as a site notice. It hides automatically when the file is missing or empty, the text is HTML-escaped, and no extra configuration is required.
 - **Homepage workbench**: When signed in, the homepage becomes a VSCode-welcome-style workbench — recently edited notes (count controlled by `home_page.recent_notes_limit`) and a **to-do list** (add / toggle / delete / clear completed, bounded by the `todos` config). With simple mode enabled, the homepage jumps straight to a new note.
 - **Multi-language UI**: Simplified Chinese and English are built in, with manual switching and browser-language fallback.
-- **User settings**: Every signed-in user manages their account at `/user/<username>/settings` — toggle **simple mode** (hides tags, pins, benben and other advanced features, keeping only note editing and preview; the preference is tied to the account and applies on all devices, and the old navbar toggle has moved here), change the password (verifies the current password and complexity, and signs out other devices), and change the login username (notes, images, attachments and tag/folder/pin/share/benben/comment/org data are automatically migrated to the new username).
-- **Deployment-friendly configuration**: Common options live in `config.json`, including note expiration, session timeout, password policy, trusted proxy IP handling, and HTTPS cookies. For serverless deployment, data can go to external storage (Upstash Redis / Neon PostgreSQL), surviving cold starts.
+- **User settings**: Every signed-in user manages their account at `/user/<username>/settings` — toggle **simple mode** (hides tags, pins, benben, the org menu, the share entry and other advanced features; the editor also hides the preview pane, attachments and the comment entry, keeping only note editing; the preference is tied to the account and applies on all devices, and the old navbar toggle has moved here), change the password (verifies the current password and complexity, and signs out other devices), and change the login username (notes, images, attachments, tags/folders/pins/todos/shares/benben/comments/org data are automatically migrated to the new username, and the current session is renamed so you stay signed in).
+- **Deployment-friendly configuration**: Common options live in `config.json`, including note expiration, session timeout, password policy, trusted proxy IP handling, and HTTPS cookies. Business data can live in local SQLite (index) + JSON files, Upstash Redis, Neon/PostgreSQL, or in-memory storage — external backends survive cold starts on serverless platforms.
 - **Practical baseline protection**: Includes CSRF protection, request rate limits, save limits, registration limits, a global per-IP fallback limit, IP allow/block lists, content sanitization, and X-Forwarded-For forgery protection for safer public deployments.
 
 ## Quick Start
@@ -84,14 +86,26 @@ Python version $\geq$ 3.10.
     ```bash
     pip install -r requirements-dev.txt
     pytest tests/                     # end-to-end tests (isolated temp data dir, never touches local data)
-    python tests/frontend_check.py    # front-end syntax check (Jinja2 + inline JS/CSS + JSON)
+    python tests/frontend_check.py    # front-end syntax check (Jinja2 + inline CSS/JSON; inline JS only when Node is installed)
     ```
 
 ### Production Deployment
 
+#### Get a SECRET_KEY
+
+Windows: in PowerShell (`win+x i`) run `$bytes=New-Object byte[] 48;[System.Security.Cryptography.RNGCryptoServiceProvider]::Create().GetBytes($bytes);[Convert]::ToBase64String($bytes)` to generate a key.
+
+Linux / macOS: in a terminal run `openssl rand -base64 48` to generate a key.
+
+Cross-platform Python: `python -c "import secrets; print(secrets.token_hex(32))"` or `python3 -c "import secrets; print(secrets.token_hex(32))"`.
+
 #### Option 1: Vercel (Serverless, Recommended)
 
 The repository ships with Vercel configuration (`vercel.json` + `api/index.py`):
+
+[Vercel Demo](https://rusin-note.vercel.app)
+
+[![Deploy to Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Frusin-dev%2Frusin-note&&env=RUSIN_SECRET_KEY)
 
 1. Import this repository on [Vercel](https://vercel.com) (the Python runtime is auto-detected).
 2. Pick a storage backend:
@@ -100,11 +114,13 @@ The repository ships with Vercel configuration (`vercel.json` + `api/index.py`):
 3. Add `RUSIN_SECRET_KEY` (a long random string used for session/CSRF signing). This is strongly recommended; a persistent backend can generate and retain one automatically, while the `memory` backend cannot preserve it across cold starts.
 4. Deploy. Notes, media, users, sessions, shares, feeds, comments, and organization data use Neon/Upstash, are shared across instances, and survive cold starts.
 
-Optional: set `REDIS_URL` (a Redis connection string, e.g. Upstash or self-hosted Redis) so page caching switches to shared Redis and rate-limit counters are shared across instances. Without it, the page cache uses the in-process SimpleCache and rate limiting counts per instance.
+Optional: set `REDIS_URL` (a Redis connection string, e.g. Upstash or self-hosted Redis) so page caching switches to shared Redis and rate-limit counters are shared across instances. Without it, the cache first tries `cache.redis_url` (the repository default is `redis://localhost:6379/0`, usually unreachable on serverless platforms), falls back to the in-process SimpleCache when unreachable, and rate limiting counts per instance.
 
 > Note: `config.json` defaults to `trust_proxy_headers: true` and `secure_cookies: true` for serverless platforms. Change them back for local/VPS use if needed.
 
 #### Option 2: AWS Lambda (Serverless)
+
+A credit card is required, so this option is not recommended.
 
 `lambda_handler.py` (Mangum WSGI adapter) is included:
 
@@ -137,8 +153,9 @@ Connect to your server, then:
     # Run in the background
     nohup python3 -m app > app.log 2>&1 &
 
-    # Recommended in production (Linux, gunicorn — already in requirements.txt)
-    gunicorn 'app.wsgi:app' -b 0.0.0.0:$PORT --workers 2 --threads 4
+    # Recommended in production (Linux, gunicorn — install it separately: pip install gunicorn)
+    # The listen port comes from PORT; replace 8080 yourself if PORT is unset (must match the reverse-proxy target below)
+    gunicorn 'app.wsgi:app' -b 0.0.0.0:${PORT:-8080} --workers 2 --threads 4
     ```
 
 4. Configure Nginx (optional)
@@ -174,6 +191,12 @@ Connect to your server, then:
     > to left while skipping trusted proxies — forged left-hand entries are never used. If the peer
     > is not trusted, all proxy headers are ignored and the direct IP is used.
 
+    > Note: `config.json` ships with `trust_proxy_headers: true` and `secure_cookies: true`
+    > for serverless platforms. Keep both when you are behind Nginx/Cloudflare (plus a
+    > matching `trusted_proxies`); set them back to `false` only for plain-HTTP local/VPS
+    > use **without** a reverse proxy — browsers reject `Secure` cookies over HTTP, and
+    > there are no proxy headers to trust when clients connect directly.
+
     ```bash
     # Enable and reload
     sudo ln -s /etc/nginx/sites-available/rusin-note /etc/nginx/sites-enabled
@@ -181,7 +204,7 @@ Connect to your server, then:
     sudo ufw allow 'Nginx Full'
     ```
 
-### Zeabur Auto Deployment
+#### Zeabur Auto Deployment
 
 When deploying from GitHub on Zeabur, the application directory is rebuilt on each deployment. To prevent clipboards, users, share links, and benben posts from being cleared, store runtime data in a persistent volume:
 
@@ -219,9 +242,12 @@ Do not mount the Volume to the project root, or it may hide the deployed applica
 
 > Local/VPS defaults to the `sqlite` backend: SQLite (`index.db`) stores only
 > index metadata for fast listing / sorting / searching / stats, while the actual
-> content of notes and collections is still persisted as JSON files. Legacy
-> pure-JSON layouts (`notes/<user>/<ID>.txt`, ...) are migrated automatically on
-> first startup.
+> content of notes and collections is still persisted as JSON files. Two migrations
+> run automatically on first startup: legacy plain-text notes
+> (`notes/<user>/<ID>.txt` → `.json`) and old runtime data that used to sit in the
+> repository root (→ `data/`). Note: the `note_titles.json` key is still registered
+> in the storage layer but is no longer read or written, so it is never created on
+> a fresh deployment.
 
 #### Zeabur: enable Redis (page cache + shared rate limiting)
 
@@ -236,7 +262,7 @@ Zeabur is a PaaS platform, so installing Redis inside the container (`apt instal
    ```
 
    equivalent to `redis://:password@service-name:6379`.
-4. Redeploy. On startup the app actively `PING`s Redis: when reachable, the page cache (homepage / notes / benben, ...) switches to the shared Redis backend and rate-limit counters are stored there too (shared across instances); when unreachable, the log prints `Redis 缓存不可达，已降级到 SimpleCache` (`Redis cache unreachable, falling back to SimpleCache`) and the app keeps using the in-process cache with no loss of functionality.
+4. Redeploy. On startup the app actively `PING`s Redis: when reachable, the page cache (homepage / notes / benben, ...) switches to the shared Redis backend and rate-limit counters are stored there too (shared across instances); when unreachable, the log prints `Redis 缓存不可达（…），已降级到 SimpleCache` (`Redis cache unreachable (…), falling back to SimpleCache`) and the app keeps using the in-process cache with no loss of functionality.
 
 > Note: Redis only handles caching and rate limiting. Clipboard, user, share, benben, and other business data still live on the `/data` volume mounted above (the `file` backend); the two do not affect each other. If you want business data shared across instances and safe from restarts, switch to the `postgres` or `upstash` backend (next section).
 
@@ -249,7 +275,7 @@ The storage layer (`app/storage.py`) is the unified data interface and provides 
 | Backend | How to enable | Notes |
 |---|---|---|
 | `sqlite` | default (local/VPS) | SQLite (`<DATA_DIR>/index.db`) stores an index for fast lookup; note and collection content is persisted as JSON under `<DATA_DIR>/`; legacy `file` layouts are migrated automatically |
-| `file` | `RUSIN_STORAGE=file` | Plain JSON/binary files, kept for backward compatibility; data under `RUSIN_DATA_DIR`, layout as above |
+| `file` | `RUSIN_STORAGE=file` | Plain-file layout kept for backward compatibility: notes are plain text at `notes/<user>/<ID>.txt` (not JSON), while collections, images and attachments follow the same layout as the `sqlite` row but without `index.db`; data goes under `RUSIN_DATA_DIR` |
 | `upstash` | set `KV_REST_API_URL` + `KV_REST_API_TOKEN` (Upstash Redis REST API) | Data in external KV — shared across instances, survives cold starts; plain HTTPS requests, works on any Python serverless platform |
 | `postgres` | set `DATABASE_URL` (Neon or any PostgreSQL; injected automatically when Neon is attached on Vercel) | Data in `storage_kv`, `storage_notes`, `storage_images`, and `storage_attachments`; cross-instance mutual exclusion via PG advisory locks |
 | `memory` | `RUSIN_STORAGE=memory` (auto-enabled on serverless platforms without the above) | In-memory only, cleared on restart |
@@ -258,11 +284,13 @@ Auto-detect priority: explicit `RUSIN_STORAGE` > `KV_REST_API_URL`+`KV_REST_API_
 
 - Serverless environments (detected via `VERCEL` / `NETLIFY` / `AWS_LAMBDA_FUNCTION_NAME`) do not start background threads — cleanup runs opportunistically inside requests; logs fall back to stderr (platform log streams).
 - `RUSIN_SECRET_KEY` is strongly recommended on serverless platforms. If it is unset and the backend is persistent (file/upstash/postgres), a key is generated and stored automatically; otherwise a random per-instance key is used.
-- `.env.example` shows `RUSIN_SECRET_KEY` and `RUSIN_ADMIN`; storage and cache environment variables are documented above.
+- `.env.example` shows four variables: `RUSIN_STORAGE`, `RUSIN_DATA_DIR`, `RUSIN_SECRET_KEY` and `RUSIN_ADMIN`; cache-related environment variables are documented above.
 
 ## Plugin System
 
-Plugins are distributed as zip archives. Place a `*.plugin.zip` package in `RUSIN_DATA_DIR`; at startup the application validates and extracts it into `plugins/<namespace>/`, registers its Flask blueprint, and removes the package. Plugins are disabled automatically on serverless platforms because their filesystems are read-only.
+Plugins are distributed as zip archives. Place a `*.plugin.zip` package in `RUSIN_DATA_DIR`; at startup the application validates and extracts it into `plugins/<namespace>/`, registers its Flask blueprint, and removes the package. **Serverless deployments (read-only filesystem) do not support plugins.**
+
+### Plugin package structure
 
 ```plaintext
 + desc.json          metadata
@@ -274,12 +302,40 @@ Plugins are distributed as zip archives. Place a `*.plugin.zip` package in `RUSI
   + static/          blueprint static files
 ```
 
-`desc.json` contains `name`, `version`, `namespace`, `upstream_repo`, optional `icon`, and `auth_token`. The namespace must match `^[a-zA-Z0-9_\-]+$`. Packages without `auth_token` are rejected unless startup uses `--skip-auth` or `RUSIN_PLUGIN_SKIP_AUTH=1`.
+Example `desc.json`:
 
-- Installation rejects zip path traversal, oversized extraction, invalid package roots, unauthorized packages, and namespace conflicts. A missing Blueprint disables only that plugin, not the main application.
-- A background task checks plugins every `plugins.update_interval_hours` (default 6 hours). If `last_update` is older than `plugins.update_stale_days` (default 3 days), it fetches `upstream_repo` with a short timeout and reinstalls the package. Updated files of an already loaded plugin require an application restart.
-- Plugin blueprints are registered before the root short-link catch-all. Plugin POST forms must include `{{ csrf_token() }}` because CSRF protection is global.
-- Plugins execute Python inside the application process. Install only trusted packages.
+```json
+{
+  "name": "example",
+  "version": "v0.1",
+  "upstream_repo": "https://github.com/rusin-dev/template-plug",
+  "icon": "icon.ico",
+  "namespace": "template_plug",
+  "auth_token": "sk-ccccddddddd"
+}
+```
+
+- `namespace`: the namespace (`^[a-zA-Z0-9_\-]+$`), matching the install directory `plugins/<namespace>`; it must not collide with an existing one;
+- `upstream_repo`: upstream repository used for automatic updates — either a direct zip URL or a GitHub repository URL (the latest `main` / `master` archive is downloaded);
+- `auth_token`: installation credential. **Packages missing it are rejected** unless startup runs with `--skip-auth` or the environment variable `RUSIN_PLUGIN_SKIP_AUTH=1` (not recommended in production).
+
+`src/__init__.py` template:
+
+```python
+APP_ROUTER = "app.py"    # module that defines the Blueprint (defaults to app.py)
+OVERRIDE = False         # whether to override site static files
+# OVERRIDE = {"source": {"static/dst.css": "static/src.css"}}
+ENV_VARIBLES = []        # required environment variables (a log warning is raised when missing)
+```
+
+### Installation, update and security
+
+- **Phase 1 (install)**: at startup the app scans the runtime directory for `*.plugin.zip`, validates and extracts them into `plugins/<namespace>/`, writes `auth_token` and `last_update` back into `desc.json`, then deletes the package. Checks include: zip path traversal, oversized extraction, package root must contain only `desc.json` / icon / `src/`, `auth_token` verification, and namespace conflicts (a different source may not reuse an existing namespace unless it declares `OVERRIDE`; the same source may). The plugin must contain a Blueprint in `src/app.py`; a missing one logs an error and is skipped without breaking the site.
+- **Phase 2 (update)**: a background thread (every `plugins.update_interval_hours`, default 6 hours) scans `plugins/*/desc.json`; when `last_update` is older than `update_stale_days` (default 3 days) it fetches `upstream_repo` (3 second timeout), saves the result as `<namespace>.plugin.zip` and reruns Phase 1. Already-loaded plugins only pick up the new files after a restart.
+- `plugins` config in `config.json`: `enabled` (default `true`), `update_interval_hours` (default `6`), `update_stale_days` (default `3`).
+- Plugin blueprints are registered before the root short-link catch-all, so plugin routes are not swallowed by `/<id>`; a plugin that fails to import only disables itself and is logged, the site keeps running.
+- Plugin POST forms must include `{{ csrf_token() }}` because CSRF protection is global.
+- Plugins execute Python inside the application process. Install only trusted packages; `auth_token` is recommended so unofficial packages are rejected (the check is skipped only with the explicit bypass above).
 
 ## Project Structure
 
@@ -290,7 +346,9 @@ rusin-note:.
 │  Disclaimer-en.md (English disclaimer)
 │  Disclaimer.md (disclaimer)
 │  favicon.ico
-│  NOTICE.txt (homepage notice banner content, first line only)
+│  LICENSE
+│  .gitignore
+│  NOTICE.txt (homepage notice banner content, first non-empty line)
 │  README.md
 │  README_en.md
 │  requirements.txt (Python dependencies)
@@ -321,6 +379,7 @@ rusin-note:.
 │  │  folders.py (note folders)
 │  │  i18n.py (multi-language support)
 │  │  images.py (image validation, quotas, and storage API)
+│  │  ip_utils.py (safe client-IP parsing: trusted-proxy check / right-to-left XFF / IP lists)
 │  │  logger.py (logging)
 │  │  middleware.py (request hooks and rate-limit helpers)
 │  │  notes.py (note file operations & stats)
@@ -371,6 +430,7 @@ rusin-note:.
 │  └─share (share pages)
 │
 ├─tests (pytest end-to-end tests & front-end syntax check)
+│       README.md (test conventions and file notes)
 │       conftest.py (environment isolation and shared fixtures)
 │       support.py (shared HTTP helpers and assertions)
 │       frontend_check.py (front-end syntax check CLI)
@@ -399,15 +459,43 @@ rusin-note:.
 Rate limiting keys on the *real client IP*, while `X-Forwarded-For` (XFF), `X-Real-IP` and `CF-Connecting-IP` are request headers any client can forge — trusting them blindly lets an attacker rotate fake IPs and bypass every limit. The rules implemented in `app/ip_utils.py` are:
 
 1. **Peer validation**: proxy headers are honoured only when the direct TCP peer (`remote_addr`) matches `trusted_proxies`; for direct public traffic all proxy headers are ignored.
-2. **Strict parsing**: a header value must be a valid IP (`1.2.3.4:80`, `[2001:db8::1]:443`, `::ffff:1.2.3.4` are accepted); anything else is dropped so arbitrary strings can never create limiter buckets. Header values longer than 256 bytes and XFF chains longer than 16 entries are truncated.
+2. **Strict parsing**: a header value must be a valid IP (`1.2.3.4:80`, `[2001:db8::1]:443`, `::ffff:1.2.3.4` are accepted); anything else is dropped so arbitrary strings can never create limiter buckets. A single header longer than 256 bytes is dropped in full (not parsed at all), and XFF chains longer than 16 entries keep only the first 16.
 3. **XFF resolved from the right**: XFF is an append-only list, so the right-most entries are written by trusted proxies and the left-hand part may be forged. Trusted proxy addresses are skipped layer by layer (Cloudflare → Nginx) and the first untrusted valid IP wins.
 4. **Visibility**: when proxy headers arrive from an untrusted peer, a throttled `检测到疑似伪造的代理头已忽略` warning is logged (at most once per IP per 5 minutes).
 
-Deployment notes: add `"cloudflare"` to `trusted_proxies` when Cloudflare is in front; narrow `trusted_proxies` to the concrete proxy IP (or just `["loopback"]`) when the app port is exposed directly to the internet (including directly mapped Docker ports, where the peer may look like a gateway private address), since the `private` preset lets any host inside those ranges forge proxy headers; add the explicit IP/CIDR when the load balancer address is not covered by `private` (otherwise proxy headers are ignored and all users share one limit bucket). The effective policy is written to the application log (`data/log/*.log`, falling back to stderr on serverless) at startup. This project intentionally does **not** use Werkzeug's `ProxyFix`, which would let a forged XFF rewrite `request.remote_addr`.
+Deployment notes:
+
+```nginx
+# Nginx must *rewrite* XFF (append the upstream address it sees) or set X-Real-IP;
+# otherwise a client-supplied XFF is forwarded untouched
+proxy_set_header X-Real-IP $remote_addr;
+proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+```
+
+- Same-host / same-private-network Nginx or Caddy: the default `["loopback", "private"]` in `trusted_proxies` is enough.
+- Cloudflare (or Cloudflare → Nginx): add the `"cloudflare"` preset; it also honours `CF-Connecting-IP`, which Cloudflare overwrites.
+- When the application port is **exposed directly to the internet** (including directly mapped Docker ports, where the peer may look like a gateway private address), narrow `trusted_proxies` to the concrete reverse-proxy IP (or only `["loopback"]`) — the `private` preset lets any host in those ranges forge proxy headers.
+- Behind an internal load balancer whose address is a public IP, or when the proxy sits in a range other than the `private` preset: add the explicit IP/CIDR to `trusted_proxies`, otherwise proxy headers are ignored and every user shares one limit bucket (normal traffic starts getting throttled).
+- At startup the effective policy is logged (`IP policy: ...` / `global IP rate limit: ...` / allow-list & block-list sizes) to the application log (`data/log/*.log`, falling back to stderr on serverless), so you can confirm the configuration.
+
+> This project intentionally does **not** use Werkzeug's `ProxyFix`: it would let a forged XFF rewrite `request.remote_addr`, defeating the trusted-proxy check.
+
+### Development & Testing
+
+```bash
+pip install -r requirements-dev.txt     # installs pytest (pulls in requirements.txt)
+pytest tests/                           # run the whole end-to-end suite
+pytest tests/test_org.py -q             # single module / keyword filter: pytest tests/ -q -k images
+python tests/frontend_check.py          # front-end syntax check (Jinja2 + inline CSS/JSON; inline JS is checked only if Node is installed, otherwise skipped)
+```
+
+- Tests are organized with **pytest + logging**: `tests/conftest.py` pins `RUSIN_STORAGE=file`, switches to a temporary `RUSIN_DATA_DIR`, and clears every module-level runtime cache, so tests never touch your local data; rate limiting is disabled inside tests (to test the limiter itself see `tests/test_ip_limiter.py`), and the full conventions live in `tests/README.md`.
+- All front-end assets are inlined in the Jinja2 templates (there is no `static/` directory), so run `python tests/frontend_check.py` after touching templates.
+- CI (`.github/workflows/check.yml`) runs on push / PR to `dev` and is path-filtered: the `frontend` job runs the syntax check, the `test` job runs pytest and then starts the server for an HTTP health check.
 
 ### Configuration Options
 
-- `max_note_size_kb`: Maximum note size (in **KB**), default `512` (0.5 MB).
+- `max_note_size_kb`: Maximum note size (in **KB**), default `512` (0.5 MB — this is the value shipped in `config.json`; the code falls back to `5120` when the key is missing).
 - `sitename`: Website name. Enter your site name.
 - `rate_limit`: Rate limiting configuration.
 
@@ -420,7 +508,7 @@ Deployment notes: add `"cloudflare"` to `trusted_proxies` when Cloudflare is in 
     - `window_seconds`: Time window $t$, default `60`.
     - `max_requests`: Maximum number of requests $s$, default `45`.
 
-    Maximum $s$ GET requests (page loads, favicon, etc.) within $t$ seconds.
+    Maximum $s$ GET requests within $t$ seconds, applied only to routes that declare the decorator explicitly (world / note / user-list pages, etc.). The homepage, `/count` and static assets have no GET limit of their own and are only covered by `ip_rate_limit` below.
 
 - `save_rate_limit`: Independent rate limiting for save-type POST requests (note saves / share write-backs).
     - `window_seconds`: Time window $t$, default `60`.
@@ -433,6 +521,7 @@ Deployment notes: add `"cloudflare"` to `trusted_proxies` when Cloudflare is in 
 - `ip_rate_limit`: Application-wide total request cap per IP, accumulated across every route and applied on top of the per-route limits.
     - `window_seconds`: Time window $t$, default `60`.
     - `max_requests`: Maximum number of requests $s$, default `300` (set to `0` to disable).
+    - `enabled`: Switch, default `true`; set to `false` to disable this fallback limit as well.
 
 - `trust_proxy_headers`: Whether to trust proxy client-IP headers. The repository configuration currently sets it to `true` for serverless/reverse-proxy deployments; set it to `false` when requests can reach the application directly.
 
@@ -442,7 +531,7 @@ Deployment notes: add `"cloudflare"` to `trusted_proxies` when Cloudflare is in 
 
     Entries may be IPs/CIDRs, the presets `loopback` / `private` (RFC1918, CGNAT, link-local) / `cloudflare` (official Cloudflare ranges), or `"*"` to trust any peer (**forgeable**, for troubleshooting only). Default: `["loopback", "private"]`.
 
-- `proxy_hops`: Number of proxy hops counted from the right of `X-Forwarded-For` in the legacy mode (`trusted_proxies` set to `"*"` or empty), default `1`.
+- `proxy_hops`: Number of proxy hops counted from the right of `X-Forwarded-For` in the legacy mode, default `1`. Legacy mode means `trusted_proxies` is set to `"*"` / `"any"` / `"all"` — an empty list is **not** legacy mode, it means "never trust proxy headers".
 
 - `ip_allowlist`: IP/CIDR allowlist that is exempt from rate limiting (monitoring, internal health checks), default `[]`.
 
@@ -454,7 +543,7 @@ Deployment notes: add `"cloudflare"` to `trusted_proxies` when Cloudflare is in 
 
     **Security note**: Only set to `true` when the site is served over HTTPS; otherwise browsers will refuse to send the cookie over HTTP.
 
-- `id_generation`: Random URL generation configuration.
+- `id_generation`: Random URL generation configuration (values below are what `config.json` ships; when the key is missing the code falls back to length `6` with letters and digits all enabled).
     - `length`: URL length, default `4`.
     - `use_uppercase`: Use uppercase letters, default `false`.
     - `use_lowercase`: Use lowercase letters, default `true`.
@@ -534,8 +623,8 @@ Deployment notes: add `"cloudflare"` to `trusted_proxies` when Cloudflare is in 
     - `download_rate_limit`: dedicated per-IP rate limit for the attachment download route, `window_seconds` (default `60`) and `max_requests` (default `120`);
     - These concurrency caps stop "open a thousand connections and trickle each at 1KB/s" or "100 threads downloading 100 files" abuse, where the request rate stays under the limiter but workers stay occupied and egress bandwidth is saturated: over the cap, downloads return 429 with `Retry-After` and uploads return a 429 JSON error the editor can display. Over-limit requests are **rejected, not queued** (queueing would occupy workers just the same). Counting is **per process** (`app/concurrency.py`), so with N gunicorn workers the effective cap is about `N × value`; strict cross-instance counting would need an atomic counter in external storage, which this project does not use;
     - Attachments are referenced as links by default; if one note embeds several attachment images (more concurrent requests than the cap), raise `max_concurrent_downloads` or set it to `0`;
-    - `blocked_extensions`: list of blocked file extensions (blacklist mode), default includes `.exe`, `.bat`, `.sh`, `.zip` and other executables/archives.
-- `comments`: comment system (`/comments/<target_type>/<target_id>`, supports notes and share pages).
+    - `blocked_extensions`: list of blocked file extensions (blacklist mode), default includes `.exe`, `.bat`, `.sh`, `.zip` and other executables/archives. **The configured value carries no leading dot** (`config.json` lists `exe`, `zip`; the code adds the `.`), so do not write `.exe` — it would never match.
+- `comments`: comment system (`/comments/<target_type>/<path:target_id>`, supports notes and share pages).
     - `enabled`: enable comments, default `true`; set `false` to return 404 on comment pages;
     - `max_length`: max length of a single comment (in **characters**), default `1024` (~1KB);
     - `max_comments`: max comments per target (note/share), default `200`;
@@ -549,10 +638,10 @@ Deployment notes: add `"cloudflare"` to `trusted_proxies` when Cloudflare is in 
    - `require_lowercase`: whether lowercase letters are required, default `true`;  
    - `require_digits`: whether digits are required, default `true`;  
    - `require_special`: whether special characters (excluding `/ \ ( ) " '`) are required, default `true`;
-- `RUSIN_DATA_DIR`: optional environment variable for the runtime data directory, defaulting to `data` (i.e. `data/` under the project; used only by the local `sqlite` / `file` backends — external backends have no such directory).
+- `RUSIN_DATA_DIR`: optional environment variable for the runtime data directory, defaulting to `data` (i.e. `data/` under the project). **Content data** (notes / images / attachments / collection JSON) is written here only by the local `sqlite` / `file` backends, but the `log/` and `plugins/` directories are always created under it regardless of backend (serverless logs fall back to stderr).
 
    Notes, images, attachments, and business-data JSON files are written under this directory; see the Zeabur layout above. On auto-deploy platforms, mount a persistent volume at `/data` and set `RUSIN_DATA_DIR=/data` to preserve data across deployments.
-- `RUSIN_STORAGE`: optional env var to force the storage backend: `sqlite` (default, local/VPS), `file` (plain JSON files), `memory` (in-memory), `upstash` (external KV for serverless), `postgres` (Neon/PostgreSQL). When unset: `KV_REST_API_URL`/`KV_REST_API_TOKEN` set → `upstash`; `DATABASE_URL` set → `postgres`; serverless platform env detected → `memory`; otherwise `sqlite`. See "Storage Backends" above.
+- `RUSIN_STORAGE`: optional env var to force the storage backend: `sqlite` (default, local/VPS), `file` (plain files — notes as `.txt` text), `memory` (in-memory), `upstash` (external KV for serverless), `postgres` (Neon/PostgreSQL). When unset: `KV_REST_API_URL`/`KV_REST_API_TOKEN` set → `upstash`; `DATABASE_URL` set → `postgres`; serverless platform env detected → `memory`; otherwise `sqlite`. See "Storage Backends" above.
 - **Multi-language**: The interface supports Simplified Chinese and English. Language switch links (`/lang/zh` / `/lang/en`) are provided on the right side of the navbar; the preference is remembered via a cookie (`rusin-lang`); when unset, it falls back to the browser's `Accept-Language`, defaulting to Chinese. After switching, all site text (navbar, buttons, hints, error messages, benben previews, etc.) switches language instantly.
 - `benben` (feed at `/benben`, logged-in users can post, anonymous read-only).
    - `max_length`: max length of a single feed post (in **characters**), default `1024` (~1KB);
@@ -578,4 +667,4 @@ Deployment notes: add `"cloudflare"` to `trusted_proxies` when Cloudflare is in 
     - `path_pattern`: log file path template, default `log/{timestamp}.log`, resolved relative to the data directory (i.e. `<RUSIN_DATA_DIR>/log/`);
 
     When the log file cannot be created (e.g. a read-only serverless filesystem), logging falls back to stderr and enters the platform log stream.
-- `debug`: debug switch, default `false`. It only affects the log level of the `app/*` modules and does **not** enable Flask's debug mode; keep it `false` in production.
+- `debug`: log verbosity switch, default `false`. It does **not** enable Flask's debug mode; the mapping is `false` → `INFO` (verbose) and `true` → `ERROR` (quiet). Keep it `false` in production.
