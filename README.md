@@ -19,10 +19,8 @@
         <img src="https://github.com/rusin-dev/rusin-note/actions/workflows/check.yml/badge.svg" alt="CI Build"></a>
         <a href="https://github.com/rusin-dev/rusin-note/actions/workflows/auto-merge.yml">
         <img src="https://github.com/rusin-dev/rusin-note/actions/workflows/auto-merge.yml/badge.svg?branch=main" alt="Auto merge"></a>
-        <a href="https://pypi.org/project/pandera/"><img src="https://img.shields.io/pypi/v/pandera.svg" alt="PyPI version shields.io"></a>
+        <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/python-3.10%2B-blue?logo=python&logoColor=white" alt="Python version"></a>
         <a href="https://www.repostatus.org/#active"><img src="https://img.shields.io/badge/repo%20status-Active-Green" alt="Project Status: Active – The project has reached a stable, usable state and is being actively developed."></a>
-        <a href="https://pypi.python.org/pypi/pandera/"><img src="https://img.shields.io/pypi/pyversions/pandera.svg" alt="PyPI pyversions">
-        </a>
     </p>
 </div>
 
@@ -31,9 +29,9 @@
 ## 产品特性
 
 - **开箱即用的云端剪贴板**：基于 Flask 的轻量实现，可部署在 VPS 或 Vercel / AWS Lambda 等无服务器平台，用浏览器即可快速保存和访问文本内容。
-- **公开与私有笔记**：支持随机短路径公开笔记，也支持访客账号下的私有笔记列表，兼顾临时分享和个人留存。
+- **公开与私有笔记**：支持随机短路径公开笔记，登录用户也拥有自己的私有笔记列表，兼顾临时分享和个人留存。
 - **安全分享链接**：可为用户笔记生成带随机 token 的分享链接，并支持分享内容写回，便于跨设备协作。
-- **Markdown 与 LaTeX 渲染**：只读页面、评论和犇犇动态支持经过 Bleach 清洗的 Markdown、KaTeX 公式与 highlight.js 代码高亮（代码块自动带行号），适合保存代码片段、说明文档和数学内容。编辑页实时渲染可手动开关。
+- **Markdown 与 LaTeX 渲染**：只读页面、评论和犇犇动态支持经过 Bleach 清洗的 Markdown、KaTeX 公式与代码高亮（服务端 Pygments 分词着色，客户端 highlight.js 处理未识别语言并生成行号，跟随站点亮/暗主题），适合保存代码片段、说明文档和数学内容。编辑页实时渲染可手动开关。
 - **大纲预览**：只读页自动提取 `h1`-`h6` 标题生成目录——宽屏显示右侧大纲栏、窄屏显示悬浮按钮 + 侧滑抽屉，点击平滑定位到对应章节，滚动时自动高亮当前所在章节；编辑页实时预览栏头部也有「大纲」下拉，随输入实时更新。纯客户端实现，无标题时自动隐藏。
 - **Markdown 标题锚点**：每个 Markdown 标题自动生成 slug id，支持页内 `#链接` 跳转、深链直接定位到指定章节，点击锚点图标可复制链接。
 - **Markdown 提示卡片（GitHub Alerts）**：在引用块首行写 `[!NOTE]`、`[!TIP]`、`[!IMPORTANT]`、`[!WARNING]`、`[!CAUTION]`（`[!INFO]` 为 `[!NOTE]` 别名）即可生成 GH 风格彩色卡片；卡片以 `<details>` 实现，点击标题可展开/收起，默认展开，标记后加 `-`（如 `> [!WARNING]-`）则默认折叠、加 `+` 则显式展开；卡片内 Markdown、代码块与嵌套卡片均正常渲染。
@@ -42,15 +40,16 @@
 - **笔记文件夹**：支持将笔记归入文件夹（单归属），用户可在文件夹视图下管理自己的笔记，列表页支持按文件夹筛选。
 - **笔记置顶**：在笔记列表页可通过图钉图标将重要笔记置顶，置顶笔记始终显示在最前面。
 - **笔记图床**：编辑器支持粘贴/拖拽上传 PNG、JPEG、GIF 或 WebP 图片，按文件魔数校验格式并以 Markdown 语法引用；图片公开可读，默认单张 2MB、每用户 50MB 配额。
-- **笔记附件**：支持上传任意文件类型（可执行文件除外），默认单文件 50KB、每笔记 500KB 配额（可在 `config.json` 调整），附件管理页支持拖拽上传，笔记中以链接形式引用。
+- **笔记附件**：支持上传任意文件类型（可执行文件与压缩包等默认进黑名单），默认单文件 50KB、每笔记 500KB、每用户 10MB 配额（均可在 `config.json` 调整），附件管理页支持拖拽上传，笔记中以链接形式引用。
 - **评论系统**：笔记和分享页面支持评论功能，支持匿名评论，可配置最大评论数（默认 200 条）、冷却时间、分页加载，与犇犇动态类似的发布等待机制。
 - **犇犇动态**：内置持久化轻量动态流，登录用户可发布内容，未登录用户可浏览，支持实时预览、分页加载、发布冷却，以及点击动态右上角“回复”快速填充 `|| @用户名: 原内容`。
 - **功能开关（Feature Flags）**：管理员在 `/admin/features` 用滑块开关启用/停用站点功能（公开笔记、犇犇、分享链接、开放注册、快捷引用、笔记标签、笔记文件夹、笔记置顶、Markdown 标题锚点、Markdown 提示卡片、笔记图床、笔记附件、评论系统、LaTeX、代码高亮、头像、组织），保存后立即生效、无需重启；启用的功能会在 `/count` 数据汇总页呈现，停用的功能入口自动隐藏、路由直接 404。
 - **组织/团队协作**：创建组织并邀请成员加入，支持 Owner / Admin / Member 三级角色体系。组织笔记独立存储在 `_orgs/<org_name>/` 命名空间，与个人笔记完全隔离。三种加入方式：邀请制（生成邀请码分享）、公开加入（自由加入）、审批制（申请后由 Admin/Owner 审批）。Owner 可管理组织设置、添加/移除管理员、删除组织；Admin 可管理成员和邀请；Member 可创建和编辑组织笔记。
 - **首页公告横幅**：首页顶部展示仓库根目录 `NOTICE.txt` 的第一行内容作为站内公告；文件缺失或整体内容为空时自动隐藏，文本经 HTML 转义，无需额外配置。
+- **首页工作台**：登录后首页呈现 VSCode 欢迎页风格的工作台——最近编辑的笔记列表（条数由 `home_page.recent_notes_limit` 控制）与**待办清单**（新增 / 勾选 / 删除 / 清除已完成，条目数与单条长度受 `todos` 配置约束）；开启简洁模式后首页直接跳转到新建笔记。
 - **多语言界面**：内置简体中文与 English，可手动切换，也可按浏览器语言自动选择。
-- **用户设置**：每位登录用户在 `/user/<username>/settings` 管理账号——可切换**简洁模式**（隐藏标签、置顶、犇犇等高级功能，只保留笔记读写与预览，偏好随账号在所有设备一致生效，原导航栏切换按钮已并入此处）、修改密码（校验原密码与复杂度，并注销其它设备会话）以及修改登录用户名（笔记、图床、附件及标签/文件夹/置顶/分享/犇犇/评论/组织等数据自动迁移到新用户名）。
-- **部署友好**：配置集中在 `config.json`，支持笔记过期清理、会话超时、密码策略、页面缓存、反向代理真实 IP、HTTPS Cookie 等常见部署选项。业务数据可使用本地文件、Upstash Redis、Neon/PostgreSQL 或内存后端。
+- **用户设置**：每位登录用户在 `/user/<username>/settings` 管理账号——可切换**简洁模式**（隐藏标签、置顶、犇犇、组织菜单与分享入口等高级功能，只保留笔记读写与预览，偏好随账号在所有设备一致生效，原导航栏切换按钮已并入此处）、修改密码（校验原密码与复杂度，并注销其它设备会话）以及修改登录用户名（笔记、图床、附件及标签/文件夹/置顶/分享/犇犇/评论/组织等数据自动迁移到新用户名）。
+- **部署友好**：配置集中在 `config.json`，支持笔记过期清理、会话超时、密码策略、页面缓存、反向代理真实 IP、HTTPS Cookie 等常见部署选项。业务数据可使用本地 SQLite（索引）+ JSON 文件、Upstash Redis、Neon/PostgreSQL 或内存后端。
 - **基础防护完善**：包含 CSRF 防护、请求限流、保存限流、注册限流、内容安全清洗和代理头信任开关，降低公开部署风险。
 
 ## 快速开始
@@ -77,10 +76,18 @@ python 版本 $\geq$ 3.10。
 3. 启动服务
 
     ```bash
-    python3 -m app
+    python3 -m app      # Windows 下为 python -m app
     ```
 
-    然后打开 <http://localhost:8080> 查看效果。
+    然后打开 <http://localhost:8080> 查看效果（端口由环境变量 `PORT` 控制，默认 `8080`）。
+
+4. 运行测试（可选）
+
+    ```bash
+    pip install -r requirements-dev.txt
+    pytest tests/               # 端到端测试（自动隔离到临时数据目录，不污染本地数据）
+    python tests/frontend_check.py   # 前端语法检查（Jinja2 + 内联 JS/CSS + JSON）
+    ```
 
 ### 线上部署
 
@@ -144,6 +151,9 @@ Python 通用：`python -c "import secrets; print(secrets.token_hex(32))"` 或 `
 
     # 后台运行
     nohup python3 -m app > app.log 2>&1 &
+
+    # 生产环境推荐（Linux，gunicorn，依赖已含在 requirements.txt 中）
+    gunicorn 'app.wsgi:app' -b 0.0.0.0:$PORT --workers 2 --threads 4
     ```
 
 4. 配置 Nginx（可选）
@@ -208,12 +218,14 @@ Python 通用：`python -c "import secrets; print(secrets.token_hex(32))"` 或 `
 /data/note_tags.json
 /data/note_folders.json
 /data/note_pins.json
-/data/note_titles.json
+/data/todos.json
 /data/feature_flags.json
 /data/orgs.json
 /data/org_members.json
 /data/org_invites.json
 /data/org_join_requests.json
+/data/.secret_key      # 自动生成的 SECRET_KEY（未设置 RUSIN_SECRET_KEY 时）
+/data/plugins/         # 已安装的插件
 /data/log/
 ```
 
@@ -320,13 +332,19 @@ rusin-note:.
 │  Disclaimer-en.md（英文免责声明）
 │  Disclaimer.md（免责声明）
 │  favicon.ico
+│  NOTICE.txt（首页公告横幅内容，取第一行）
 │  README.md
 │  README_en.md
 │  requirements.txt（Python 依赖）
+│  requirements-dev.txt（开发依赖：pytest）
+│  pytest.ini（pytest 配置）
+│  todo.md（路线图 / 待办）
+│  AGENTS.md / CLAUDE.md（AI 协作指南）
 │  zbpack.json（打包配置）
 │  vercel.json（Vercel 无服务器部署配置）
 │  lambda_handler.py（AWS Lambda 入口）
 │  .env.example（环境变量示例）
+│  feature_flags.json（历史遗留的功能开关状态文件；运行时实际写入 data/feature_flags.json）
 │
 ├─api（无服务器入口）
 │      index.py（Vercel Python 入口）
@@ -349,10 +367,13 @@ rusin-note:.
 │  │  notes.py（笔记操作与统计）
 │  │  pins.py（笔记置顶）
 │  │  plugins.py（插件系统：zip 安装 / 蓝图加载 / 上游更新）
-│  │  storage.py（存储层：file / memory / upstash / postgres 后端）
+│  │  storage.py（存储层：sqlite / file / memory / upstash / postgres 后端）
+│  │  storage_sqlite.py（SQLite 索引后端实现）
 │  │  store.py（用户/会话/分享/犇犇/评论/组织数据存储）
 │  │  tags.py（笔记标签）
 │  │  theme.py（主题与静态资源辅助）
+│  │  todos.py（首页工作台待办清单）
+│  │  user_settings.py（简洁模式 / 改密码 / 改用户名与数据迁移）
 │  │  utils.py（通用工具函数）
 │  │  wsgi.py（WSGI 入口）
 │  │
@@ -363,10 +384,11 @@ rusin-note:.
 │          auth.py（登录与注册）
 │          benben.py（犇犇动态）
 │          comments.py（评论页面）
-│          home.py（首页）
+│          home.py（首页 / 统计 / 免责声明）
 │          org.py（组织与团队协作）
 │          share.py（分享页面）
-│          static_routes.py（静态与说明页面）
+│          static_routes.py（favicon / 图床 / 附件访问）
+│          todos.py（工作台待办操作）
 │          user.py（用户与用户笔记）
 │          world.py（公开笔记）
 │          world_short.py（短链接公开笔记）
@@ -375,7 +397,7 @@ rusin-note:.
 │  │  base.html（基础布局）
 │  │  count.html（统计页面）
 │  │  disclaimer.html（免责声明页面）
-│  │  home.html（首页）
+│  │  home.html（首页 / 工作台）
 │  │
 │  ├─auth（认证页面）
 │  ├─admin（管理页面）
@@ -389,8 +411,15 @@ rusin-note:.
 │  ├─partials（公共片段）
 │  └─share（分享页面）
 │
+├─tests（pytest 端到端测试与前端语法检查）
+│       conftest.py（环境隔离与共享 fixtures）
+│       support.py（共享 HTTP 辅助与断言）
+│       frontend_check.py（前端语法检查 CLI）
+│       test_*.py（各功能端到端测试）
+│
 ├─image（图片资源）
 │      logo.png
+│      screenshots1.png
 │
 ├─.github
 │  │  issue-labeler.yml（Issue 标签配置）
@@ -405,6 +434,19 @@ rusin-note:.
 │          trigger-fork-sync.yml（触发 Fork 同步）
 │          upstream-sync.yml（上游同步）
 ```
+
+### 开发与测试
+
+```bash
+pip install -r requirements-dev.txt     # 安装 pytest（已包含 requirements.txt）
+pytest tests/                           # 运行全部端到端测试
+pytest tests/test_org.py -q             # 运行单个模块 / 按关键字筛选：pytest tests/ -q -k images
+python tests/frontend_check.py          # 前端语法检查（Jinja2 + 内联 JS/CSS + JSON，需要本机有 Node）
+```
+
+- 测试统一用 **pytest + logging** 组织：`tests/conftest.py` 会固定 `RUSIN_STORAGE=file`、切换到临时 `RUSIN_DATA_DIR` 并清空各模块内存缓存，测试不会污染本地数据；测试环境默认关闭限流。详细约定见 `tests/README.md`。
+- 前端资源全部内联在 Jinja2 模板中（无 `static/` 目录），改动模板后请运行 `python tests/frontend_check.py`。
+- CI（`.github/workflows/check.yml`）在 push / PR 到 `dev` 分支时按变更范围触发：`frontend` job 执行前端语法检查，`test` job 执行 pytest 并启动服务做 HTTP 健康检查。
 
 ### 配置项解析
 
@@ -466,22 +508,35 @@ rusin-note:.
    - KaTeX 静态资源从 `global_cdn` 基础地址拼接（默认 jsdmirror，可换 jsdelivr 等）；
 
     开启后，Markdown 只读页面支持 `$...$` 行内公式与 `$$...$$` 块级公式（KaTeX 洛谷同款，客户端渲染，无需服务端依赖）。
-- `code_highlight` 代码高亮（highlight.js，客户端渲染）。
+- `code_highlight` 代码高亮（服务端 Pygments 着色 + 客户端 highlight.js 补充）。
    - `enabled` ：是否开启，默认 `true`；
 
-    开启后，所有 Markdown 渲染处（笔记只读页、编辑页实时预览、犇犇动态、免责声明）的代码块自动语法高亮并显示行号，跟随站点浅色/暗色主题切换，无需服务端依赖。
+    代码块在服务端始终由 Pygments 分词着色；该开关额外控制客户端 highlight.js：开启后，所有 Markdown 渲染处（笔记只读页、编辑页实时预览、犇犇动态、评论、免责声明）对 Pygments 未识别的语言兜底高亮、生成行号，并跟随站点浅色/暗色主题切换。关闭后行号与客户端高亮一并移除，服务端着色仍保留。
 - `cache` 页面缓存。
    - `enabled`：是否启用缓存，默认 `true`；
    - `backend`：缓存后端，当前配置为 `redis`；
    - `default_timeout`：默认缓存时间（秒），当前为 `300`；
    - `redis_url`：Redis 地址，可由环境变量 `REDIS_URL` 覆盖。Redis 不可达时自动降级到进程内 SimpleCache。
+
+     另外：限流计数存储也读取 `REDIS_URL`（设置后多实例共享限流计数，未设置用进程内 memory://）。
+- `note_editor` 编辑页行为。
+   - `live_preview_default`：实时预览的默认开关，默认 `false`；访客可手动开启，选择记在浏览器 localStorage；
+   - `markdown_manual_url`：编辑页「Markdown 语法说明」链接地址，默认 `https://markdown.com.cn`。
+- `home_page` 首页工作台。
+   - `recent_notes_limit`：首页展示的最近编辑笔记条数，默认 `5`；
+   - `recent_shares_limit`：预留的最近分享条数（当前首页未展示分享列表），默认 `5`。
+- `todos` 首页工作台待办清单。
+   - `max_items`：单个用户待办条数上限，默认 `100`；
+   - `max_length`：单条待办文本长度上限（字符），默认 `200`。
 - `note_refs` 笔记快捷引用（`#` 引用，见「产品特性」）。
    - `enabled` ：是否开启，默认 `true`；置 `false` 后编辑器不弹引用补全框、渲染时不把 `#ID` 转为链接；
    - `search_limit` ：补全接口单次最多返回条数，默认 `8`；
    - `scan_limit` ：补全搜索最多扫描的笔记数（按修改时间倒序），默认 `100`。upstash / postgres 等远程存储后端每篇笔记需一次网络读取，笔记较多时可适当调低。
 - `max_note_tags`：每篇笔记最多标签数，默认 `10`；
 - `max_tag_length`：单个标签最大长度（单位：**字符**），默认 `24`；
-- `max_folder_name_length`：文件夹名最大长度（单位：**字符**），默认 `32`；
+- `max_folder_name_length`：文件夹名最大长度（单位：**字符**），默认 `64`；
+- `max_folder_depth`：文件夹嵌套层级上限（以 `/` 分隔计数），默认 `8`；
+- `max_note_id_length`：笔记 ID 最大长度，默认 `250`（短链/长链接兼容性上限）；
 - `avatar` 用户头像（通过第三方服务生成，显示在导航栏当前用户、犇犇动态发布者与用户笔记列表标题处）。
    - `enabled` ：是否开启，默认 `true`；置 `false` 后完全关闭头像显示；
    - `url_template` ：头像 URL 模板，默认 `https://cn.cravatar.com/avatar/{hash}?d=identicon&f=y`。支持两个占位符：`{hash}`（`md5(用户名)` 小写十六进制）、`{username}`（URL 编码后的用户名）。由于本站用户没有邮箱，默认用 `md5(用户名)` 作为哈希，`d=identicon` 会让 Gravatar 系服务为每个哈希生成确定性的几何头像；也可换成其他按用户名生成头像的服务（如 DiceBear：`https://api.dicebear.com/9.x/identicon/svg?seed={username}`）；
@@ -511,7 +566,7 @@ rusin-note:.
    - `require_lowercase`：是否必须包含小写字母，默认 `true`；  
    - `require_digits`：是否必须包含数字，默认 `true`；  
    - `require_special`：是否必须包含特殊符号（不含 `/ \ ( ) " '`），默认 `true`； 
-- `RUSIN_DATA_DIR`：可选环境变量，用于指定运行数据目录，默认当前项目目录（仅 `file` 后端使用）。
+- `RUSIN_DATA_DIR`：可选环境变量，用于指定运行数据目录，默认 `data`（即项目下的 `data/`；仅本地 `sqlite` / `file` 后端使用，外部后端无此目录）。
 
     笔记、图片、附件及各业务 JSON 数据会写入该目录；完整布局见上方 Zeabur 示例。在自动部署平台上建议挂载持久化卷到 `/data`，并设置 `RUSIN_DATA_DIR=/data`，避免重新部署时清空数据。
 - `RUSIN_STORAGE`：可选环境变量，显式指定存储后端：`sqlite`（本地/VPS，默认）、`file`（纯 JSON 文件）、`memory`（纯内存）、`upstash`（外部 KV）、`postgres`（Neon/PostgreSQL）。未指定时自动识别：设置了 `KV_REST_API_URL` / `KV_REST_API_TOKEN` 用 `upstash`，设置了 `DATABASE_URL` 用 `postgres`，检测到无服务器平台环境变量用 `memory`，否则 `sqlite`。详见上方「存储后端说明」。
@@ -524,12 +579,20 @@ rusin-note:.
    - `max_posts`：犇犇持久化条数上限，默认 `200`（外部存储单键体积控制，超出丢弃最旧）；
 
    内容支持 Markdown 与 LaTeX 公式（`$...$` / `$$...$$`，依赖 `latex_render` 开关），发布表单带实时预览（客户端 marked.js 渲染，预览同样过滤危险标签与链接）；渲染时经 bleach 安全清洗防止 XSS；每页显示 `page_size` 条，通过「加载更多」分批加载，加载与发布均受请求速率限制（GET/POST 限流），发布还受单用户冷却限制（`cooldown_seconds`）。登录用户可点击动态右上角的「回复」，以 `|| @用户名: 原内容` 覆盖填入发布框。
-- `plugins` 插件系统（详见上方「插件系统」章节）。
+- `plugins` 插件系统（详见上方「插件系统」章节；`config.json` 中可省略该段，缺省时使用内置默认值）。
    - `enabled`：是否启用，默认 `true`（无服务器环境自动禁用）；
    - `update_interval_hours`：后台更新检查线程的轮询周期（单位：**小时**），默认 $6$；
    - `update_stale_days`：距 `last_update` 超过该天数才请求 `upstream_repo`（单位：**天**），默认 $3$。
 - `features` / `admin_users` 功能开关（#90）。
-   - `features`：各功能的**默认开关**，当前 `config.json` 显式配置 `world_notes`（公开笔记与短链）、`benben`（犇犇动态）、`share_links`（分享链接）、`open_register`（开放注册）、`note_tags`（笔记标签）、`note_folders`（笔记文件夹）、`note_pins`（笔记置顶）、`heading_anchors`（Markdown 标题锚点）、`markdown_alerts`（Markdown 提示卡片）、`note_images`（笔记图床）、`note_attachments`（笔记附件）和 `comments`（评论系统）。`orgs` 未显式配置时默认启用；历史功能（`note_refs`、`latex_render`、`code_highlight`、`avatar`、`note_images`、`note_attachments`、`comments`）的默认值沿用各自配置段；
+   - `features`：各功能的**默认开关**。当前 `config.json` 显式配置了 `world_notes`（公开笔记与短链）、`benben`（犇犇动态）、`share_links`（分享链接）、`open_register`（开放注册）、`note_tags`（笔记标签）、`note_folders`（笔记文件夹）、`note_pins`（笔记置顶）、`heading_anchors`（Markdown 标题锚点）、`markdown_alerts`（Markdown 提示卡片）、`note_images`（笔记图床）、`note_attachments`（笔记附件）和 `comments`（评论系统）共 12 项。
+
+     **优先级**：`note_refs`、`latex_render`、`code_highlight`、`avatar`、`note_images`、`note_attachments`、`comments` 这 7 个「历史功能」的默认值**始终取自各自配置段**（如 `images.enabled`、`attachments.enabled`、`comments.enabled`），本段中的同名项不生效；其余功能未在本段配置时默认启用（含 `orgs`）。
    - `admin_users`：功能开关管理员用户名列表；也可用环境变量 `RUSIN_ADMIN` 指定（多个用户名逗号分隔，两者取并集）。
 
-   管理员登录后可在 `/admin/features` 用滑块开关切换各功能的启用状态，保存后立即生效（无需重启）：运行时状态持久化在存储后端（`sqlite`/`file` 后端即数据目录下的 `feature_flags.json`），多实例部署经约 5 秒的缓存 TTL 自动收敛；停用的功能路由直接 404、导航与首页入口自动隐藏。全部功能开关状态会呈现在 `/count` 数据汇总页的「功能状态」区（未设管理员时该区对所有人可见，但无人能修改开关）。注意：无服务器 `memory` 后端不持久，实例冷启动后回退到 `config.json` 默认值。
+   管理员登录后可在 `/admin/features` 用滑块开关切换各功能的启用状态，保存后立即生效（无需重启）：运行时状态持久化在存储后端（`sqlite`/`file` 后端即数据目录下的 `feature_flags.json`，仓库根目录下的 `feature_flags.json` 是历史遗留文件、不参与运行），多实例部署经约 5 秒的缓存 TTL 自动收敛；停用的功能路由直接 404、导航与首页入口自动隐藏。全部功能开关状态会呈现在 `/count` 数据汇总页的「功能状态」区（未设管理员时该区对所有人可见，但无人能修改开关）。注意：无服务器 `memory` 后端不持久，实例冷启动后回退到 `config.json` 默认值。
+- `logger` 日志。
+   - `max_size`：单个日志文件的字节上限（RotatingFileHandler `maxBytes`），默认 `4294967296`（4 GiB）；
+   - `path_pattern`：日志文件路径模板，默认 `log/{timestamp}.log`，相对数据目录解析（即 `<RUSIN_DATA_DIR>/log/`）；
+
+    日志文件不可创建时（如无服务器只读文件系统）自动回退到 stderr，进入平台日志流。
+- `debug`：调试开关，默认 `false`。仅影响 `app/*` 模块日志的记录级别，**不会**开启 Flask 调试模式；生产环境请保持 `false`。

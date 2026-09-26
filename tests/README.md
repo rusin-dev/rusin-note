@@ -23,8 +23,11 @@ pytest tests/ -q -k images    # 按关键字筛选
 | `test_frontend.py` | 前端语法检查（复用 `frontend_check.py`）：Jinja2 + 内联 JS/CSS + JSON |
 | `test_folders.py` | 笔记文件夹树：路径规范化、树构建、`?folder=` 筛选、功能开关 |
 | `test_images.py` | 图床：魔数校验、上传/读取、大小/配额/格式校验、XSS 白名单 |
+| `test_markdown_alerts.py` | Markdown 提示卡片（GitHub Alerts）：`> [!NOTE]` 等渲染为可折叠 `<details>`、默认展开/折叠、bleach 白名单 |
+| `test_home_notice.py` | 首页公告横幅：`NOTICE.txt` 首行展示、跳过前导空行、文件缺失/为空时不渲染 |
 | `test_org.py` | 组织：创建 / 加入 / 邀请审批 / 角色权限 / 组织笔记 |
 | `test_pins.py` | 笔记置顶：开关、排序、筛选联动、持久化 |
+| `test_sqlite_storage.py` | SQLite 后端：笔记 JSON 读写 + 索引查询、通用 KV、图床/附件、旧版 `.txt` 笔记导入、`select_backend` 自动识别 |
 | `test_user_settings.py` | 用户设置：简洁模式 / 修改密码 / 修改用户名（跨子系统数据迁移） |
 | `frontend_check.py` | 前端语法检查 CLI（无 pytest 依赖，CI `frontend` job 直接调用；检查逻辑由 `test_frontend.py` 复用） |
 

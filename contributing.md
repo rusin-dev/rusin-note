@@ -1,3 +1,5 @@
 - 不要推送到 main 分支！请推送到dev分支避免用户接受破坏性更新。
 - 有新点子先新建 issue，不要直接提交！
-- 调试代码查看详细信息，注意把 `config.json` 中的 `debug` 改成 True!
+- 提交前自测：`pip install -r requirements-dev.txt && pytest tests/`；改动了模板还要跑 `python tests/frontend_check.py`。
+- 调试代码查看详细信息，注意把 `config.json` 中的 `debug` 改成 True!（注意：当前实现里该开关只影响 `app/*` 模块日志的记录级别，并不会开启 Flask 调试模式。）
+- 新增功能时请同步更新文档：`README.md` / `README_en.md` 的「产品特性」与「配置项解析」、`i18n.py` 中 zh/en 文案成对添加、需要可开关的功能在 `feature_flags.py` 的 `FEATURES` 注册表登记并给视图加 `@require_feature(key)`。
