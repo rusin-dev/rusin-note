@@ -164,6 +164,7 @@ DEFAULT_CONFIG = {
         "max_height_px": 1000,               # 评论内容渲染后最大显示高度（px）
     },
     "oauth": {                                # 第三方登录（GitHub/Google/Microsoft/微信/QQ）
+        "enabled": False,                      # 总开关：默认关闭所有 OAuth（即使功能开关被打开也需此开关为 true）
         "auto_register": True,                 # 未绑定账号时是否自动创建新用户（关闭后需先登录再绑定）
         "timeout_seconds": 10,                 # 向各 Provider 发起 HTTP 请求的超时（秒）
         "providers": {                         # 各 Provider 凭据；留空即视为未配置，登录页不展示
@@ -610,6 +611,9 @@ except (TypeError, ValueError):
 # 各 Provider 的授权/令牌/用户信息端点硬编码在 app/core/oauth.py，这里只放
 # 凭据与开关。凭据留空即视为「未配置」，登录页不展示对应按钮。
 OAUTH_CFG = config.get("oauth", DEFAULT_CONFIG["oauth"])
+# 总开关：默认关闭所有第三方登录。仅当其为 true 且对应功能开关开启、凭据已配置时
+# 才展示 / 允许使用某 Provider（线下可硬关闭，不受运行时功能开关影响）。
+OAUTH_ENABLED = bool(OAUTH_CFG.get("enabled", False))
 OAUTH_AUTO_REGISTER = bool(OAUTH_CFG.get("auto_register", True))
 try:
     OAUTH_TIMEOUT_SECONDS = max(1, int(OAUTH_CFG.get("timeout_seconds", 10)))

@@ -44,7 +44,7 @@
 - **评论系统**：笔记和分享页面支持评论功能，支持匿名评论，可配置最大评论数（默认 200 条）、冷却时间、分页加载，与犇犇动态类似的发布等待机制。
 - **犇犇动态**：内置持久化轻量动态流，登录用户可发布内容，未登录用户可浏览，支持实时预览、分页加载、发布冷却，以及点击动态右上角“回复”快速填充 `|| @用户名: 原内容`。
 - **功能开关（Feature Flags）**：管理员在 `/admin/features` 用滑块开关启用/停用站点功能（公开笔记、犇犇、分享链接、开放注册、快捷引用、笔记标签、笔记文件夹、笔记置顶、Markdown 标题锚点、Markdown 提示卡片、笔记图床、笔记附件、评论系统、LaTeX、代码高亮、头像、组织），保存后立即生效、无需重启；启用的功能会在 `/count` 数据汇总页呈现，停用的功能入口自动隐藏、路由直接 404。
-- **第三方登录与账号安全（可选）**：支持 GitHub / Google / Microsoft / 微信 / QQ 第三方登录（OAuth 2.0，在 `oauth.providers` 填入凭据后启用，登录页仅展示已开启且已配置的平台，未绑定时可自动注册或先登录再绑定）；支持基于 TOTP 的两步验证（2FA，可用认证器 App 扫码/手动录入，并提供一次性恢复码）；支持绑定并验证邮箱 / 手机号，并可用验证码免密码登录。三类能力均为独立功能开关（`oauth_*` / `two_factor_auth` / `email_verify` / `phone_verify`），可在 `/admin/features` 单独启停。
+- **第三方登录与账号安全（可选）**：支持 GitHub / Google / Microsoft / 微信 / QQ 第三方登录（OAuth 2.0；`oauth.enabled` 总开关**默认关闭**，开启并在 `oauth.providers` 填入凭据、且打开对应功能开关后才可用，登录页仅展示可用平台，未绑定时可自动注册或先登录再绑定）；支持基于 TOTP 的两步验证（2FA，可用认证器 App 扫码/手动录入，并提供一次性恢复码）；支持绑定并验证邮箱 / 手机号，并可用验证码免密码登录。三类能力均为独立功能开关（`oauth_*` / `two_factor_auth` / `email_verify` / `phone_verify`），可在 `/admin/features` 单独启停。
 - **组织/团队协作**：创建组织并邀请成员加入，支持 Owner / Admin / Member 三级角色体系。组织笔记独立存储在 `_orgs/<org_name>/` 命名空间，与个人笔记完全隔离。三种加入方式：邀请制（生成邀请码分享）、公开加入（自由加入）、审批制（申请后由 Admin/Owner 审批）。Owner 可管理组织设置、添加/移除管理员、删除组织；Admin 可管理成员和邀请；Member 可创建和编辑组织笔记。
 - **首页公告横幅**：首页顶部展示仓库根目录 `NOTICE.txt` 的第一个非空行（跳过前导空行）作为站内公告；文件缺失或整体内容为空时自动隐藏，文本经 HTML 转义，无需额外配置。
 - **首页工作台**：登录后首页呈现 VSCode 欢迎页风格的工作台——最近编辑的笔记列表（条数由 `home_page.recent_notes_limit` 控制）与**待办清单**（新增 / 勾选 / 删除 / 清除已完成，条目数与单条长度受 `todos` 配置约束）；开启简洁模式后首页直接跳转到新建笔记。
@@ -645,6 +645,7 @@ python tests/frontend_check.py          # 前端语法检查（Jinja2 + 内联 C
    - `update_interval_hours`：后台更新检查线程的轮询周期（单位：**小时**），默认 $6$；
    - `update_stale_days`：距 `last_update` 超过该天数才请求 `upstream_repo`（单位：**天**），默认 $3$。
 - `oauth` 第三方登录（OAuth 2.0）。
+   - `enabled`：总开关，**默认 `false`（关闭全部 OAuth）**。即使功能开关被打开、凭据已配置，此开关为 `false` 时所有第三方登录仍不可用；适合在配置层硬关闭，不受运行时功能开关影响；
    - `auto_register`：第三方账号未绑定时是否自动创建站内用户，默认 `true`（关闭后需先登录再在设置中绑定）；
    - `timeout_seconds`：向各 Provider 发起 HTTP 请求的超时（秒），默认 `10`；
    - `providers.<github|google|microsoft|wechat|qq>`：各平台凭据，分别填 `client_id`/`client_secret`（Microsoft 另可填 `tenant`，微信/QQ 为 `app_id`/`app_secret`）；留空即视为未配置，登录页不展示对应按钮。
@@ -656,7 +657,7 @@ python tests/frontend_check.py          # 前端语法检查（Jinja2 + 内联 C
 - `features` / `admin_users` 功能开关（#90）。
    - `features`：各功能的**默认开关**。当前 `config.json` 显式配置了 `world_notes`（公开笔记与短链）、`benben`（犇犇动态）、`share_links`（分享链接）、`open_register`（开放注册）、`note_tags`（笔记标签）、`note_folders`（笔记文件夹）、`note_pins`（笔记置顶）、`heading_anchors`（Markdown 标题锚点）、`markdown_alerts`（Markdown 提示卡片）、`note_images`（笔记图床）、`note_attachments`（笔记附件）、`comments`（评论系统）以及 `oauth_github`/`oauth_google`/`oauth_microsoft`/`oauth_wechat`/`oauth_qq`/`two_factor_auth`/`email_verify`/`phone_verify` 共 20 项（后 8 项默认 `false`）。
 
-     **优先级**：`note_refs`、`latex_render`、`code_highlight`、`avatar`、`note_images`、`note_attachments`、`comments` 这 7 个「历史功能」的默认值**始终取自各自配置段**（如 `images.enabled`、`attachments.enabled`、`comments.enabled`），本段中的同名项不生效；其余功能未在本段配置时默认启用（含 `orgs`）。第三方登录平台的展示还需在 `oauth.providers` 中填好凭据。
+     **优先级**：`note_refs`、`latex_render`、`code_highlight`、`avatar`、`note_images`、`note_attachments`、`comments` 这 7 个「历史功能」的默认值**始终取自各自配置段**（如 `images.enabled`、`attachments.enabled`、`comments.enabled`），本段中的同名项不生效；其余功能未在本段配置时默认启用（含 `orgs`）。第三方登录平台的展示还需 `oauth.enabled` 为 `true` 且在 `oauth.providers` 中填好凭据。
    - `admin_users`：功能开关管理员用户名列表；也可用环境变量 `RUSIN_ADMIN` 指定（多个用户名逗号分隔，两者取并集）。
 
    管理员登录后可在 `/admin/features` 用滑块开关切换各功能的启用状态，保存后立即生效（无需重启）：运行时状态持久化在存储后端（`sqlite`/`file` 后端即数据目录下的 `feature_flags.json`），多实例部署经约 5 秒的缓存 TTL 自动收敛；停用的功能路由直接 404、导航与首页入口自动隐藏。全部功能开关状态会呈现在 `/count` 数据汇总页的「功能状态」区（未设管理员时该区对所有人可见，但无人能修改开关）。注意：无服务器 `memory` 后端不持久，实例冷启动后回退到 `config.json` 默认值。

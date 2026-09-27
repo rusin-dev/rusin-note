@@ -33,6 +33,8 @@ def _enable_all():
 def _configure(monkeypatch, provider="github"):
     cfg = {"providers": {provider: {"client_id": "cid", "client_secret": "secret"}}}
     monkeypatch.setattr(config, "OAUTH_CFG", cfg)
+    # 默认配置关闭 OAuth 总开关，测试中显式打开
+    monkeypatch.setattr(config, "OAUTH_ENABLED", True)
 
 
 def _state_of(response) -> str:
@@ -107,6 +109,15 @@ class TestOAuth:
         _configure(monkeypatch)
         expect(ctx.anon.get("/oauth/github").status_code == 404, "关闭后发起授权 404")
         _enable_all()
+
+    def test_master_switch_off(self, ctx, monkeypatch):
+        logger.info("=== [D2] 总开关默认关闭 ===")
+        _enable_all()
+        monkeypatch.setattr(config, "OAUTH_CFG", {
+            "providers": {"github": {"client_id": "a", "client_secret": "b"}}})
+        monkeypatch.setattr(config, "OAUTH_ENABLED", False)
+        expect(service.available_providers() == [], "总开关关闭时即使有凭据/功能开关也不可用")
+        expect(ctx.anon.get("/oauth/github").status_code == 404, "总开关关闭时发起授权 404")
 
     def test_link_and_unlink(self, ctx, monkeypatch):
         logger.info("=== [E] 已登录用户绑定 / 解绑 ===")

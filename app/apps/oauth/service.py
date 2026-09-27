@@ -104,8 +104,15 @@ def is_configured(provider: str) -> bool:
     return bool(client_id and client_secret)
 
 
+def is_globally_enabled() -> bool:
+    """OAuth 总开关（config.json 的 ``oauth.enabled``，默认 false）"""
+    return bool(config.OAUTH_ENABLED)
+
+
 def is_available(provider: str) -> bool:
-    return (provider in PROVIDERS
+    """总开关 ∧ 功能开关 ∧ 凭据已配置（三者任一不满足即不可用）"""
+    return (is_globally_enabled()
+            and provider in PROVIDERS
             and feature_enabled(feature_key(provider))
             and is_configured(provider))
 

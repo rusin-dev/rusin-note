@@ -32,7 +32,9 @@ _STATE_KEY = "oauth_state"
 
 
 def _guard_provider(provider: str) -> None:
-    """Provider 合法性 + 功能开关 + 凭据配置三重校验，任一不满足即 404。"""
+    """Provider 合法性 + 总开关 + 功能开关 + 凭据配置校验，任一不满足即 404。"""
+    if not service.is_globally_enabled():
+        abort(404)
     if provider not in service.PROVIDERS:
         abort(404)
     if not feature_enabled(service.feature_key(provider)):

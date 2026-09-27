@@ -162,7 +162,7 @@ upstash 后端所有键统一加 `rusin:` 前缀；memory 后端 get/set 带 dee
 - **密码**：PBKDF2 10 万次迭代慢哈希 + 常量时间比较；`PW_MAX_LENGTH` 硬上限 128 防超长输入 CPU DoS
 - **路径穿越**：笔记 ID 正则 `^[a-zA-Z0-9_\-]+$` + realpath/commonpath 双重校验；用户名/ID 有保留名单（`RESERVED_USERNAMES`、`FORBIDDEN_NOTE_IDS`）
 - **Cookie**：session HttpOnly + SameSite=Lax，`secure_cookies` 开关控制 Secure 标志；登录 Cookie 统一由 `core/auth.set_session_cookie`/`clear_session_cookie` 写入，各 App 不自行拼属性
-- **第三方登录（OAuth）**：state + PKCE 存 Flask 签名会话并校验；`oauth_accounts` 一个 uid 只绑一个站内用户；自动注册用户名带 Provider 前缀 + 随机后缀避免冒用；凭据缺失或功能开关关闭时路由 404
+- **第三方登录（OAuth）**：state + PKCE 存 Flask 签名会话并校验；`oauth_accounts` 一个 uid 只绑一个站内用户；自动注册用户名带 Provider 前缀 + 随机后缀避免冒用；`config.json` 的 `oauth.enabled` **默认为 false**（总开关），与功能开关、凭据配置三者同时满足才可用，否则路由 404 / 登录页不展示
 - **2FA（TOTP）**：动态码按 `match_step` 命中的时间步做防重放（`last_step`），恢复码仅存 SHA-256 哈希且一次性；登录密码校验通过后经 Flask 签名会话写入待验证标记再转 `/login/2fa`
 - **邮箱/手机验证**：验证码仅存哈希，带有效期、重发冷却与最大尝试次数；SMTP/短信 Webhook 未配置时不发送且不落库（避免伪造成功后绑定）
 
@@ -187,7 +187,7 @@ upstash 后端所有键统一加 `rusin:` 前缀；memory 后端 get/set 带 dee
 - `max_note_tags`（10）、`max_tag_length`（24）、`max_folder_name_length`（64）、`max_folder_depth`（8）、`max_note_id_length`（250）
 - `logger`（`max_size` 4GiB / `path_pattern` `log/{timestamp}.log`，相对数据目录，不可写回退 stderr）、`debug`（仅影响 app 模块日志级别，**不**开启 Flask 调试；`false`=INFO、`true`=ERROR）
 - `plugins`（`enabled` 默认 true、`update_interval_hours` 6、`update_stale_days` 3；config.json 可省略该段）
-- `oauth`（第三方登录：`auto_register` 默认 true、`timeout_seconds` 10、`providers.<key>.client_id/client_secret`（微信/QQ 为 `app_id`/`app_secret`、Microsoft 另有 `tenant`）；凭据留空即视为未配置、登录页不展示）
+- `oauth`（第三方登录：`enabled` **总开关默认 false**（硬关闭全部 OAuth，不受运行时功能开关影响）、`auto_register` 默认 true、`timeout_seconds` 10、`providers.<key>.client_id/client_secret`（微信/QQ 为 `app_id`/`app_secret`、Microsoft 另有 `tenant`）；可用 = `enabled` ∧ `oauth_<key>` 功能开关 ∧ 凭据已配置，凭据留空即视为未配置、登录页不展示）
 - `security`（2FA/邮箱/手机：`code_length` 6 / `code_ttl_seconds` 600 / `code_resend_cooldown_seconds` 60 / `code_max_attempts` 5 / `challenge_ttl_seconds` 600 / `timeout_seconds` 10 / `email_login` / `phone_login` / `smtp`（host/port/username/password/from_addr/use_tls/use_ssl）/ `sms.webhook_url`+`token`）
 - `features`（功能开关默认值，config.json 显式列了 20 项；7 个历史功能 `note_refs`/`latex_render`/`code_highlight`/`avatar`/`note_images`/`note_attachments`/`comments` 的默认值**始终取自各自配置段**，本段同名项不生效；`oauth_*`/`two_factor_auth`/`email_verify`/`phone_verify` 默认 false）、`admin_users`（功能开关管理员，与环境变量 `RUSIN_ADMIN` 取并集）
 
