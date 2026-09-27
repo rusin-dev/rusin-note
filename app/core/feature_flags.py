@@ -47,6 +47,17 @@ FEATURES = [
     {"key": "code_highlight", "icon": "fa-code"},
     {"key": "avatar", "icon": "fa-user"},
     {"key": "orgs", "icon": "fa-users"},                # 组织/团队协作
+    # 第三方登录（各 Provider 需要先在 config.json 的 oauth.providers 填入凭据，
+    # 未配置时即使开关打开也不会在登录页展示）
+    {"key": "oauth_github", "icon": "fa-code-branch"},
+    {"key": "oauth_google", "icon": "fa-g"},
+    {"key": "oauth_microsoft", "icon": "fa-windows"},
+    {"key": "oauth_wechat", "icon": "fa-comment-dots"},
+    {"key": "oauth_qq", "icon": "fa-comment"},
+    # 双因素 / 联系方式验证
+    {"key": "two_factor_auth", "icon": "fa-shield-halved"},
+    {"key": "email_verify", "icon": "fa-envelope"},
+    {"key": "phone_verify", "icon": "fa-mobile-screen"},
 ]
 FEATURE_KEYS = [f["key"] for f in FEATURES]
 

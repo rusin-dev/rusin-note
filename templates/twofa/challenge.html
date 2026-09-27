@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>{{ t('twofa_challenge_title') }}</h1>
+<p class="desc" style="color: var(--muted); margin-top: 6px;">{{ t('twofa_challenge_desc') }}</p>
+{% if error %}<p class="error">{{ error }}</p>{% endif %}
+<form method="POST" action="/login/2fa">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="form-group">
+        <label>{{ t('twofa_code_label') }}</label>
+        <input type="text" name="code" required autofocus autocomplete="one-time-code"
+               inputmode="numeric" pattern="[0-9A-Za-z\-]{4,32}">
+    </div>
+    <button type="submit">{{ t('twofa_verify_submit') }}</button>
+</form>
+<p style="margin-top:12px;"><a href="/login">{{ t('twofa_back_login') }}</a></p>
+{% endblock %}

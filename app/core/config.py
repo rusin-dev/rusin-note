@@ -163,6 +163,34 @@ DEFAULT_CONFIG = {
         "page_size": 50,                     # 每页显示评论数
         "max_height_px": 1000,               # 评论内容渲染后最大显示高度（px）
     },
+    "oauth": {                                # 第三方登录（GitHub/Google/Microsoft/微信/QQ）
+        "auto_register": True,                 # 未绑定账号时是否自动创建新用户（关闭后需先登录再绑定）
+        "timeout_seconds": 10,                 # 向各 Provider 发起 HTTP 请求的超时（秒）
+        "providers": {                         # 各 Provider 凭据；留空即视为未配置，登录页不展示
+            "github": {"client_id": "", "client_secret": ""},
+            "google": {"client_id": "", "client_secret": ""},
+            "microsoft": {"client_id": "", "client_secret": "", "tenant": "common"},
+            "wechat": {"app_id": "", "app_secret": ""},
+            "qq": {"app_id": "", "app_secret": ""},
+        },
+    },
+    "security": {                             # 2FA / 邮箱 / 手机号验证
+        "code_length": 6,                      # 邮箱/手机验证码长度
+        "code_ttl_seconds": 600,               # 验证码有效期（秒）
+        "code_resend_cooldown_seconds": 60,    # 同一目标重发验证码的最小间隔（秒）
+        "code_max_attempts": 5,                # 单个验证码最大尝试次数（防爆破）
+        "challenge_ttl_seconds": 600,          # 登录二次验证挑战有效期（秒）
+        "timeout_seconds": 10,                 # 验证码投递（SMTP / 短信 Webhook）超时（秒）
+        "email_login": True,                   # 是否允许邮箱验证码直接登录
+        "phone_login": True,                   # 是否允许手机验证码直接登录
+        "smtp": {                              # 邮箱验证码投递（留空则仅记录日志、不发送）
+            "host": "", "port": 587, "username": "", "password": "",
+            "from_addr": "", "use_tls": True, "use_ssl": False,
+        },
+        "sms": {                               # 短信验证码投递：通用 HTTP Webhook（POST JSON）
+            "webhook_url": "", "token": "",
+        },
+    },
     "features": {                             # 功能开关默认值（#90）：运行时可由管理员在 /admin/features 切换
         "world_notes": True,
         "benben": True,
@@ -175,6 +203,16 @@ DEFAULT_CONFIG = {
         "note_images": True,
         "note_attachments": True,
         "comments": True,
+        # 第三方登录：需要先在 oauth.providers 填好凭据，默认关闭
+        "oauth_github": False,
+        "oauth_google": False,
+        "oauth_microsoft": False,
+        "oauth_wechat": False,
+        "oauth_qq": False,
+        # 双因素 / 联系方式验证：默认关闭
+        "two_factor_auth": False,
+        "email_verify": False,
+        "phone_verify": False,
     },
     "admin_users": [],                        # 功能开关管理员用户名（也可用环境变量 RUSIN_ADMIN 指定，逗号分隔）
     "max_note_id_length": 250,
@@ -567,6 +605,45 @@ try:
         COMMENTS_MAX_HEIGHT_PX = 1000
 except (TypeError, ValueError):
     COMMENTS_MAX_HEIGHT_PX = 1000
+
+# ---------- 第三方登录（OAuth）配置 ----------
+# 各 Provider 的授权/令牌/用户信息端点硬编码在 app/core/oauth.py，这里只放
+# 凭据与开关。凭据留空即视为「未配置」，登录页不展示对应按钮。
+OAUTH_CFG = config.get("oauth", DEFAULT_CONFIG["oauth"])
+OAUTH_AUTO_REGISTER = bool(OAUTH_CFG.get("auto_register", True))
+try:
+    OAUTH_TIMEOUT_SECONDS = max(1, int(OAUTH_CFG.get("timeout_seconds", 10)))
+except (TypeError, ValueError):
+    OAUTH_TIMEOUT_SECONDS = 10
+_OAUTH_PROVIDERS_CFG = OAUTH_CFG.get("providers", {}) or {}
+if not isinstance(_OAUTH_PROVIDERS_CFG, dict):
+    _OAUTH_PROVIDERS_CFG = {}
+
+# ---------- 2FA / 邮箱 / 手机号验证配置 ----------
+SECURITY_CFG = config.get("security", DEFAULT_CONFIG["security"])
+
+def _security_int(key: str, default: int, minimum: int = 1) -> int:
+    try:
+        return max(minimum, int(SECURITY_CFG.get(key, default)))
+    except (TypeError, ValueError):
+        return default
+
+SECURITY_CODE_LENGTH = _security_int("code_length", 6, 4)
+# 验证码字符集固定为数字，长度可配（4-8 位），过长会导致比对/输入困难
+if SECURITY_CODE_LENGTH > 8:
+    SECURITY_CODE_LENGTH = 8
+SECURITY_CODE_TTL = _security_int("code_ttl_seconds", 600)
+SECURITY_CODE_RESEND_COOLDOWN = _security_int("code_resend_cooldown_seconds", 60, 0)
+SECURITY_CODE_MAX_ATTEMPTS = _security_int("code_max_attempts", 5)
+SECURITY_CHALLENGE_TTL = _security_int("challenge_ttl_seconds", 600)
+SECURITY_EMAIL_LOGIN = bool(SECURITY_CFG.get("email_login", True))
+SECURITY_PHONE_LOGIN = bool(SECURITY_CFG.get("phone_login", True))
+try:
+    SECURITY_TIMEOUT_SECONDS = max(1, int(SECURITY_CFG.get("timeout_seconds", 10)))
+except (TypeError, ValueError):
+    SECURITY_TIMEOUT_SECONDS = 10
+SMTP_CFG = SECURITY_CFG.get("smtp", DEFAULT_CONFIG["security"]["smtp"]) or {}
+SMS_CFG = SECURITY_CFG.get("sms", DEFAULT_CONFIG["security"]["sms"]) or {}
 
 # ---------- 功能开关管理员（#90：/admin/features 的访问者） ----------
 # config.json 的 admin_users 与环境变量 RUSIN_ADMIN（逗号分隔用户名）取并集

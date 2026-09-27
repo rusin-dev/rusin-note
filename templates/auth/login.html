@@ -14,5 +14,31 @@
     </div>
     <button type="submit">{{ t('login_submit') }}</button>
 </form>
+
+{% if oauth_providers or feature_enabled('email_verify') or feature_enabled('phone_verify') %}
+<div class="login-sep"><span>{{ t('login_or') }}</span></div>
+{% endif %}
+{% if oauth_providers %}
+<div class="oauth-grid">
+    {% for p in oauth_providers %}
+    <a class="oauth-btn" href="/oauth/{{ p.key }}">
+        <i class="{{ p.icon }}" aria-hidden="true"></i>
+        <span>{{ p.label }}</span>
+    </a>
+    {% endfor %}
+</div>
+{% endif %}
+{% if feature_enabled('email_verify') or feature_enabled('phone_verify') %}
+<p style="margin-top:12px;"><a href="/login/otp">{{ t('otp_login_link') }}</a></p>
+{% endif %}
 <p style="margin-top:12px;"><a href="/register">{{ t('login_no_account') }}</a></p>
+
+<style>
+    .login-sep { display: flex; align-items: center; gap: 12px; margin: 22px 0 16px; color: var(--muted); font-size: 13px; }
+    .login-sep::before, .login-sep::after { content: ""; flex: 1; height: 1px; background: var(--card-border); }
+    .oauth-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; }
+    .oauth-btn { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 10px 14px; border: 1px solid var(--card-border); border-radius: 8px; background: var(--card-bg); color: var(--text); text-decoration: none; font-size: 14px; transition: border-color 0.18s ease, box-shadow 0.18s ease; }
+    .oauth-btn:hover { border-color: var(--glow-ring); box-shadow: var(--glow-shadow); text-decoration: none; }
+    .oauth-btn i { font-size: 16px; }
+</style>
 {% endblock %}

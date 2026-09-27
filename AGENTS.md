@@ -1,7 +1,7 @@
 # Rusin-Note 项目指南
 
 ## 项目简介
-基于 Flask 的轻量级云端剪贴板，支持公开短链笔记、用户私有笔记、分享链接、动态（犇犇）、评论、首页工作台待办与组织/团队协作。可部署在 VPS（sqlite/file 后端）或 Vercel / AWS Lambda 等无服务器平台（upstash / postgres 后端接入外部存储）。
+基于 Flask 的轻量级云端剪贴板，支持公开短链笔记、用户私有笔记、分享链接、动态（犇犇）、评论、首页工作台待办、组织/团队协作，以及第三方登录（OAuth）、双因素认证（2FA）与邮箱/手机号验证。可部署在 VPS（sqlite/file 后端）或 Vercel / AWS Lambda 等无服务器平台（upstash / postgres 后端接入外部存储）。
 
 ## 技术栈
 - Python 3.10+, Flask 3, Flask-WTF, Flask-Limiter, Flask-Caching, waitress/gunicorn, mangum（Lambda 适配）
@@ -32,7 +32,7 @@
 
 自动识别优先级：显式 `RUSIN_STORAGE` > KV 环境变量（upstash）> `DATABASE_URL`（postgres）> 无服务器平台（memory）> 本地（sqlite）。
 
-- 集合类 KV 键在 `storage.py` 的 `KV_FILE_MAP` 登记落盘文件名（`users.json`、`sessions.json`、`shares.json`、`benben.json`、`comments.json`、`note_tags.json`、`note_folders.json`、`note_pins.json`、`note_titles.json`、`todos.json`、`feature_flags.json`、`orgs.json`、`org_members.json`、`org_invites.json`、`org_join_requests.json`、`.secret_key`）；笔记键为 `note:<用户>:<ID>`，图床/附件键为 `img:` / `att:` 前缀（file/postgres 后端走原生二进制文件）。
+- 集合类 KV 键在 `storage.py` 的 `KV_FILE_MAP` 登记落盘文件名（`users.json`、`sessions.json`、`shares.json`、`benben.json`、`comments.json`、`note_tags.json`、`note_folders.json`、`note_pins.json`、`note_titles.json`、`todos.json`、`feature_flags.json`、`orgs.json`、`org_members.json`、`org_invites.json`、`org_join_requests.json`、`oauth_accounts.json`、`two_factor.json`、`user_contacts.json`、`verification_codes.json`、`.secret_key`）；笔记键为 `note:<用户>:<ID>`，图床/附件键为 `img:` / `att:` 前缀（file/postgres 后端走原生二进制文件）。
 
 - 统一接口在基类 `StorageBackend` 提供笔记元数据/检索能力：`note_title`、`list_notes_detailed`、`search_notes`、`notes_stats`（与后端无关的退化实现），SQLite 后端覆盖为单次索引查询（`notes.py` 的 `search_user_notes`/`get_stats` 与列表页据此避免逐篇读取内容）。
 
@@ -54,17 +54,20 @@
 ## 架构要点
 - 入口：`app/__main__.py`（waitress）或 `app/wsgi.py`（gunicorn）；无服务器：`api/index.py`（Vercel）、`lambda_handler.py`（Lambda）
 - 代码分层：**共享内核 `app/core/`**（基础设施 + 跨功能领域服务）与**功能 App `app/apps/<feature>/`**（每个 App 自带 `views.py` 蓝图，必要时带 `service.py` 业务逻辑）；`app/apps/registry.py` 统一按序注册各 App 蓝图。
-- 核心模块（`app/core/`）：`storage.py`（存储后端抽象）、`storage_sqlite.py`（默认 SQLite 索引后端）、`store.py`（数据存储业务）、`auth.py`（认证）、`notes.py`（笔记底层操作）、`tags.py`/`folders.py`/`pins.py`（笔记标签/文件夹/置顶）、`middleware.py`（请求上下文）、`ip_utils.py`（客户端 IP 安全解析 / 可信代理校验 / IP 名单）、`concurrency.py`（进程内并发闸门：单用户在途请求上限）、`prefs.py`（简洁模式偏好）、`plugins.py`（插件系统：zip 解压安装 / auth_token 校验 / 命名空间冲突检查 / 蓝图加载 / 上游更新线程）、`feature_flags.py`（功能开关：注册表 + 存储持久化 + `require_feature` 装饰器）
-- 功能 App（`app/apps/`）：home / auth / notes / world / share / benben / comments / org / todos / images / attachments / user / admin / static；其中 `comments`、`todos`、`images`、`attachments`、`user` 自带 `service.py`（业务逻辑：评论存取、待办、图床/附件校验配额、密码与改名迁移）。
-- 路由蓝图（`app/apps/`，注册顺序见 `app/apps/registry.py`）：home, auth, benben, static, notes, images, attachments, user, share, world, admin（`/admin/features` 功能开关管理）, comments, org（组织/团队协作）, todos（工作台待办）, **插件蓝图（在 registry.register_blueprints 内注册）**, world_short（注意最后注册 catch-all）
-- 用户设置（`/user/<u>/settings`，`app/apps/user/service.py`）：简洁模式（原导航栏切换按钮已并入，账号级偏好存 users.json，`middleware` 注入 `g.simple_mode` 服务端渲染 `<html class="simple-mode">`，页面缓存键含该标志）、修改密码（注销其它会话）、修改用户名（先复制笔记/图床/附件再迁移各存储用户标识，最后删旧数据）。端到端测试：`pytest tests/test_user_settings.py`
+- 核心模块（`app/core/`）：`storage.py`（存储后端抽象）、`storage_sqlite.py`（默认 SQLite 索引后端）、`store.py`（数据存储业务）、`auth.py`（认证，含 `set_session_cookie`/`clear_session_cookie` 共享 Cookie 助手）、`totp.py`（纯标准库 RFC 6238 TOTP 与恢复码）、`cleanup.py`（清理任务注册表：依赖倒置，避免 core → app）、`notes.py`（笔记底层操作）、`tags.py`/`folders.py`/`pins.py`（笔记标签/文件夹/置顶）、`middleware.py`（请求上下文）、`ip_utils.py`（客户端 IP 安全解析 / 可信代理校验 / IP 名单）、`concurrency.py`（进程内并发闸门：单用户在途请求上限）、`prefs.py`（简洁模式偏好）、`plugins.py`（插件系统：zip 解压安装 / auth_token 校验 / 命名空间冲突检查 / 蓝图加载 / 上游更新线程）、`feature_flags.py`（功能开关：注册表 + 存储持久化 + `require_feature` 装饰器）
+- 功能 App（`app/apps/`）：home / auth / notes / world / share / benben / comments / org / todos / images / attachments / user / admin / static / **oauth**（第三方登录）/ **twofa**（双因素认证）/ **email**（邮箱/手机号验证）；其中 `comments`、`todos`、`images`、`attachments`、`user`、`oauth`、`twofa`、`email` 自带 `service.py`（业务逻辑：评论存取、待办、图床/附件校验配额、密码与改名迁移、OAuth 流程与账号绑定、TOTP 状态、联系方式与验证码）。
+- 路由蓝图（`app/apps/`，注册顺序见 `app/apps/registry.py`）：home, auth, benben, static, notes, images, attachments, user, share, world, admin（`/admin/features` 功能开关管理）, comments, org（组织/团队协作）, todos（工作台待办）, oauth / twofa / email（认证与验证）, **插件蓝图（在 registry.register_blueprints 内注册）**, world_short（注意最后注册 catch-all）
+- 用户设置（`/user/<u>/settings`，`app/apps/user/service.py`）：简洁模式（原导航栏切换按钮已并入，账号级偏好存 users.json，`middleware` 注入 `g.simple_mode` 服务端渲染 `<html class="simple-mode">`，页面缓存键含该标志）、修改密码（注销其它会话；纯第三方注册账号无密码时允许直接设置初始密码）、修改用户名（先复制笔记/图床/附件再迁移各存储用户标识（含 2FA/联系方式/第三方绑定），最后删旧数据）、账号安全总览（链接到 `/user/<u>/twofa`、`/user/<u>/email`、`/user/<u>/oauth`）。端到端测试：`pytest tests/test_user_settings.py`
+- 第三方登录（OAuth，`app/apps/oauth/`）：Provider 注册表覆盖 GitHub / Google / Microsoft / 微信 / QQ，网络请求全部用标准库 `urllib`（无 authlib/requests 依赖）；`oauth.providers` 填凭据、`oauth_auto_register` 控制自动注册；账号绑定存 KV 键 `oauth_accounts`（`provider:uid → username`，一 uid 仅绑一人）；路由 `/oauth/<provider>`（发起，`?link=1` 为绑定）、`/oauth/<provider>/callback`、`/user/<u>/oauth` 管理页；state/PKCE 存 Flask 签名会话；受 `oauth_github`/`oauth_google`/`oauth_microsoft`/`oauth_wechat`/`oauth_qq` 开关与凭据配置双重约束。端到端测试：`pytest tests/test_oauth.py`
+- 双因素认证（2FA，`app/apps/twofa/`）：TOTP 算法在 `app/core/totp.py`（纯标准库），状态存 KV 键 `two_factor`（密钥 + 恢复码哈希 + 防重放 `last_step`）；`/login/2fa` 为密码校验后的第二因素页，`/user/<u>/twofa` 为绑定/确认/停用/重生成恢复码管理页；受 `two_factor_auth` 开关控制；密码校验成功后若 `twofa.service.is_required` 为真则转入第二因素页。端到端测试：`pytest tests/test_twofa.py`
+- 邮箱/手机号验证（`app/apps/email/`）：联系方式存 KV 键 `user_contacts`（值 + `verified`），验证码存 `verification_codes`（仅哈希 + 有效期 + 尝试次数 + 冷却）；投递用 SMTP（`security.smtp`）与通用短信 Webhook（`security.sms`），未配置时记录日志且不落库；支持绑定验证（`purpose=bind`）与验证码免密登录（`purpose=login`，`/login/otp`）；管理页 `/user/<u>/email`；受 `email_verify`/`phone_verify` 开关控制。端到端测试：`pytest tests/test_email_verify.py`
 - 首页公告横幅：`app/apps/home/views.py` 的 `index` 读取 `config.NOTICE_FILE`（仓库根目录 `NOTICE.txt`）第一个非空行（跳过前导空行）并传入 `home.html`，内容非空时渲染 `.home-notice` 横幅（文本经 HTML 转义）；读取逻辑见 `utils.read_notice_first_line`，端到端测试 `pytest tests/test_home_notice.py`
-- 功能开关（`app/core/feature_flags.py`，#90）：管理员（`RUSIN_ADMIN` 环境变量或 config.json `admin_users`）在 `/admin/features` 用滑块切换；运行时状态存 KV 键 `feature_flags`（file 后端即 `feature_flags.json`），进程内 5s TTL 缓存；停用功能路由 404、导航/首页入口隐藏，状态呈现于 `/count`。新增可开关功能：在 `FEATURES` 注册表登记 + 视图加 `@require_feature(key)`（必须放 `@bp.route` 之后、`@cache.cached`/`@limiter.limit` 之前）。
+- 功能开关（`app/core/feature_flags.py`，#90）：管理员（`RUSIN_ADMIN` 环境变量或 config.json `admin_users`）在 `/admin/features` 用滑块切换；运行时状态存 KV 键 `feature_flags`（file 后端即 `feature_flags.json`），进程内 5s TTL 缓存；停用功能路由 404、导航/首页入口隐藏，状态呈现于 `/count`。注册表共 25 项（含 `oauth_github`/`oauth_google`/`oauth_microsoft`/`oauth_wechat`/`oauth_qq`/`two_factor_auth`/`email_verify`/`phone_verify`，默认读 `features` 段且 OAuth/验证类默认 false）。新增可开关功能：在 `FEATURES` 注册表登记 + 视图加 `@require_feature(key)`（必须放 `@bp.route` 之后、`@cache.cached`/`@limiter.limit` 之前；Provider 级动态开关在视图中用 `feature_enabled("oauth_<key>")` 判定）。
 - 插件系统（`app/core/plugins.py`；无服务器只读盘环境自动禁用）：`*.plugin.zip` 投放到 `RUSIN_DATA_DIR` 自动解压安装到 `plugins/<namespace>/` 并删除包；desc.json 缺 `auth_token` 须 `--skip-auth`（或 `RUSIN_PLUGIN_SKIP_AUTH=1`）放行；命名空间冲突非同源且未声明 OVERRIDE 拒绝；后台线程每 `plugins.update_interval_hours`（默认 6h）检查，`last_update` 超过 `update_stale_days`（默认 3 天）则请求 `upstream_repo`（3s 超时）后重跑安装。
 - 组织/团队协作（`app/apps/org/views.py` + `app/core/store.py` 组织段）：组织笔记以 `_orgs/<org_name>` 作为存储用户名命名空间，与个人笔记完全隔离；Owner / Admin / Member 三级角色，加入方式支持邀请码 / 公开加入 / 审批制，受 `orgs` 功能开关控制。端到端测试：`pytest tests/test_org.py`
 - 评论系统（`app/apps/comments/service.py` + `app/apps/comments/views.py`）：目标类型为 `note` / `share`，统一存 KV 键 `comments:all`（file 后端即 `comments.json`），受 `comments` 功能开关与 `comments` 配置段（长度 / 上限 / 冷却 / 分页）控制。
 - 首页工作台（`app/apps/home/views.py` + `app/apps/todos/service.py`）：登录态首页展示最近编辑笔记（`home_page.recent_notes_limit`）与待办清单（KV 键 `todos`，受 `todos.max_items` / `todos.max_length` 约束）；简洁模式下首页 302 直接跳到新建笔记。
-- 测试清单：`tests/` 覆盖 `test_org` / `test_user_settings` / `test_images` / `test_pins` / `test_folders` / `test_sqlite_storage` / `test_markdown_alerts` / `test_home_notice` / `test_attachments` / `test_ip_limiter` / `test_frontend`，统一 `pytest tests/` 运行。
+- 测试清单：`tests/` 覆盖 `test_org` / `test_user_settings` / `test_images` / `test_pins` / `test_folders` / `test_sqlite_storage` / `test_markdown_alerts` / `test_home_notice` / `test_attachments` / `test_ip_limiter` / `test_frontend` / `test_oauth` / `test_twofa` / `test_email_verify`，统一 `pytest tests/` 运行。
 - 模板：Jinja2，支持 `{{ t('key') }}` 多语言
 - 无服务器默认存储：Vercel 绑定 Neon 后 `DATABASE_URL` 自动注入 → 自动切到 postgres 后端
 - 前端检查：前端资源全部内联在 Jinja2 模板中，无独立 JS/CSS 文件；`tests/frontend_check.py` 做静态语法检查（Jinja2 `Environment.parse` + Node `--check` 校验内联 JS + CSS 括号配平 + JSON 解析），由 `.github/workflows/check.yml` 的 `frontend` job 在前端文件变更时运行

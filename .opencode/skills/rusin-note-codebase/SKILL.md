@@ -5,7 +5,7 @@ description: Use when working in this project (Rusin-Note, a Flask 云端剪贴�
 
 # Rusin-Note 项目结构与文件作用
 
-Rusin-Note 是一个受 note.ms 启发的轻量级云端剪贴板 / 在线记事本，基于 Flask 3，支持 VPS 与无服务器（Vercel / AWS Lambda）部署。核心是"随机短链公开笔记 + 用户私有笔记 + 分享链接 + 犇犇动态"，数据存储通过可插拔、统一的存储接口（`app/core/storage.py` 的 `storage` 单例）访问：sqlite（本地默认，SQLite 索引 + JSON 内容）/ file（纯 JSON 落盘）/ upstash（外部 KV）/ postgres（Neon/PostgreSQL）/ memory（纯内存）。
+Rusin-Note 是一个受 note.ms 启发的轻量级云端剪贴板 / 在线记事本，基于 Flask 3，支持 VPS 与无服务器（Vercel / AWS Lambda）部署。核心是"随机短链公开笔记 + 用户私有笔记 + 分享链接 + 犇犇动态"，并可选提供第三方登录（OAuth：GitHub/Google/Microsoft/微信/QQ）、双因素认证（TOTP 2FA）与邮箱/手机号验证。数据存储通过可插拔、统一的存储接口（`app/core/storage.py` 的 `storage` 单例）访问：sqlite（本地默认，SQLite 索引 + JSON 内容）/ file（纯 JSON 落盘）/ upstash（外部 KV）/ postgres（Neon/PostgreSQL）/ memory（纯内存）。
 
 ## 运行方式
 
@@ -35,6 +35,10 @@ Rusin-Note 是一个受 note.ms 启发的轻量级云端剪贴板 / 在线记事
 | `note_pins` | `note_pins.json` | 笔记置顶 | `{username: {note_id: bool}}` |
 | `note_titles` | `note_titles.json` | 旧版遗留键（当前代码不读写） | 仅登记于 `KV_FILE_MAP` 与 `LEGACY_ROOT_ITEMS`，新部署不会生成 |
 | `todos` | `todos.json` | 首页工作台待办 | `{username: [{id, text, done, created_at}]}`，受 `todos.max_items`/`max_length` 约束 |
+| `oauth_accounts` | `oauth_accounts.json` | 第三方登录绑定 | `{"<provider>:<uid>": {provider, uid, username, display, linked_at}}`，一个 uid 仅绑一个站内用户 |
+| `two_factor` | `two_factor.json` | 双因素认证状态 | `{username: {secret, enabled, recovery: [sha256], created_at, confirmed_at, last_step}}`，恢复码仅存哈希、`last_step` 防重放 |
+| `user_contacts` | `user_contacts.json` | 邮箱/手机号绑定 | `{username: {"email"|"phone": {value, verified, verified_at}}}` |
+| `verification_codes` | `verification_codes.json` | 邮箱/手机验证码 | `{"<purpose>:<kind>:<username>": {hash, target, expires_at, attempts, sent_at}}`，仅存哈希 |
 | `orgs` / `org_members` / `org_invites` / `org_join_requests` | 同名 `.json` | 组织、成员角色、邀请码、加入申请 | 见 `store.py` 组织段（Owner/Admin/Member 角色） |
 | `note:<u>:<id>` | `notes/<u>/<id>.json` | 笔记 | sqlite 存 `{"content", "created_at", "updated_at"}` 并索引标题/大小/mtime；file 后端存 `notes/<u>/<id>.txt` 纯文本；memory/upstash 存 `{"content", "mtime"}` |
 | `img:<u>:<img_id>` / `att:<u>:<att_id>` | `images/<u>/<id>`、`attachments/<u>/<id>` + `<id>.meta.json` | 图床 / 附件（原生二进制） | file/sqlite 直接落盘；postgres 进 `storage_images`/`storage_attachments`；memory/upstash 走 base64 KV |
@@ -85,7 +89,9 @@ upstash 后端所有键统一加 `rusin:` 前缀；memory 后端 get/set 带 dee
 | `storage_sqlite.py` | **SQLite + JSON 后端**：`SqliteBackend(FileBackend)` 在 `<DATA_DIR>/index.db`（WAL）维护 `kv_index`/`notes_index`/`images_index`/`attachments_index` 四张索引表，内容仍以 JSON/二进制落盘（`notes/<u>/<id>.json`、`<name>.json`、`images/`、`attachments/`）；首次启动自动导入旧版 `notes/*.txt`，默认数据目录切到 `data/` 时 `migrate_legacy_data_root()` 从旧根目录迁移 |
 | `config.py` | 加载 `config.json` 并导出全部全局常量（`MAX_CONTENT_BYTES`、各类限流参数、`ID_CHARSET`、`SHARE_TOKEN_CHARSET`/`SHARE_TOKEN_PATTERN`、密码策略 `PW_*`、`BENBEN_*`（含 `BENBEN_MAX_POSTS`）、会话/笔记过期、LaTeX、代理信任、Cookie 安全、`SERVERLESS` 平台检测、`data_path()` 等）。标记为 ADDED/BUG-x 的注释说明某常量的引入原因 |
 | `store.py` | 用户/会话/分享/犇犇/评论/组织的内存缓存 + 存储层持久化：`register_user`/`store_session`/`remove_session`/`delete_sessions_if`/`create_share`/`delete_share`/`add_benben_post`/`add_comment`/组织 CRUD 与邀请审批 均走「线程锁 + storage.lock + 重读合并 + 整值写入」；分享视图计数延迟批量持久化（`increment_share_views`/`flush_share_views`）；犇犇与评论发布冷却（内存态）、分页读取（带周期重载）；`rename_user_records` 改用户名时迁移各集合中的用户标识 |
-| `auth.py` | PBKDF2-HMAC-SHA256 密码哈希（兼容旧单轮 SHA-256 可验证、登录后自然升级）、会话 token 生成/校验（存哈希）、过期会话清理、密码复杂度检查 |
+| `auth.py` | PBKDF2-HMAC-SHA256 密码哈希（兼容旧单轮 SHA-256 可验证、登录后自然升级）、会话 token 生成/校验（存哈希）、过期会话清理、密码复杂度检查；跨 App 共享的登录 Cookie 助手 `set_session_cookie`/`clear_session_cookie` |
+| `totp.py` | **纯标准库 RFC 6238 TOTP**：`generate_secret` / `generate_code` / `match_step`（返回命中时间步）/ `verify_code` / `provisioning_uri` / `generate_recovery_codes` / `hash_recovery_code`（无 pyotp 依赖） |
+| `cleanup.py` | 后台清理任务注册表（依赖倒置）：各 App 用 `register_cleanup(fn)` 注册，内核 `background`/`middleware` 调用 `run_cleanups()`，避免 core → app 反向依赖 |
 | `notes.py` | 笔记读写走 `storage` 后端（无路径穿越代码——校验交给 `validate_username`/`validate_note_id` 正则）、ID/用户名校验（含保留名单）、`note_exists`、统计（30s TTL 缓存）、随机 ID 生成、过期笔记清理 |
 | `tags.py` / `folders.py` / `pins.py` | 笔记标签 / 文件夹（`/` 分层单归属，`build_folder_tree` 建树）/ 置顶；三者结构一致：内存缓存 + `storage.lock` 内重读合并 + 整值写回 KV（`note_tags`/`note_folders`/`note_pins`），并提供 `rename_user_*` 供改用户名迁移 |
 | `apps/todos/service.py` | 首页工作台待办：KV 键 `todos`，`{username: [{id, text, done, created_at}]}`，受 `todos.max_items`/`max_length` 约束，写路径同上 |
@@ -99,19 +105,25 @@ upstash 后端所有键统一加 `rusin:` 前缀；memory 后端 get/set 带 dee
 | `theme.py` | 暗色主题 CSS 变量（`THEME_VARS`）与切换脚本（Cookie + localStorage + 系统偏好）、favicon 内存缓存 |
 | `logger.py` | `create_logger(name)` 返回写入 `log/{timestamp}.log` 的 RotatingFileHandler 日志器；文件不可写（无服务器只读 FS）时回退 stderr |
 | `utils.py` | `format_size`/`format_note_time` 格式化、`get_avatar_url` 头像 URL、`expand_note_refs`（`#ID` 快捷引用展开）、`render_markdown_html`（markdown + pymdownx.tilde + Pygments 服务端着色 + bleach 清洗防 XSS；`markdown_alerts` 启用时把 `> [!NOTE]` 等引用块经 treeprocessor 转为可折叠 `<details>` 卡片）、`render_pygments_head`（亮/暗两套 Pygments CSS，注入 `pygments_head`）、`render_code_highlight_head`（客户端 highlight.js + 行号 + 主题切换）、`render_heading_anchors_head`、`render_markdown_alerts_head`（`window.MarkdownAlerts.apply`，供实时预览）、`render_latex_head`（KaTeX CDN 引入）、`read_notice_first_line`、`read_disclaimer` |
-| `feature_flags.py` | **功能开关（#90）**：`FEATURES` 注册表共 17 项（world_notes / benben / share_links / open_register / note_refs / note_tags / note_folders / note_pins / heading_anchors / markdown_alerts / note_images / note_attachments / comments / latex_render / code_highlight / avatar / orgs）+ 运行时状态（KV 键 `feature_flags`，进程内 5s TTL 缓存）；`feature_enabled(key)` 查询、`set_flags` 整体写入、`require_feature(key)` 视图装饰器（停用→404，须放 `@bp.route` 后、缓存/限流装饰器前）、`is_admin`（`RUSIN_ADMIN` env + config `admin_users` 并集）；默认值：`_HERITAGE_DEFAULTS` 中的 7 个历史功能（note_refs/latex_render/code_highlight/avatar/note_images/note_attachments/comments）沿用各自配置段，其余读 `features` 段（缺省 True） |
+| `feature_flags.py` | **功能开关（#90）**：`FEATURES` 注册表共 25 项（world_notes / benben / share_links / open_register / note_refs / note_tags / note_folders / note_pins / heading_anchors / markdown_alerts / note_images / note_attachments / comments / latex_render / code_highlight / avatar / orgs / **oauth_github / oauth_google / oauth_microsoft / oauth_wechat / oauth_qq / two_factor_auth / email_verify / phone_verify**）+ 运行时状态（KV 键 `feature_flags`，进程内 5s TTL 缓存）；`feature_enabled(key)` 查询、`set_flags` 整体写入、`require_feature(key)` 视图装饰器（停用→404，须放 `@bp.route` 后、缓存/限流装饰器前）、`is_admin`（`RUSIN_ADMIN` env + config `admin_users` 并集）；默认值：`_HERITAGE_DEFAULTS` 中的 7 个历史功能（note_refs/latex_render/code_highlight/avatar/note_images/note_attachments/comments）沿用各自配置段，其余读 `features` 段（缺省 True，OAuth/验证类显式 false） |
 | `plugins.py` | 插件系统：`*.plugin.zip` 投放到 `RUSIN_DATA_DIR` 启动时解压安装到 `plugins/<namespace>/`（zip 路径穿越/体积防护、根目录白名单、auth_token 校验、命名空间冲突检查）并注册蓝图；`start_update_thread` 后台每 `update_interval_hours` 检查上游、`last_update` 超 `update_stale_days` 拉取 `upstream_repo` 重装；无服务器只读盘环境自动禁用 |
 | `background.py` | 后台守护线程：会话清理、分享视图定期刷盘、过期笔记清理（`start_background_threads()` 一次性启动；`SERVERLESS` 时为无操作） |
-| `apps/user/service.py` | 用户设置业务：修改密码（校验原密码/复杂度，注销其它会话）、修改用户名（先复制笔记/图床/附件到新命名空间，再迁移标签/文件夹/置顶/分享/犇犇/评论/组织等用户标识，最后删除旧数据）；简洁模式的读写实现在 `core/prefs.py`（`middleware` 注入 `g.simple_mode`），本文件再导出以兼容旧调用 |
+| `apps/user/service.py` | 用户设置业务：修改密码（校验原密码/复杂度，注销其它会话；纯第三方注册账号无密码时允许直接设置初始密码）、修改用户名（先复制笔记/图床/附件到新命名空间，再迁移标签/文件夹/置顶/分享/犇犇/评论/组织/**2FA/联系方式/第三方绑定**等用户标识，最后删除旧数据）；简洁模式的读写实现在 `core/prefs.py`（`middleware` 注入 `g.simple_mode`），本文件再导出以兼容旧调用 |
+| `apps/oauth/service.py` | 第三方登录业务：`PROVIDERS` 注册表（GitHub/Google/Microsoft/微信/QQ，端点/scope/PKCE/凭据键）、`available_providers`（= 功能开关 ∧ 凭据已配置）、`build_authorize_url`、`exchange_code`、`fetch_profile`（归一化为 `{uid, display, email, avatar}`）、`oauth_accounts` KV 的绑定/解绑/改名迁移、自动注册用户名生成（带 Provider 前缀）；网络全用 `urllib` |
+| `apps/twofa/service.py` | 双因素认证业务：TOTP 绑定/确认/停用、动态码校验 + 防重放、一次性恢复码、改名迁移；状态存 KV 键 `two_factor` |
+| `apps/email/service.py` | 邮箱/手机号验证业务：联系方式绑定（`purpose=bind`）与验证码免密登录（`purpose=login`）、验证码生成/哈希/冷却/尝试次数/过期、SMTP 与短信 Webhook 投递（`deliver_email`/`deliver_sms` 可测试替换）、改名迁移；导出 `purge_expired_codes` 并通过 `cleanup.register_cleanup` 注册 |
 
 ## app/apps/ 功能 App 与路由
 
-每个功能 App 位于 `app/apps/<feature>/`，自带 `views.py`（蓝图），业务逻辑放 `service.py`。注册顺序在 `app/apps/registry.py`：home → auth → benben → static → notes → images → attachments → user → share → world → admin → comments → org → todos → **插件蓝图** → **world_short（必须最后，因含 catch-all 短链）**。
+每个功能 App 位于 `app/apps/<feature>/`，自带 `views.py`（蓝图），业务逻辑放 `service.py`。注册顺序在 `app/apps/registry.py`：home → auth → benben → static → notes → images → attachments → user → share → world → admin → comments → org → todos → **oauth → twofa → email** → **插件蓝图** → **world_short（必须最后，因含 catch-all 短链）**。
 
 | 蓝图 | 模块 | 路由与作用 |
 |---|---|---|
 | home | `home/views.py` | `/` 首页（匿名态为功能开关过滤的卡片；登录态为工作台：最近笔记 + 待办清单，`cache.cached` 对登录态/简洁模式跳过缓存；简洁模式 302 直接到新建笔记）、`/count` 统计（含「功能状态」呈现区）、`/disclaimer` 免责声明 |
-| auth | `auth/views.py` | `/register` GET/POST（注册限流，密码复杂度校验；受 `open_register` 开关控制）、`/login` GET/POST、`/logout`、`/lang/<lang>` 语言切换（回跳 Referer） |
+| auth | `auth/views.py` | `/register` GET/POST（注册限流，密码复杂度校验；受 `open_register` 开关控制）、`/login` GET/POST（登录页展示可用第三方登录按钮与验证码登录入口；密码校验通过且用户已开启 2FA 时转入 `/login/2fa`）、`/logout`、`/lang/<lang>` 语言切换（回跳 Referer） |
+| oauth | `oauth/views.py` | `/oauth/<provider>`（发起授权；`?link=1` 且已登录为绑定）、`/oauth/<provider>/callback`（state/PKCE 校验 → 换取令牌 → 登录/自动注册/绑定 → 建会话，若开启 2FA 转第二因素）、`/user/<u>/oauth`（绑定管理）、`/user/<u>/oauth/<provider>/unlink`；受 `oauth_<provider>` 开关 + 凭据配置约束 |
+| twofa | `twofa/views.py` | `/login/2fa` GET/POST（密码后的第二因素，动态码或恢复码）、`/user/<u>/twofa` GET/POST（开始绑定/确认/停用/重生成恢复码）；受 `two_factor_auth` 开关控制 |
+| email | `email/views.py` | `/login/otp` GET/POST（邮箱/手机号验证码免密登录两步表单）、`/user/<u>/email` GET/POST（绑定请求/确认/解绑）；受 `email_verify`/`phone_verify` 开关控制 |
 | world | `world/views.py` | `/world`（生成随机 ID 重定向）、`/world/<id>` GET/POST（公开笔记，POST 走 SAVE 限流）、`/world/<id>/md` 与 `/world/<id>.md` Markdown 只读渲染；全部受 `world_notes` 开关控制 |
 | world_short | `world/short.py` | `/<id>`（短链重定向到 `/world/<id>`）、`/<id>.md`（短链 Markdown），catch-all 必须最后注册；受 `world_notes` 开关控制 |
 | notes | `notes/views.py` | `/user/<u>/` 笔记列表（支持 `?tag=` / `?folder=` 筛选）、`/user/<u>/new` 新建、`/user/<u>/<id>` GET/POST、`/user/<u>/<id>/delete`、`/user/<u>/<id>/pin`（`note_pins`）、`/user/<u>/<id>/md`、`/user/<u>/refs` 引用搜索（`note_refs`）。均经 `common.helpers.require_auth`（当前会话用户须等于 URL 用户名，否则 401） |
@@ -131,7 +143,7 @@ upstash 后端所有键统一加 `rusin:` 前缀；memory 后端 get/set 带 dee
 
 - `base.html` 基础布局（含功能开关滑块 `.ff-switch` 与状态卡 `.ff-card` 样式、简洁模式 `.simple-mode` 隐藏规则）；`partials/_navbar.html` 导航栏（benben/注册/分享/组织入口按 `feature_enabled` 与 `simple_mode` 条件渲染）
 - `home.html` 首页/工作台（最近笔记 + 待办清单 + 公告横幅）、`count.html` 统计（含「功能状态」呈现区）、`disclaimer.html` 免责声明、`admin/features.html` 功能开关滑块管理页
-- `auth/` 注册/登录；`notes/` 笔记（`note_edit.html` 编辑页、`note_md.html` Markdown 只读页、`user_list.html` 笔记列表/文件夹树/标签筛选、`user_settings.html` 用户设置页）；`share/share_list.html` 分享管理；`benben/benben.html` 犇犇；`comments/comments.html` 评论组件；`images/image_list.html`、`attachments/attachment_list.html` 图床/附件管理页
+- `auth/` 注册/登录（登录页含第三方登录按钮与验证码登录入口）；`twofa/challenge.html` 第二因素页、`twofa/manage.html` 2FA 管理页；`email/login.html` 验证码登录、`email/manage.html` 联系方式管理；`oauth/manage.html` 第三方账号绑定管理；`notes/` 笔记（`note_edit.html` 编辑页、`note_md.html` Markdown 只读页、`user_list.html` 笔记列表/文件夹树/标签筛选、`user_settings.html` 用户设置页（含账号安全入口））；`share/share_list.html` 分享管理；`benben/benben.html` 犇犇；`comments/comments.html` 评论组件；`images/image_list.html`、`attachments/attachment_list.html` 图床/附件管理页
 - `org/` 组织（`org.html` 首页、`org_notes.html`、`org_note_view.html` / `org_note_edit.html`、`org_members.html`、`org_settings.html`、`org_invites.html`、`org_requests.html`、`org_create.html`、`org_mine.html`）
 - `errors/` 错误页 400/401/404/429/500（403/413 复用 400 模板）
 
@@ -149,7 +161,10 @@ upstash 后端所有键统一加 `rusin:` 前缀；memory 后端 get/set 带 dee
 - **XSS**：Markdown 渲染后经 bleach 白名单清洗（`utils.render_markdown_html`）；提示卡片输出 `<details>/<summary>` 前同样过 bleach，新增标签/属性须同步 `allowed_tags`/`allowed_attrs`
 - **密码**：PBKDF2 10 万次迭代慢哈希 + 常量时间比较；`PW_MAX_LENGTH` 硬上限 128 防超长输入 CPU DoS
 - **路径穿越**：笔记 ID 正则 `^[a-zA-Z0-9_\-]+$` + realpath/commonpath 双重校验；用户名/ID 有保留名单（`RESERVED_USERNAMES`、`FORBIDDEN_NOTE_IDS`）
-- **Cookie**：session HttpOnly + SameSite=Lax，`secure_cookies` 开关控制 Secure 标志
+- **Cookie**：session HttpOnly + SameSite=Lax，`secure_cookies` 开关控制 Secure 标志；登录 Cookie 统一由 `core/auth.set_session_cookie`/`clear_session_cookie` 写入，各 App 不自行拼属性
+- **第三方登录（OAuth）**：state + PKCE 存 Flask 签名会话并校验；`oauth_accounts` 一个 uid 只绑一个站内用户；自动注册用户名带 Provider 前缀 + 随机后缀避免冒用；凭据缺失或功能开关关闭时路由 404
+- **2FA（TOTP）**：动态码按 `match_step` 命中的时间步做防重放（`last_step`），恢复码仅存 SHA-256 哈希且一次性；登录密码校验通过后经 Flask 签名会话写入待验证标记再转 `/login/2fa`
+- **邮箱/手机验证**：验证码仅存哈希，带有效期、重发冷却与最大尝试次数；SMTP/短信 Webhook 未配置时不发送且不落库（避免伪造成功后绑定）
 
 ## 配置项（config.json 关键项）
 
@@ -172,7 +187,9 @@ upstash 后端所有键统一加 `rusin:` 前缀；memory 后端 get/set 带 dee
 - `max_note_tags`（10）、`max_tag_length`（24）、`max_folder_name_length`（64）、`max_folder_depth`（8）、`max_note_id_length`（250）
 - `logger`（`max_size` 4GiB / `path_pattern` `log/{timestamp}.log`，相对数据目录，不可写回退 stderr）、`debug`（仅影响 app 模块日志级别，**不**开启 Flask 调试；`false`=INFO、`true`=ERROR）
 - `plugins`（`enabled` 默认 true、`update_interval_hours` 6、`update_stale_days` 3；config.json 可省略该段）
-- `features`（功能开关默认值，config.json 显式列了 12 项；7 个历史功能 `note_refs`/`latex_render`/`code_highlight`/`avatar`/`note_images`/`note_attachments`/`comments` 的默认值**始终取自各自配置段**，本段同名项不生效）、`admin_users`（功能开关管理员，与环境变量 `RUSIN_ADMIN` 取并集）
+- `oauth`（第三方登录：`auto_register` 默认 true、`timeout_seconds` 10、`providers.<key>.client_id/client_secret`（微信/QQ 为 `app_id`/`app_secret`、Microsoft 另有 `tenant`）；凭据留空即视为未配置、登录页不展示）
+- `security`（2FA/邮箱/手机：`code_length` 6 / `code_ttl_seconds` 600 / `code_resend_cooldown_seconds` 60 / `code_max_attempts` 5 / `challenge_ttl_seconds` 600 / `timeout_seconds` 10 / `email_login` / `phone_login` / `smtp`（host/port/username/password/from_addr/use_tls/use_ssl）/ `sms.webhook_url`+`token`）
+- `features`（功能开关默认值，config.json 显式列了 20 项；7 个历史功能 `note_refs`/`latex_render`/`code_highlight`/`avatar`/`note_images`/`note_attachments`/`comments` 的默认值**始终取自各自配置段**，本段同名项不生效；`oauth_*`/`two_factor_auth`/`email_verify`/`phone_verify` 默认 false）、`admin_users`（功能开关管理员，与环境变量 `RUSIN_ADMIN` 取并集）
 
 ## 常见改动点
 
@@ -181,7 +198,9 @@ upstash 后端所有键统一加 `rusin:` 前缀；memory 后端 get/set 带 dee
 - **新增头像显示位**：模板直接用 `{{ get_avatar(username) }}`（已由 i18n 注入全局），空串时用 `{% if av %}` 隐藏 `<img>`；生成逻辑见 `utils.get_avatar_url`，配置在 `config.json` 的 `avatar`
 - **改限流**：`config.json` 对应键 + 视图函数 `@limiter.limit` 字符串
 - **改数据格式**：留意 `store.py`/`auth.py` 中的旧数据兼容注释（BUG-7 损坏数据跳过等）；加字段时给 `get_*` 用 `.get()` 兜底
-- **新增可开关功能（#90）**：`feature_flags.py` 的 `FEATURES` 注册表登记（key/icon）+ i18n 加 `feature_<key>` zh/en 文案 + 视图加 `@require_feature(key)`（放 `@bp.route` 之后、`@cache.cached`/`@limiter.limit` 之前）+ config.json `features` 段加默认值；模板用 `feature_enabled(key)` 条件渲染
+- **新增可开关功能（#90）**：`feature_flags.py` 的 `FEATURES` 注册表登记（key/icon）+ i18n 加 `feature_<key>` zh/en 文案 + 视图加 `@require_feature(key)`（放 `@bp.route` 之后、`@cache.cached`/`@limiter.limit` 之前）+ config.json `features` 段加默认值；模板用 `feature_enabled(key)` 条件渲染。Provider 级动态开关（`oauth_<key>`）在视图内用 `feature_enabled()` 判定后 `abort(404)`
+- **新增第三方登录 Provider**：在 `oauth/service.py` 的 `PROVIDERS` 注册表加条目（authorize/token/scope/creds/prefix），实现对应的 `exchange_code` 与 `fetch_profile` 分支，config.json `oauth.providers` 加凭据键，`feature_flags.py` 加 `oauth_<key>`，i18n 加 `feature_oauth_<key>`
+- **新增清理任务**：在 App 的 service 中通过 `app.core.cleanup.register_cleanup(fn)` 注册，避免 core 直接 import app（`background.cleanup_loop` 与无服务器机会式清理会调用）
 - **新增存储键/后端**：键布局在 `storage.py`（`KV_FILE_MAP`/`_note_key`），sqlite/file 后端新键需在 `KV_FILE_MAP` 登记路径（否则 sqlite 落到 `kv/<hash>.json`）；新增后端需实现 `StorageBackend` 全部方法并在 `select_backend()` 注册（sqlite 在 `storage_sqlite.py`，postgres 后端新表需在 `_ensure_schema` 增加 DDL）
 - **写路径并发**：读改写必须「线程锁 → `storage.lock(键)`」再重读合并，顺序不可颠倒；纯整值覆盖（`write_note`）无需跨实例锁
 - **新增端到端测试**：`tests/test_*.py`，复用 `conftest.py` 的 `app`/`client`/`anon`/`ctx`/`data_dir` fixture 与 `support.py` 的 `expect()`/CSRF/注册登录辅助；跨方法共享状态挂 class 级 `ctx`，不要挂 `self`

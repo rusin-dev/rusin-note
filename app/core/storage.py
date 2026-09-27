@@ -70,6 +70,11 @@ KV_FILE_MAP = {
     "note_pins": "note_pins.json",
     "todos": "todos.json",
     "feature_flags": "feature_flags.json",
+    # 第三方登录 / 双因素认证 / 邮箱手机验证
+    "oauth_accounts": "oauth_accounts.json",
+    "two_factor": "two_factor.json",
+    "user_contacts": "user_contacts.json",
+    "verification_codes": "verification_codes.json",
     "secret_key": ".secret_key",
     # 组织相关
     "orgs": "orgs.json",

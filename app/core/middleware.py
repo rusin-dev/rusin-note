@@ -78,6 +78,8 @@ def _opportunistic_cleanup() -> None:
         purge_expired_sessions()
         purge_expired_notes()
         flush_share_views()
+        from app.core.cleanup import run_cleanups
+        run_cleanups()
     except Exception:
         pass
 

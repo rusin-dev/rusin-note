@@ -9,6 +9,7 @@ from threading import Thread
 
 from app.core import config
 from app.core.auth import purge_expired_sessions, session_cleanup_loop
+from app.core.cleanup import run_cleanups
 from app.core.logger import create_logger
 from app.core.notes import note_cleanup_loop, purge_expired_notes
 from app.core.store import flush_share_views
@@ -27,13 +28,22 @@ def share_views_flush_loop() -> None:
             logger.error(f"[错误] 分享视图刷新失败: {e}")
 
 
+def cleanup_loop() -> None:
+    """后台线程：执行各 App 注册的过期数据清理任务（验证码等）"""
+    while True:
+        time.sleep(config.SESSION_CLEANUP_INTERVAL)
+        run_cleanups()
+
+
 def start_background_threads() -> None:
     """启动所有后台守护线程（一次性，不可重复调用）。SERVERLESS 环境为无操作。"""
     if config.SERVERLESS:
         return
     purge_expired_sessions()
+    run_cleanups()
     Thread(target=session_cleanup_loop, daemon=True).start()
     Thread(target=share_views_flush_loop, daemon=True).start()
+    Thread(target=cleanup_loop, daemon=True).start()
     if config.NOTE_EXPIRATION_ENABLED:
         purge_expired_notes()
         Thread(target=note_cleanup_loop, daemon=True).start()
