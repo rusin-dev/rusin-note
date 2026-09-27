@@ -139,6 +139,41 @@
     "page_size": 50,
     "max_height_px": 1000
   },
+  "oauth": {
+    "enabled": false,
+    "auto_register": true,
+    "timeout_seconds": 10,
+    "providers": {
+      "github": {"client_id": "", "client_secret": ""},
+      "google": {"client_id": "", "client_secret": ""},
+      "microsoft": {"client_id": "", "client_secret": "", "tenant": "common"},
+      "wechat": {"app_id": "", "app_secret": ""},
+      "qq": {"app_id": "", "app_secret": ""}
+    }
+  },
+  "security": {
+    "code_length": 6,
+    "code_ttl_seconds": 600,
+    "code_resend_cooldown_seconds": 60,
+    "code_max_attempts": 5,
+    "challenge_ttl_seconds": 600,
+    "timeout_seconds": 10,
+    "email_login": true,
+    "phone_login": true,
+    "smtp": {
+      "host": "",
+      "port": 587,
+      "username": "",
+      "password": "",
+      "from_addr": "",
+      "use_tls": true,
+      "use_ssl": false
+    },
+    "sms": {
+      "webhook_url": "",
+      "token": ""
+    }
+  },
   "features": {
     "world_notes": true,
     "benben": true,
@@ -151,7 +186,15 @@
     "markdown_alerts": true,
     "note_images": true,
     "note_attachments": true,
-    "comments": true
+    "comments": true,
+    "oauth_github": false,
+    "oauth_google": false,
+    "oauth_microsoft": false,
+    "oauth_wechat": false,
+    "oauth_qq": false,
+    "two_factor_auth": false,
+    "email_verify": false,
+    "phone_verify": false
   },
   "admin_users": ["admin"],
   "max_note_id_length": 250,

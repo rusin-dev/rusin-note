@@ -24,6 +24,11 @@
     .settings-switch input:focus-visible ~ .track { outline: 2px solid var(--link); outline-offset: 2px; }
     .settings-section .btn-primary { width: auto; padding: 8px 20px; }
     .settings-danger .settings-section-title { color: #d32f2f; }
+    .security-links { display: flex; flex-wrap: wrap; gap: 10px; }
+    .security-links a { display: inline-flex; align-items: center; gap: 8px; padding: 8px 14px; border: 1px solid var(--card-border); border-radius: 8px; background: var(--card-bg); color: var(--text); text-decoration: none; font-size: 14px; }
+    .security-links a:hover { border-color: var(--glow-ring); text-decoration: none; }
+    .security-links .on { color: #1a7f37; }
+    .security-links .off { color: var(--muted); }
     .saved-banner { background: var(--card-icon-bg); color: var(--link); border: 1px solid var(--card-border); border-radius: 8px; padding: 10px 16px; margin-top: 16px; font-size: 14px; }
 </style>
 
@@ -53,16 +58,45 @@
     </form>
 </div>
 
+{% if two_factor_feature or email_feature or phone_feature or oauth_providers %}
+<div class="settings-section">
+    <h2>{{ t('settings_security') }}</h2>
+    <p class="desc">{{ t('settings_security_desc') }}</p>
+    <div class="security-links">
+        {% if two_factor_feature %}
+        <a href="{{ url_for('twofa.manage_get', username=username) }}">
+            <i class="fa-solid fa-shield-halved" aria-hidden="true"></i>
+            {{ t('settings_two_factor') }}：{% if two_factor_on %}<span class="on">{{ t('feature_on') }}</span>{% else %}<span class="off">{{ t('feature_off') }}</span>{% endif %}
+        </a>
+        {% endif %}
+        {% if email_feature or phone_feature %}
+        <a href="{{ url_for('email.manage_get', username=username) }}">
+            <i class="fa-solid fa-envelope" aria-hidden="true"></i>
+            {{ t('settings_contacts') }}
+        </a>
+        {% endif %}
+        {% if oauth_providers %}
+        <a href="{{ url_for('oauth.manage_get', username=username) }}">
+            <i class="fa-solid fa-link" aria-hidden="true"></i>
+            {{ t('settings_oauth') }}（{{ oauth_accounts|length }}）
+        </a>
+        {% endif %}
+    </div>
+</div>
+{% endif %}
+
 <div class="settings-section">
     <h2>{{ t('settings_password') }}</h2>
-    <p class="desc">{{ t('settings_password_desc') }}</p>
+    <p class="desc">{{ t('settings_password_desc') if has_password else t('settings_password_set_desc') }}</p>
     <form method="POST" action="{{ url_for('user.user_settings_post', username=username) }}">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <input type="hidden" name="action" value="password">
+        {% if has_password %}
         <div class="form-group">
             <label>{{ t('settings_password_current') }}</label>
             <input type="password" name="current_password" required autocomplete="current-password">
         </div>
+        {% endif %}
         <div class="form-group">
             <label>{{ t('settings_password_new', req=req_desc) }}</label>
             <input type="password" name="new_password" required autocomplete="new-password">
@@ -71,7 +105,7 @@
             <label>{{ t('settings_password_confirm') }}</label>
             <input type="password" name="confirm_password" required autocomplete="new-password">
         </div>
-        <button type="submit" class="btn-primary">{{ t('settings_password_submit') }}</button>
+        <button type="submit" class="btn-primary">{{ t('settings_password_submit') if has_password else t('settings_password_set_submit') }}</button>
     </form>
 </div>
 

@@ -85,6 +85,27 @@ def delete_session(token: str):
     remove_session(hash_token(token))
 
 
+# ---------- 会话 Cookie ----------
+# 登录 Cookie 的写入/清除在多个 App（auth / twofa / oauth / email）都需复用，
+# 因此放在共享内核，避免各视图重复实现导致属性（HttpOnly/SameSite/Secure）不一致。
+def set_session_cookie(resp, token: str):
+    """为响应写入登录会话 Cookie（HttpOnly + SameSite=Lax）。"""
+    if config.SESSION_TIMEOUT_ENABLED:
+        max_age = int(config.SESSION_TIMEOUT_SECONDS)
+    else:
+        max_age = config.COOKIE_MAX_AGE_DEFAULT
+    resp.set_cookie(config.SESSION_COOKIE, value=token, max_age=max_age,
+                    httponly=True, samesite="Lax",
+                    secure=config.SECURE_COOKIES, path="/")
+    return resp
+
+
+def clear_session_cookie(resp):
+    """清除登录会话 Cookie。"""
+    resp.delete_cookie(config.SESSION_COOKIE, path="/")
+    return resp
+
+
 # 多进程部署下，本进程内存中的 sessions 可能与磁盘（其它 worker 写入）不一致。
 # 读取前周期性重载：保证其它 worker 创建的会话可见、登出/过期立即生效。
 _SESSIONS_RESYNC_INTERVAL = 2.0

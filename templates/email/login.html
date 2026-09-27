@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>{{ t('otp_login_title') }}</h1>
+{% if error %}<p class="error">{{ error }}</p>{% endif %}
+
+{% if step == 'request' %}
+<p class="desc" style="color: var(--muted); margin-top: 6px;">{{ t('otp_login_desc') }}</p>
+<form method="POST" action="/login/otp">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="action" value="request">
+    <div class="form-group">
+        <label>{{ t('otp_kind_label') }}</label>
+        <select name="kind">
+            {% if feature_enabled('email_verify') %}<option value="email"{% if kind == 'email' %} selected{% endif %}>{{ t('contact_email') }}</option>{% endif %}
+            {% if feature_enabled('phone_verify') %}<option value="phone"{% if kind == 'phone' %} selected{% endif %}>{{ t('contact_phone') }}</option>{% endif %}
+        </select>
+    </div>
+    <div class="form-group">
+        <label>{{ t('otp_contact_label') }}</label>
+        <input type="text" name="contact" required autocomplete="username">
+    </div>
+    <button type="submit">{{ t('otp_send_code') }}</button>
+</form>
+{% else %}
+<p class="desc" style="color: var(--muted); margin-top: 6px;">{{ t('otp_code_sent', kind=t('contact_email') if kind == 'email' else t('contact_phone')) }}</p>
+<form method="POST" action="/login/otp">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="action" value="verify">
+    <div class="form-group">
+        <label>{{ t('otp_code_label') }}</label>
+        <input type="text" name="code" required autofocus autocomplete="one-time-code" inputmode="numeric">
+    </div>
+    <button type="submit">{{ t('otp_verify_submit') }}</button>
+</form>
+<form method="POST" action="/login/otp" style="margin-top: 12px;">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="action" value="cancel">
+    <button type="submit" class="btn-secondary">{{ t('otp_back') }}</button>
+</form>
+{% endif %}
+
+<p style="margin-top:12px;"><a href="/login">{{ t('twofa_back_login') }}</a></p>
+{% endblock %}

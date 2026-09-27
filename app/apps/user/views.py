@@ -77,6 +77,15 @@ def user_settings_post(username):
 
 def _render_settings(username, error, saved=""):
     lang = getattr(g, "lang", "zh")
+    # 账号安全总览：模板据此决定展示哪些区块（功能开关 + 当前状态）
+    from app.core.feature_flags import feature_enabled
+    from app.core.store import get_user
+    from app.apps.twofa import service as twofa_service
+    from app.apps.email import service as email_service
+    from app.apps.oauth import service as oauth_service
+
+    user = get_user(username) or {}
+    contacts = email_service.get_contacts(username)
     return render_template(
         "notes/user_settings.html",
         username=username,
@@ -84,4 +93,14 @@ def _render_settings(username, error, saved=""):
         error=error,
         saved=saved,
         req_desc=config.get_password_requirements_description(lang),
+        has_password=bool(user.get("salt") and user.get("hash")),
+        two_factor_feature=feature_enabled("two_factor_auth"),
+        two_factor_on=twofa_service.is_enabled(username),
+        two_factor_recovery=twofa_service.count_recovery_codes(username),
+        email_feature=email_service.is_kind_enabled("email"),
+        phone_feature=email_service.is_kind_enabled("phone"),
+        email_contact=contacts.get("email"),
+        phone_contact=contacts.get("phone"),
+        oauth_providers=oauth_service.available_providers(),
+        oauth_accounts=oauth_service.get_user_accounts(username),
     )
