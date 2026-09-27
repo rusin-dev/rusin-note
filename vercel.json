@@ -7,12 +7,10 @@
         "includeFiles": [
           "app/**",
           "templates/**",
+          "docs/**",
+          "NOTICE.txt",
           "config.json",
-          "requirements.txt",
-          "Disclaimer.md",
-          "Disclaimer-en.md",
-          "favicon.ico",
-          "image/**"
+          "requirements.txt"
         ]
       }
     }

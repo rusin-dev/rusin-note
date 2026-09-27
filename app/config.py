@@ -473,8 +473,12 @@ try:
 except (TypeError, ValueError):
     RECENT_SHARES_LIMIT = 5
 
+# 项目根目录（仓库根），用于定位仓库内的固定资源
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # 首页横幅：仓库根目录 NOTICE.txt 的第一行（文件缺失/内容为空时首页不展示）
-NOTICE_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "NOTICE.txt")
+NOTICE_FILE = os.path.join(BASE_DIR, "NOTICE.txt")
+# 文档目录（免责声明、协作指南、路线图等）
+DOCS_DIR = os.path.join(BASE_DIR, "docs")
 
 # ---------- 工作台待办（TODO LIST）----------
 TODOS_CFG = config.get("todos", DEFAULT_CONFIG["todos"])

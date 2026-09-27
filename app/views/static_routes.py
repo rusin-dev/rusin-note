@@ -47,11 +47,11 @@ _STATIC_NAME_RE = re.compile(r"^[a-zA-Z0-9_\-]+\.(png|jpg|jpeg|gif|svg|ico|webp)
 
 @bp.route("/image/<name>")
 def image_static(name):
-    """服务仓库 image/ 目录下的静态资源（logo 等）"""
+    """服务 app/static/image/ 目录下的静态资源（logo 等）"""
     if not _STATIC_NAME_RE.match(name):
         abort(404)
     static_root = os.path.realpath(
-        os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "image")
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "static", "image")
     )
     static_path = os.path.realpath(os.path.join(static_root, name))
     if static_path.startswith(static_root + os.sep):

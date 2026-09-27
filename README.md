@@ -1,9 +1,9 @@
 > [!IMPORTANT]
 >
-> 注：如果您是 rusin-dev（本组织）的成员，想要贡献，请参见[协作指南](https://github.com/rusin-dev/rusin-note?tab=contributing-ov-file)并查看 [todo](https://github.com/rusin-dev/rusin-note/blob/main/todo.md)，如果您不是本组织的，可以加入或开个 Issue。
+> 注：如果您是 rusin-dev（本组织）的成员，想要贡献，请参见[协作指南](https://github.com/rusin-dev/rusin-note?tab=contributing-ov-file)并查看 [todo](https://github.com/rusin-dev/rusin-note/blob/main/docs/todo.md)，如果您不是本组织的，可以加入或开个 Issue。
 
 <div align="center">
-    <a href="https://github.com/rusin-dev/rusin-note"><img width="15%" alt="logo" src="./image/logo.png" /></a>
+    <a href="https://github.com/rusin-dev/rusin-note"><img width="15%" alt="logo" src="./app/static/image/logo.png" /></a>
     <h1><b>Rusin-Note</b></h1>
     <p><em>🖊︎ 一个受 note.ms 启发的轻量级云端剪贴板项目，支持 VPS 与无服务器（Serverless）部署，开箱即用。</em></p>
     <p>
@@ -24,7 +24,7 @@
     </p>
 </div>
 
-![屏幕截图](https://github.com/rusin-dev/rusin-note/blob/main/image/screenshots1.png)
+![屏幕截图](https://github.com/rusin-dev/rusin-note/blob/main/app/static/image/screenshots1.png)
 
 ## 产品特性
 
@@ -337,10 +337,6 @@ ENV_VARIBLES = []        # 声明依赖的环境变量名（缺失时启动日�
 ```plaintext
 rusin-note:.
 │  config.json（配置项）
-│  contributing.md（协作指南）
-│  Disclaimer-en.md（英文免责声明）
-│  Disclaimer.md（免责声明）
-│  favicon.ico
 │  LICENSE
 │  .gitignore
 │  NOTICE.txt（首页公告横幅内容，取第一个非空行）
@@ -349,13 +345,11 @@ rusin-note:.
 │  requirements.txt（Python 依赖）
 │  requirements-dev.txt（开发依赖：pytest）
 │  pytest.ini（pytest 配置）
-│  todo.md（路线图 / 待办）
 │  AGENTS.md / CLAUDE.md（AI 协作指南）
 │  zbpack.json（打包配置）
 │  vercel.json（Vercel 无服务器部署配置）
 │  lambda_handler.py（AWS Lambda 入口）
 │  .env.example（环境变量示例）
-│  feature_flags.json（历史遗留的功能开关状态文件；运行时实际写入 data/feature_flags.json）
 │
 ├─api（无服务器入口）
 │      index.py（Vercel Python 入口）
@@ -389,6 +383,12 @@ rusin-note:.
 │  │  user_settings.py（简洁模式 / 改密码 / 改用户名与数据迁移）
 │  │  utils.py（通用工具函数）
 │  │  wsgi.py（WSGI 入口）
+│  │
+│  ├─static（内置静态资源）
+│  │  │  favicon.ico
+│  │  └─image（图片资源）
+│  │          logo.png
+│  │          screenshots1.png
 │  │
 │  └─views（蓝图与路由）
 │          __init__.py（蓝图注册）
@@ -431,9 +431,11 @@ rusin-note:.
 │       frontend_check.py（前端语法检查 CLI）
 │       test_*.py（各功能端到端测试）
 │
-├─image（图片资源）
-│      logo.png
-│      screenshots1.png
+├─docs（文档）
+│      CONTRIBUTING.md（协作指南）
+│      Disclaimer-en.md（英文免责声明）
+│      Disclaimer.md（免责声明）
+│      todo.md（路线图 / 待办）
 │
 ├─.github
 │  │  issue-labeler.yml（Issue 标签配置）
@@ -647,7 +649,7 @@ python tests/frontend_check.py          # 前端语法检查（Jinja2 + 内联 C
      **优先级**：`note_refs`、`latex_render`、`code_highlight`、`avatar`、`note_images`、`note_attachments`、`comments` 这 7 个「历史功能」的默认值**始终取自各自配置段**（如 `images.enabled`、`attachments.enabled`、`comments.enabled`），本段中的同名项不生效；其余功能未在本段配置时默认启用（含 `orgs`）。
    - `admin_users`：功能开关管理员用户名列表；也可用环境变量 `RUSIN_ADMIN` 指定（多个用户名逗号分隔，两者取并集）。
 
-   管理员登录后可在 `/admin/features` 用滑块开关切换各功能的启用状态，保存后立即生效（无需重启）：运行时状态持久化在存储后端（`sqlite`/`file` 后端即数据目录下的 `feature_flags.json`，仓库根目录下的 `feature_flags.json` 是历史遗留文件、不参与运行），多实例部署经约 5 秒的缓存 TTL 自动收敛；停用的功能路由直接 404、导航与首页入口自动隐藏。全部功能开关状态会呈现在 `/count` 数据汇总页的「功能状态」区（未设管理员时该区对所有人可见，但无人能修改开关）。注意：无服务器 `memory` 后端不持久，实例冷启动后回退到 `config.json` 默认值。
+   管理员登录后可在 `/admin/features` 用滑块开关切换各功能的启用状态，保存后立即生效（无需重启）：运行时状态持久化在存储后端（`sqlite`/`file` 后端即数据目录下的 `feature_flags.json`），多实例部署经约 5 秒的缓存 TTL 自动收敛；停用的功能路由直接 404、导航与首页入口自动隐藏。全部功能开关状态会呈现在 `/count` 数据汇总页的「功能状态」区（未设管理员时该区对所有人可见，但无人能修改开关）。注意：无服务器 `memory` 后端不持久，实例冷启动后回退到 `config.json` 默认值。
 - `logger` 日志。
    - `max_size`：单个日志文件的字节上限（RotatingFileHandler `maxBytes`），默认 `4294967296`（4 GiB）；
    - `path_pattern`：日志文件路径模板，默认 `log/{timestamp}.log`，相对数据目录解析（即 `<RUSIN_DATA_DIR>/log/`）；
