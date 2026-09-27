@@ -782,9 +782,10 @@ def read_disclaimer(lang: str) -> str:
     from . import config
     from .i18n import t
     file_name = "Disclaimer-en.md" if lang == "en" else "Disclaimer.md"
-    if os.path.exists(file_name):
+    file_path = os.path.join(config.DOCS_DIR, file_name)
+    if os.path.exists(file_path):
         try:
-            with open(file_name, "r", encoding="utf-8") as f:
+            with open(file_path, "r", encoding="utf-8") as f:
                 content = f.read()
         except Exception as e:
             content = t(lang, "disclaimer_read_error", e=e)

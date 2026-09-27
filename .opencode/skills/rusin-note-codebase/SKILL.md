@@ -62,13 +62,12 @@ upstash 后端所有键统一加 `rusin:` 前缀；memory 后端 get/set 带 dee
 | `lambda_handler.py` | AWS Lambda 入口（Mangum 适配） |
 | `.env.example` | 环境变量示例（RUSIN_STORAGE / RUSIN_DATA_DIR / RUSIN_SECRET_KEY / RUSIN_ADMIN） |
 | `README.md` / `README_en.md` | 中英文文档（含 Vercel / Lambda / VPS 部署步骤、配置项与存储后端说明） |
-| `Disclaimer.md` / `Disclaimer-en.md` | 中英文免责声明（`/disclaimer` 页面读取） |
-| `contributing.md` | 协作指南 |
 | `AGENTS.md` / `CLAUDE.md` | AI 协作指南（命令、存储、安全约定、架构要点） |
-| `todo.md` | 路线图（已实现 / 会实现 / 待讨论，链接对应 GitHub Issue） |
-| `feature_flags.json` | **仓库根目录的历史遗留文件**，运行时不读取（运行时状态写入 `data/feature_flags.json`） |
+| `docs/CONTRIBUTING.md` | 协作指南 |
+| `docs/todo.md` | 路线图（已实现 / 会实现 / 待讨论，链接对应 GitHub Issue） |
+| `docs/Disclaimer.md` / `docs/Disclaimer-en.md` | 中英文免责声明（`/disclaimer` 页面读取，路径见 `config.DOCS_DIR`） |
 | `tests/` | 测试目录（pytest + logging：`test_*.py` 端到端测试 + `conftest.py` 环境隔离 + `support.py` 共享辅助，`frontend_check.py` 前端语法检查 CLI）；运行 `pytest tests/`，各测试使用独立临时 `RUSIN_DATA_DIR` |
-| `favicon.ico` / `image/logo.png` / `image/screenshots1.png` | 站点图标与图片资源 |
+| `app/static/favicon.ico` / `app/static/image/logo.png` / `app/static/image/screenshots1.png` | 站点图标与图片资源（由 `app/theme.py` / `app/views/static_routes.py` 依据包目录解析，`/favicon.ico` 与 `/image/<name>` 路由不变） |
 | `.github/` | Issue 模板、issue-labeler、CI/CD workflows（check/codeql/release/auto-merge/upstream-sync 等）；`check.yml` 含 `changes`（paths-filter 判断 python/frontend 变更）、`test`（启动服务健康检查）、`frontend`（前端语法检查）三个 job |
 | `.gitignore` | Git 忽略规则 |
 | `LICENSE` | 许可证 |
@@ -120,7 +119,7 @@ upstash 后端所有键统一加 `rusin:` 前缀；memory 后端 get/set 带 dee
 | comments | `comments.py` | `/comments/<target_type>/<path:target_id>` GET（分页拉取评论，`cache.cached`）/ POST（发布，带冷却 + 限流）；`target_type` 为 `note` / `share`；受 `comments` 开关控制 |
 | org | `org.py` | `/org/mine`、`/org/create`、`/org/join/<invite_code>`、`/org/join-public/<org>`、`/org/join-approve/<org>`；`/org/<org>`（首页）、`/org/<org>/notes` 列表、`/org/<org>/notes/new`、`/org/<org>/notes/<id>` 查看、`.../edit`、`.../delete`、`/org/<org>/members`、`/org/<org>/settings`、`/org/<org>/invites`、`/org/<org>/requests`、`/org/<org>/leave`；组织笔记以 `_orgs/<org>` 为存储用户名，权限经 `_require_org_member/admin/owner`；全部受 `orgs` 开关控制 |
 | todos | `todos.py` | `/user/<u>/todos/add`、`/user/<u>/todos/<id>/toggle`、`/user/<u>/todos/<id>/delete`、`/user/<u>/todos/clear-done`（均 POST + 限流，模块内 `_require_auth` 校验会话用户等于 URL 用户名，成功后 302 回 `/`） |
-| static_routes | `static_routes.py` | `/favicon.ico`（内存缓存）、`/image/<name>`（仓库 `image/` 内置静态资源）、`/image/<u>/<id>`（用户图床，公开 + `public, max-age=86400`）、`/attachment/<u>/<id>`（用户附件：**默认禁止匿名下载**（未登录 401，`attachments.allow_anonymous_download` 可放开）、单用户同时下载上限（超限 429 + `Retry-After`）、按块流式产出并在结束/断开时释放并发槽位、缓存 `private`、路由带 `download_rate_limit` 每 IP 限流） |
+| static_routes | `static_routes.py` | `/favicon.ico`（内存缓存）、`/image/<name>`（`app/static/image/` 内置静态资源）、`/image/<u>/<id>`（用户图床，公开 + `public, max-age=86400`）、`/attachment/<u>/<id>`（用户附件：**默认禁止匿名下载**（未登录 401，`attachments.allow_anonymous_download` 可放开）、单用户同时下载上限（超限 429 + `Retry-After`）、按块流式产出并在结束/断开时释放并发槽位、缓存 `private`、路由带 `download_rate_limit` 每 IP 限流） |
 | — | `_helpers.py` | 共享：`check_note_id()`（非法 ID 分情况 400/404）、`build_note_context()`（构造 note_edit/note_md 模板上下文） |
 
 ## 模板（templates/，Jinja2）

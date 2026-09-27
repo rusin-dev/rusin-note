@@ -1,4 +1,6 @@
 """暗色模式主题样式/脚本与 favicon 缓存"""
+import os
+
 # ---------- 暗色模式（CSS 变量 + 切换脚本，所有页面共用） ----------
 THEME_VARS = """:root {
     color-scheme: light dark;
@@ -118,7 +120,10 @@ def get_favicon() -> bytes | None:
     global _FAVICON_CACHE
     if _FAVICON_CACHE is None:
         try:
-            with open("favicon.ico", "rb") as f:
+            favicon_path = os.path.join(
+                os.path.dirname(os.path.abspath(__file__)), "static", "favicon.ico"
+            )
+            with open(favicon_path, "rb") as f:
                 _FAVICON_CACHE = f.read()
         except (IOError, OSError):
             _FAVICON_CACHE = b""

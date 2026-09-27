@@ -3,7 +3,7 @@
 > Note: If you are a member of rusin-dev (this organization) and want to contribute, please see the [Collaboration Guide](https://github.com/rusin-dev/rusin-note?tab=contributing-ov-file). If you are not a member of this organization, you can join or open an Issue.
 
 <div align="center">
-    <a href="https://github.com/rusin-dev/rusin-note"><img width="15%" alt="logo" src="./image/logo.png" /></a>
+    <a href="https://github.com/rusin-dev/rusin-note"><img width="15%" alt="logo" src="./app/static/image/logo.png" /></a>
     <h1><b>Rusin-Note</b></h1>
     <p><em>🖊︎ A lightweight cloud clipboard project inspired by note.ms, deployable on VPS and serverless platforms (Vercel / AWS Lambda), ready to use out of the box.</em></p>
     <p>
@@ -24,7 +24,7 @@
     </p>
 </div>
 
-![Screenshot](https://github.com/rusin-dev/rusin-note/blob/main/image/screenshots1.png)
+![Screenshot](https://github.com/rusin-dev/rusin-note/blob/main/app/static/image/screenshots1.png)
 
 ## Features
 
@@ -342,10 +342,6 @@ ENV_VARIBLES = []        # required environment variables (a log warning is rais
 ```plaintext
 rusin-note:.
 │  config.json (configuration)
-│  contributing.md (collaboration guide)
-│  Disclaimer-en.md (English disclaimer)
-│  Disclaimer.md (disclaimer)
-│  favicon.ico
 │  LICENSE
 │  .gitignore
 │  NOTICE.txt (homepage notice banner content, first non-empty line)
@@ -354,13 +350,11 @@ rusin-note:.
 │  requirements.txt (Python dependencies)
 │  requirements-dev.txt (dev dependencies: pytest)
 │  pytest.ini (pytest configuration)
-│  todo.md (roadmap / to-dos)
 │  AGENTS.md / CLAUDE.md (AI collaboration guide)
 │  zbpack.json (packaging configuration)
 │  vercel.json (Vercel serverless configuration)
 │  lambda_handler.py (AWS Lambda entry)
 │  .env.example (environment variable example)
-│  feature_flags.json (legacy flag-state file; runtime writes data/feature_flags.json)
 │
 ├─api (serverless entry)
 │      index.py (Vercel Python entry)
@@ -394,6 +388,12 @@ rusin-note:.
 │  │  user_settings.py (simple mode / password / username change & data migration)
 │  │  utils.py (shared utilities)
 │  │  wsgi.py (WSGI entry)
+│  │
+│  ├─static (bundled static assets)
+│  │  │  favicon.ico
+│  │  └─image (image assets)
+│  │          logo.png
+│  │          screenshots1.png
 │  │
 │  └─views (blueprints and routes)
 │          __init__.py (blueprint registration)
@@ -436,9 +436,11 @@ rusin-note:.
 │       frontend_check.py (front-end syntax check CLI)
 │       test_*.py (per-feature end-to-end tests)
 │
-├─image (image assets)
-│      logo.png
-│      screenshots1.png
+├─docs (documentation)
+│      CONTRIBUTING.md (collaboration guide)
+│      Disclaimer-en.md (English disclaimer)
+│      Disclaimer.md (disclaimer)
+│      todo.md (roadmap / to-dos)
 │
 ├─.github
 │  │  issue-labeler.yml (Issue label configuration)
@@ -661,7 +663,7 @@ python tests/frontend_check.py          # front-end syntax check (Jinja2 + inlin
      **Precedence**: the 7 "legacy" features — `note_refs`, `latex_render`, `code_highlight`, `avatar`, `note_images`, `note_attachments`, `comments` — always take their defaults from their own dedicated sections (e.g. `images.enabled`, `attachments.enabled`, `comments.enabled`); same-named keys in this section have no effect for them. Every other feature (including `orgs`) defaults to enabled when omitted here.
    - `admin_users`: usernames allowed to manage feature flags; can also be set via the `RUSIN_ADMIN` environment variable (comma-separated; the two are merged).
 
-   After logging in, an admin can toggle features at `/admin/features`; saving takes effect immediately (no restart needed): the runtime state is persisted in the storage backend (`feature_flags.json` under the data directory for the `sqlite`/`file` backends — the `feature_flags.json` in the repository root is a legacy leftover and is not used at runtime), and multi-instance deployments converge within a ~5s cache TTL. Disabled features return 404 and their navbar/home entry points are hidden automatically. All feature states are presented in the "Feature Status" section of the `/count` stats page (visible to everyone when no admin is configured, but nobody can change the switches then). Note: the serverless `memory` backend is not persistent — after a cold start, flags fall back to the `config.json` defaults.
+   After logging in, an admin can toggle features at `/admin/features`; saving takes effect immediately (no restart needed): the runtime state is persisted in the storage backend (`feature_flags.json` under the data directory for the `sqlite`/`file` backends), and multi-instance deployments converge within a ~5s cache TTL. Disabled features return 404 and their navbar/home entry points are hidden automatically. All feature states are presented in the "Feature Status" section of the `/count` stats page (visible to everyone when no admin is configured, but nobody can change the switches then). Note: the serverless `memory` backend is not persistent — after a cold start, flags fall back to the `config.json` defaults.
 - `logger`: logging.
     - `max_size`: byte cap per log file (RotatingFileHandler `maxBytes`), default `4294967296` (4 GiB);
     - `path_pattern`: log file path template, default `log/{timestamp}.log`, resolved relative to the data directory (i.e. `<RUSIN_DATA_DIR>/log/`);
