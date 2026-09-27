@@ -14,8 +14,8 @@
     "max_requests": 120
   },
   "register_rate_limit": {
-    "window_seconds": 120,
-    "max_requests": 1
+    "window_seconds": 5,
+    "max_requests": 2
   },
   "ip_rate_limit": {
     "window_seconds": 60,
