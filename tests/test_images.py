@@ -13,10 +13,10 @@ import json
 import logging
 import os
 
-from app import config as cfg
-from app.feature_flags import FEATURE_KEYS, set_flags
-from app.images import generate_image_id, sniff_image_format, validate_image_id
-from app.notes import validate_note_id
+from app.core import config as cfg
+from app.core.feature_flags import FEATURE_KEYS, set_flags
+from app.apps.images.service import generate_image_id, sniff_image_format, validate_image_id
+from app.core.notes import validate_note_id
 from support import (
     create_note,
     csrf_from,

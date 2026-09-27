@@ -261,7 +261,7 @@ Zeabur 是 PaaS 平台，不需要也不建议在容器里 `apt install redis`�
 
 ### 存储后端说明（无服务器关键）
 
-存储层（`app/storage.py`）是项目的统一数据接口，提供五种后端，由 `RUSIN_STORAGE` 环境变量显式指定，未指定时自动识别：
+存储层（`app/core/storage.py`）是项目的统一数据接口，提供五种后端，由 `RUSIN_STORAGE` 环境变量显式指定，未指定时自动识别：
 
 | 后端 | 启用方式 | 说明 |
 |---|---|---|
@@ -354,57 +354,57 @@ rusin-note:.
 ├─api（无服务器入口）
 │      index.py（Vercel Python 入口）
 │
-├─app（核心代码）
-│  │  __init__.py
+├─app（应用）
+│  │  __init__.py（Flask app 工厂 create_app）
 │  │  __main__.py（入口：python3 -m app）
-│  │  auth.py（密码哈希与会话认证）
-│  │  attachments.py（附件校验、配额与存储接口）
-│  │  background.py（后台清理任务）
-│  │  comments.py（评论校验与业务接口）
-│  │  concurrency.py（进程内并发闸门：单用户同时在途请求上限）
-│  │  config.py（配置加载与全局常量）
-│  │  extensions.py（Flask 扩展实例）
-│  │  feature_flags.py（功能开关注册表与持久化状态）
-│  │  folders.py（笔记文件夹）
-│  │  i18n.py（多语言支持）
-│  │  images.py（图片校验、配额与存储接口）
-│  │  ip_utils.py（客户端 IP 安全解析：可信代理校验 / XFF 右起解析 / IP 名单）
-│  │  logger.py（日志记录）
-│  │  middleware.py（请求钩子与限流辅助）
-│  │  notes.py（笔记操作与统计）
-│  │  pins.py（笔记置顶）
-│  │  plugins.py（插件系统：zip 安装 / 蓝图加载 / 上游更新）
-│  │  storage.py（存储层：sqlite / file / memory / upstash / postgres 后端）
-│  │  storage_sqlite.py（SQLite 索引后端实现）
-│  │  store.py（用户/会话/分享/犇犇/评论/组织数据存储）
-│  │  tags.py（笔记标签）
-│  │  theme.py（主题与静态资源辅助）
-│  │  todos.py（首页工作台待办清单）
-│  │  user_settings.py（简洁模式 / 改密码 / 改用户名与数据迁移）
-│  │  utils.py（通用工具函数）
 │  │  wsgi.py（WSGI 入口）
 │  │
-│  ├─static（内置静态资源）
-│  │  │  favicon.ico
-│  │  └─image（图片资源）
-│  │          logo.png
-│  │          screenshots1.png
+│  ├─core（共享内核：基础设施 + 跨功能领域服务）
+│  │      auth.py（密码哈希与会话认证）
+│  │      background.py（后台清理任务）
+│  │      concurrency.py（进程内并发闸门：单用户同时在途请求上限）
+│  │      config.py（配置加载与全局常量）
+│  │      extensions.py（Flask 扩展实例）
+│  │      feature_flags.py（功能开关注册表与持久化状态）
+│  │      folders.py（笔记文件夹）
+│  │      i18n.py（多语言支持）
+│  │      ip_utils.py（客户端 IP 安全解析：可信代理校验 / XFF 右起解析 / IP 名单）
+│  │      logger.py（日志记录）
+│  │      middleware.py（请求钩子与限流辅助）
+│  │      notes.py（笔记底层读写与统计）
+│  │      pins.py（笔记置顶）
+│  │      plugins.py（插件系统：zip 安装 / 蓝图加载 / 上游更新）
+│  │      prefs.py（界面偏好：简洁模式）
+│  │      storage.py（存储层：sqlite / file / memory / upstash / postgres 后端）
+│  │      storage_sqlite.py（SQLite 索引后端实现）
+│  │      store.py（用户/会话/分享/犇犇/评论/组织数据存储）
+│  │      tags.py（笔记标签）
+│  │      theme.py（主题与静态资源辅助）
+│  │      utils.py（通用工具函数）
 │  │
-│  └─views（蓝图与路由）
-│          __init__.py（蓝图注册）
-│          _helpers.py（视图辅助函数）
-│          admin.py（功能开关管理）
-│          auth.py（登录与注册）
-│          benben.py（犇犇动态）
-│          comments.py（评论页面）
-│          home.py（首页 / 统计 / 免责声明）
-│          org.py（组织与团队协作）
-│          share.py（分享页面）
-│          static_routes.py（favicon / 图床 / 附件访问）
-│          todos.py（工作台待办操作）
-│          user.py（用户与用户笔记）
-│          world.py（公开笔记）
-│          world_short.py（短链接公开笔记）
+│  ├─apps（功能 App；每个 App 自带 views，业务逻辑放 service）
+│  │  │  registry.py（按序注册全部 App 蓝图）
+│  │  ├─common/helpers.py（跨 App 视图辅助）
+│  │  ├─home/views.py（首页 / 统计 / 免责声明）
+│  │  ├─auth/views.py（登录与注册）
+│  │  ├─notes/views.py（私有笔记列表 / 编辑 / 删除 / 置顶 / Markdown 预览）
+│  │  ├─world/views.py + short.py（公开笔记 / 短链接）
+│  │  ├─share/views.py（分享查看与用户分享管理）
+│  │  ├─benben/views.py（犇犇动态）
+│  │  ├─comments/views.py + service.py（评论）
+│  │  ├─org/views.py（组织与团队协作）
+│  │  ├─todos/views.py + service.py（工作台待办）
+│  │  ├─images/views.py + service.py（图床管理 + /image 服务）
+│  │  ├─attachments/views.py + service.py（附件管理 + /attachment 服务）
+│  │  ├─user/views.py + service.py（简洁模式 / 改密码 / 改用户名与数据迁移）
+│  │  ├─admin/views.py（功能开关管理）
+│  │  └─static/views.py（favicon / 内置静态图片）
+│  │
+│  └─static（内置静态资源）
+│      │  favicon.ico
+│      └─image（图片资源）
+│              logo.png
+│              screenshots1.png
 │
 ├─templates（Jinja2 模板）
 │  │  base.html（基础布局）
@@ -453,7 +453,7 @@ rusin-note:.
 
 ### IP 限速与防 XFF 伪造
 
-限流的键是「真实客户端 IP」，而 `X-Forwarded-For`（XFF）、`X-Real-IP`、`CF-Connecting-IP` 都是**客户端可随意伪造的请求头**。若无条件采信，攻击者每次请求换一个假 IP 就能让限流完全失效。为此本项目的解析规则如下（实现见 `app/ip_utils.py`）：
+限流的键是「真实客户端 IP」，而 `X-Forwarded-For`（XFF）、`X-Real-IP`、`CF-Connecting-IP` 都是**客户端可随意伪造的请求头**。若无条件采信，攻击者每次请求换一个假 IP 就能让限流完全失效。为此本项目的解析规则如下（实现见 `app/core/ip_utils.py`）：
 
 1. **对端校验**：只有 TCP 直连对端（`remote_addr`）命中 `trusted_proxies` 列表时才采信代理头；直接从公网访问时，所有代理头一律忽略，按直连 IP 计数。
 2. **严格解析**：头部值必须是合法 IP（支持 `1.2.3.4:80`、`[2001:db8::1]:443`、`::ffff:1.2.3.4`），非法值直接丢弃——避免用任意字符串制造海量限流桶；单个头部超过 256 字节会被**整段丢弃**（不解析），XFF 超过 16 项只保留前 16 项。
@@ -609,7 +609,7 @@ python tests/frontend_check.py          # 前端语法检查（Jinja2 + 内联 C
    - `max_concurrent_downloads` ：**单用户同时下载**上限（同一账号在途的下载请求数），默认 `1`（[#191](https://github.com/rusin-dev/rusin-note/issues/191)「限制 1 队列」），`0` 表示不限；
    - `max_concurrent_uploads` ：**单用户同时上传**上限（同一账号在途的上传请求数），默认 `1`（同上），`0` 表示不限；
    - `download_rate_limit` ：附件下载路由的独立每 IP 限流，`window_seconds`（默认 `60`）与 `max_requests`（默认 `120`）；
-   - 并发上限用于拦截「发起上千个慢速连接（每个 1KB/s）、或用上百线程同时下载上百个文件」这类**请求数不超限但长期占用 worker / 打满出站带宽**的行为：超出时下载返回 429（带 `Retry-After`），上传返回 429 JSON（编辑器可直接展示提示）；**超限直接拒绝、不排队**（排队同样占用 worker）。闸门计数在**进程内**（`app/concurrency.py`），gunicorn 起 N 个 worker 时实际上限约为 `N × 该值`；跨实例严格计数需要外部存储原子自增，本项目未采用；
+   - 并发上限用于拦截「发起上千个慢速连接（每个 1KB/s）、或用上百线程同时下载上百个文件」这类**请求数不超限但长期占用 worker / 打满出站带宽**的行为：超出时下载返回 429（带 `Retry-After`），上传返回 429 JSON（编辑器可直接展示提示）；**超限直接拒绝、不排队**（排队同样占用 worker）。闸门计数在**进程内**（`app/core/concurrency.py`），gunicorn 起 N 个 worker 时实际上限约为 `N × 该值`；跨实例严格计数需要外部存储原子自增，本项目未采用；
    - 附件在笔记中默认以链接形式引用；若一篇笔记内联了多个附件图片（同一账号并发请求 > 上限），可适当调高 `max_concurrent_downloads` 或置 `0`；
    - `blocked_extensions` ：禁止上传的文件扩展名列表（黑名单模式），默认包含 `.exe`、`.bat`、`.sh`、`.zip` 等可执行文件与压缩包。**取值本身不带前导点**（`config.json` 里写 `exe`、`zip`，代码会自动补 `.`），自行添加时不要写成 `.exe`，否则永不命中。  
 - `comments` 评论系统（`/comments/<target_type>/<path:target_id>`，支持笔记和分享页面评论）。

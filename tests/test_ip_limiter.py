@@ -17,10 +17,10 @@ from collections import Counter
 
 import pytest
 
-from app import config
-from app import ip_utils
-from app.extensions import limiter
-from app.ip_utils import (
+from app.core import config
+from app.core import ip_utils
+from app.core.extensions import limiter
+from app.core.ip_utils import (
     MAX_XFF_ENTRIES,
     analyze_client_ip,
     clear_caches,

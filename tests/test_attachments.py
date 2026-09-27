@@ -19,9 +19,9 @@ import logging
 
 import pytest
 
-from app import attachments as att
-from app import config as cfg
-from app.concurrency import ConcurrencyLimiter
+from app.apps.attachments import service as att
+from app.core import config as cfg
+from app.core.concurrency import ConcurrencyLimiter
 from support import (
     csrf_from,
     expect,
@@ -254,7 +254,7 @@ class TestAttachmentAccess:
 def rl_client(data_dir):
     """限流真正生效的测试客户端（必须在 create_app 之前打开开关）。"""
     from app import create_app
-    from app.extensions import limiter
+    from app.core.extensions import limiter
 
     limiter.enabled = True
     try:

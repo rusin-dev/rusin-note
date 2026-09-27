@@ -58,10 +58,11 @@ def reset_runtime_state(data_dir) -> None:
     内存缓存，必须显式清空（``load_*()`` 在空目录下不会清空历史数据，因为
     ``storage.get`` 返回 ``None``）。
     """
-    from app import config as app_config
-    from app import store, tags, folders, pins, todos, notes, feature_flags
-    from app import concurrency
-    from app.extensions import cache, limiter
+    from app.core import config as app_config
+    from app.core import store, tags, folders, pins, notes, feature_flags
+    from app.apps.todos import service as todos
+    from app.core import concurrency
+    from app.core.extensions import cache, limiter
 
     app_config.DATA_DIR = str(data_dir)
 
@@ -129,7 +130,7 @@ def data_dir(tmp_path_factory, request):
 def app(data_dir):
     """Flask 测试应用（TESTING 模式，关闭限流）。"""
     from app import create_app
-    from app.extensions import cache
+    from app.core.extensions import cache
 
     application = create_app()
     application.config.update(TESTING=True)

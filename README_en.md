@@ -270,7 +270,7 @@ Benben posts are now persisted to the storage backend (up to `benben.max_posts`,
 
 ### Storage Backends (Key for Serverless)
 
-The storage layer (`app/storage.py`) is the unified data interface and provides five backends, selected explicitly via the `RUSIN_STORAGE` env var or auto-detected:
+The storage layer (`app/core/storage.py`) is the unified data interface and provides five backends, selected explicitly via the `RUSIN_STORAGE` env var or auto-detected:
 
 | Backend | How to enable | Notes |
 |---|---|---|
@@ -359,57 +359,57 @@ rusin-note:.
 ├─api (serverless entry)
 │      index.py (Vercel Python entry)
 │
-├─app (core code)
-│  │  __init__.py
+├─app (application)
+│  │  __init__.py (Flask app factory create_app)
 │  │  __main__.py (entry: python3 -m app)
-│  │  attachments.py (attachment validation, quotas, and storage API)
-│  │  auth.py (password hashing & session auth)
-│  │  background.py (background cleanup tasks)
-│  │  comments.py (comment validation and business API)
-│  │  concurrency.py (in-process concurrency gate: per-user in-flight request cap)
-│  │  config.py (configuration loading & global constants)
-│  │  extensions.py (Flask extension instances)
-│  │  feature_flags.py (feature registry and persisted runtime state)
-│  │  folders.py (note folders)
-│  │  i18n.py (multi-language support)
-│  │  images.py (image validation, quotas, and storage API)
-│  │  ip_utils.py (safe client-IP parsing: trusted-proxy check / right-to-left XFF / IP lists)
-│  │  logger.py (logging)
-│  │  middleware.py (request hooks and rate-limit helpers)
-│  │  notes.py (note file operations & stats)
-│  │  pins.py (pinned notes)
-│  │  plugins.py (plugin installation, loading, and updates)
-│  │  storage.py (sqlite / file / memory / upstash / postgres backends)
-│  │  storage_sqlite.py (SQLite index backend implementation)
-│  │  store.py (users/sessions/shares/benben/comments/org data)
-│  │  tags.py (note tags)
-│  │  theme.py (theme and static resource helpers)
-│  │  todos.py (homepage workbench to-do list)
-│  │  user_settings.py (simple mode / password / username change & data migration)
-│  │  utils.py (shared utilities)
 │  │  wsgi.py (WSGI entry)
 │  │
-│  ├─static (bundled static assets)
-│  │  │  favicon.ico
-│  │  └─image (image assets)
-│  │          logo.png
-│  │          screenshots1.png
+│  ├─core (shared kernel: infrastructure + cross-feature domain services)
+│  │      auth.py (password hashing & session auth)
+│  │      background.py (background cleanup tasks)
+│  │      concurrency.py (in-process concurrency gate: per-user in-flight cap)
+│  │      config.py (configuration loading & global constants)
+│  │      extensions.py (Flask extension instances)
+│  │      feature_flags.py (feature registry and persisted runtime state)
+│  │      folders.py (note folders)
+│  │      i18n.py (multi-language support)
+│  │      ip_utils.py (safe client-IP parsing: trusted-proxy check / right-to-left XFF / IP lists)
+│  │      logger.py (logging)
+│  │      middleware.py (request hooks and rate-limit helpers)
+│  │      notes.py (note file operations & stats)
+│  │      pins.py (pinned notes)
+│  │      plugins.py (plugin installation, loading, and updates)
+│  │      prefs.py (UI preference: simple mode)
+│  │      storage.py (sqlite / file / memory / upstash / postgres backends)
+│  │      storage_sqlite.py (SQLite index backend implementation)
+│  │      store.py (users/sessions/shares/benben/comments/org data)
+│  │      tags.py (note tags)
+│  │      theme.py (theme and static resource helpers)
+│  │      utils.py (shared utilities)
 │  │
-│  └─views (blueprints and routes)
-│          __init__.py (blueprint registration)
-│          _helpers.py (view helpers)
-│          admin.py (feature flag administration)
-│          auth.py (login and registration)
-│          benben.py (benben feed)
-│          comments.py (comment pages)
-│          home.py (home / stats / disclaimer)
-│          org.py (organizations and collaboration)
-│          share.py (share pages)
-│          static_routes.py (favicon / image / attachment serving)
-│          todos.py (workbench to-do actions)
-│          user.py (user and user notes)
-│          world.py (public notes)
-│          world_short.py (short-link public notes)
+│  ├─apps (feature Apps; each owns views, business logic in service)
+│  │  │  registry.py (registers every App blueprint in order)
+│  │  ├─common/helpers.py (cross-App view helpers)
+│  │  ├─home/views.py (home / stats / disclaimer)
+│  │  ├─auth/views.py (login and registration)
+│  │  ├─notes/views.py (private note list / edit / delete / pin / Markdown preview)
+│  │  ├─world/views.py + short.py (public notes / short links)
+│  │  ├─share/views.py (share view & user share management)
+│  │  ├─benben/views.py (benben feed)
+│  │  ├─comments/views.py + service.py (comments)
+│  │  ├─org/views.py (organizations and collaboration)
+│  │  ├─todos/views.py + service.py (workbench to-do)
+│  │  ├─images/views.py + service.py (image management + /image serving)
+│  │  ├─attachments/views.py + service.py (attachment management + /attachment serving)
+│  │  ├─user/views.py + service.py (simple mode / password / username & migration)
+│  │  ├─admin/views.py (feature flag administration)
+│  │  └─static/views.py (favicon / bundled static images)
+│  │
+│  └─static (bundled static assets)
+│      │  favicon.ico
+│      └─image (image assets)
+│              logo.png
+│              screenshots1.png
 │
 ├─templates (Jinja2 templates)
 │  │  base.html (base layout)
@@ -458,7 +458,7 @@ rusin-note:.
 
 ### IP Rate Limiting and XFF Forgery Protection
 
-Rate limiting keys on the *real client IP*, while `X-Forwarded-For` (XFF), `X-Real-IP` and `CF-Connecting-IP` are request headers any client can forge — trusting them blindly lets an attacker rotate fake IPs and bypass every limit. The rules implemented in `app/ip_utils.py` are:
+Rate limiting keys on the *real client IP*, while `X-Forwarded-For` (XFF), `X-Real-IP` and `CF-Connecting-IP` are request headers any client can forge — trusting them blindly lets an attacker rotate fake IPs and bypass every limit. The rules implemented in `app/core/ip_utils.py` are:
 
 1. **Peer validation**: proxy headers are honoured only when the direct TCP peer (`remote_addr`) matches `trusted_proxies`; for direct public traffic all proxy headers are ignored.
 2. **Strict parsing**: a header value must be a valid IP (`1.2.3.4:80`, `[2001:db8::1]:443`, `::ffff:1.2.3.4` are accepted); anything else is dropped so arbitrary strings can never create limiter buckets. A single header longer than 256 bytes is dropped in full (not parsed at all), and XFF chains longer than 16 entries keep only the first 16.
@@ -623,7 +623,7 @@ python tests/frontend_check.py          # front-end syntax check (Jinja2 + inlin
     - `max_concurrent_downloads`: max **simultaneous downloads per user** (in-flight requests for one account), default `1` ([#191](https://github.com/rusin-dev/rusin-note/issues/191) "limit to 1 queue"); `0` disables the cap;
     - `max_concurrent_uploads`: max **simultaneous uploads per user** (in-flight requests for one account), default `1`; `0` disables the cap;
     - `download_rate_limit`: dedicated per-IP rate limit for the attachment download route, `window_seconds` (default `60`) and `max_requests` (default `120`);
-    - These concurrency caps stop "open a thousand connections and trickle each at 1KB/s" or "100 threads downloading 100 files" abuse, where the request rate stays under the limiter but workers stay occupied and egress bandwidth is saturated: over the cap, downloads return 429 with `Retry-After` and uploads return a 429 JSON error the editor can display. Over-limit requests are **rejected, not queued** (queueing would occupy workers just the same). Counting is **per process** (`app/concurrency.py`), so with N gunicorn workers the effective cap is about `N × value`; strict cross-instance counting would need an atomic counter in external storage, which this project does not use;
+    - These concurrency caps stop "open a thousand connections and trickle each at 1KB/s" or "100 threads downloading 100 files" abuse, where the request rate stays under the limiter but workers stay occupied and egress bandwidth is saturated: over the cap, downloads return 429 with `Retry-After` and uploads return a 429 JSON error the editor can display. Over-limit requests are **rejected, not queued** (queueing would occupy workers just the same). Counting is **per process** (`app/core/concurrency.py`), so with N gunicorn workers the effective cap is about `N × value`; strict cross-instance counting would need an atomic counter in external storage, which this project does not use;
     - Attachments are referenced as links by default; if one note embeds several attachment images (more concurrent requests than the cap), raise `max_concurrent_downloads` or set it to `0`;
     - `blocked_extensions`: list of blocked file extensions (blacklist mode), default includes `.exe`, `.bat`, `.sh`, `.zip` and other executables/archives. **The configured value carries no leading dot** (`config.json` lists `exe`, `zip`; the code adds the `.`), so do not write `.exe` — it would never match.
 - `comments`: comment system (`/comments/<target_type>/<path:target_id>`, supports notes and share pages).

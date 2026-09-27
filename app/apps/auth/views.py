@@ -1,0 +1,142 @@
+"""注册、登录、登出、语言切换"""
+import os
+import urllib.parse
+from flask import Blueprint, abort, g, make_response, redirect, render_template, request, url_for
+
+from app.core import config
+from app.core.auth import (
+    check_password_complexity,
+    create_session,
+    delete_session,
+    generate_salt,
+    hash_password,
+    verify_password,
+)
+from app.core.extensions import limiter
+from app.core.feature_flags import require_feature
+from app.core.i18n import LANG_COOKIE
+from app.core.notes import RESERVED_USERNAMES, validate_username
+from app.core.store import get_user, register_user
+from app.core.middleware import get_session_token
+
+
+bp = Blueprint("auth", __name__)
+
+
+def _set_session_cookie(resp, token: str):
+    if config.SESSION_TIMEOUT_ENABLED:
+        max_age = int(config.SESSION_TIMEOUT_SECONDS)
+    else:
+        max_age = config.COOKIE_MAX_AGE_DEFAULT
+    resp.set_cookie(config.SESSION_COOKIE, value=token, max_age=max_age, httponly=True,
+                    samesite="Lax", secure=config.SECURE_COOKIES, path="/")
+
+
+def _clear_session_cookie(resp):
+    resp.delete_cookie(config.SESSION_COOKIE, path="/")
+
+
+# ---------- GET ----------
+
+@bp.route("/register", methods=["GET"])
+@require_feature("open_register")
+@limiter.limit(lambda: f"{config.GET_RATE_MAX} per {config.GET_RATE_WINDOW} second")
+def register_get():
+    return render_template("auth/register.html", error="")
+
+
+@bp.route("/login", methods=["GET"])
+@limiter.limit(lambda: f"{config.GET_RATE_MAX} per {config.GET_RATE_WINDOW} second")
+def login_get():
+    return render_template("auth/login.html", error="")
+
+
+@bp.route("/logout", methods=["POST"])
+def logout():
+    token = get_session_token()
+    if token:
+        delete_session(token)
+    resp = make_response(redirect("/"))
+    _clear_session_cookie(resp)
+    return resp
+
+
+@bp.route("/lang/<lang>")
+def lang_switch(lang):
+    if lang not in ("zh", "en"):
+        abort(400)
+    location = "/"
+    referer = request.headers.get("Referer", "")
+    if referer:
+        ref = urllib.parse.urlparse(referer)
+        location = ref.path + (("?" + ref.query) if ref.query else "")
+        if not location:
+            location = "/"
+    resp = make_response(redirect(location))
+    resp.set_cookie(LANG_COOKIE, value=lang, max_age=31536000, samesite="Lax", path="/")
+    return resp
+
+
+# ---------- POST ----------
+
+@bp.route("/register", methods=["POST"])
+@require_feature("open_register")
+@limiter.limit(lambda: f"{config.REGISTER_RATE_MAX} per {config.REGISTER_RATE_WINDOW} second")
+def register_post():
+    username = request.form.get("username", "").strip()
+    password = request.form.get("password", "")
+    confirm = request.form.get("confirm", "")
+
+    if not validate_username(username):
+        if username.lower() in RESERVED_USERNAMES:
+            error = "err_username_reserved"
+        else:
+            error = "err_username_invalid"
+        return render_template("auth/register.html", error=error), 400
+
+    if password != confirm:
+        return render_template("auth/register.html", error="err_password_mismatch"), 400
+
+    if not check_password_complexity(password):
+        from app.core.config import get_password_requirements_description
+        lang = getattr(g, "lang", "zh")
+        req_desc = get_password_requirements_description(lang)
+        from app.core.i18n import t
+        msg = t(lang, "err_password_weak", req=req_desc)
+        return render_template("auth/register.html", error=msg), 400
+
+    salt = generate_salt()
+    hashed = hash_password(password, salt)
+    if not register_user(username, {"salt": salt, "hash": hashed}):
+        return render_template("auth/register.html", error="err_username_taken"), 400
+
+    token = create_session(username)
+    # 注册后直接进入工作台首页（而不是编辑器）
+    resp = make_response(redirect("/"))
+    _set_session_cookie(resp, token)
+    return resp
+
+
+@bp.route("/login", methods=["POST"])
+@limiter.limit(lambda: f"{config.RATE_MAX} per {config.RATE_WINDOW} second")
+def login_post():
+    username = request.form.get("username", "").strip()
+    password = request.form.get("password", "")
+
+    if len(password) > config.PW_MAX_LENGTH:
+        return render_template("auth/login.html", error="err_login_failed"), 401
+
+    user = get_user(username)
+
+    salt = user.get("salt") if isinstance(user, dict) else None
+    hashed = user.get("hash") if isinstance(user, dict) else None
+    if not salt or not hashed or not isinstance(salt, str) or not isinstance(hashed, str):
+        salt, hashed = None, None
+    if salt is None or not verify_password(password, salt, hashed):
+        return render_template("auth/login.html", error="err_login_failed"), 401
+
+    token = create_session(username)
+    # 登录后跳转到工作台样式的首页
+    resp = make_response(redirect("/"))
+    _set_session_cookie(resp, token)
+    return resp

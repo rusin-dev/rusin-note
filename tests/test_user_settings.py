@@ -16,11 +16,11 @@ import json
 import logging
 import os
 
-from app.feature_flags import FEATURE_KEYS, set_flags
-from app.folders import get_note_folder, set_note_folder
-from app.notes import validate_note_id
-from app.pins import is_pinned, set_note_pinned
-from app.store import (
+from app.core.feature_flags import FEATURE_KEYS, set_flags
+from app.core.folders import get_note_folder, set_note_folder
+from app.core.notes import validate_note_id
+from app.core.pins import is_pinned, set_note_pinned
+from app.core.store import (
     add_benben_post,
     add_comment,
     create_org,
@@ -31,8 +31,8 @@ from app.store import (
     get_share,
     get_user,
 )
-from app.tags import get_note_tags, set_note_tags
-from app.user_settings import get_simple_mode, set_simple_mode
+from app.core.tags import get_note_tags, set_note_tags
+from app.apps.user.service import get_simple_mode, set_simple_mode
 from support import (
     create_note,
     csrf_from,
@@ -56,7 +56,7 @@ def settings_csrf(client, username: str) -> str:
 
 def _comment_migrated(new_name: str) -> bool:
     """评论存储在单个 KV 键；读取存储后端确认作者与目标键均已迁移。"""
-    from app.storage import storage
+    from app.core.storage import storage
 
     table = storage.get("comments:all")
     if not isinstance(table, dict):
