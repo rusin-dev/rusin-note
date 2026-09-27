@@ -12,10 +12,10 @@ import json
 import logging
 import os
 
-from app.extensions import cache
-from app.feature_flags import FEATURE_KEYS, set_flags
-from app.pins import get_user_pins, is_pinned, set_note_pinned, toggle_note_pin
-from app.tags import set_note_tags
+from app.core.extensions import cache
+from app.core.feature_flags import FEATURE_KEYS, set_flags
+from app.core.pins import get_user_pins, is_pinned, set_note_pinned, toggle_note_pin
+from app.core.tags import set_note_tags
 from support import (
     create_note,
     csrf_from,

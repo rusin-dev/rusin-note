@@ -19,7 +19,7 @@
     <tbody>
         {% for username, req in requests.items() %}
         <tr>
-            <td><a href="{{ url_for('user.user_root', username=username) }}">{{ username|e }}</a></td>
+            <td><a href="{{ url_for('notes.user_root', username=username) }}">{{ username|e }}</a></td>
             <td>{{ req.message or '-' }}</td>
             <td>{{ req.created_at | format_note_time }}</td>
             <td><span class="status-badge status-{{ req.status }}">{{ t('org_request_status_' ~ req.status) }}</span></td>

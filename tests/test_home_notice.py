@@ -9,8 +9,8 @@ from __future__ import annotations
 
 import logging
 
-from app import config
-from app.extensions import cache
+from app.core import config
+from app.core.extensions import cache
 from support import expect
 
 logger = logging.getLogger("rusin.tests.notice")

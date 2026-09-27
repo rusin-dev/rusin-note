@@ -11,10 +11,10 @@ import json
 import logging
 import os
 
-from app.config import MAX_FOLDER_DEPTH, MAX_FOLDER_NAME_LENGTH
-from app.extensions import cache
-from app.feature_flags import FEATURE_KEYS, set_flags
-from app.folders import (
+from app.core.config import MAX_FOLDER_DEPTH, MAX_FOLDER_NAME_LENGTH
+from app.core.extensions import cache
+from app.core.feature_flags import FEATURE_KEYS, set_flags
+from app.core.folders import (
     build_folder_tree,
     folder_in_subtree,
     get_note_folder,

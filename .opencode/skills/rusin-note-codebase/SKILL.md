@@ -5,7 +5,7 @@ description: Use when working in this project (Rusin-Note, a Flask 云端剪贴�
 
 # Rusin-Note 项目结构与文件作用
 
-Rusin-Note 是一个受 note.ms 启发的轻量级云端剪贴板 / 在线记事本，基于 Flask 3，支持 VPS 与无服务器（Vercel / AWS Lambda）部署。核心是"随机短链公开笔记 + 用户私有笔记 + 分享链接 + 犇犇动态"，数据存储通过可插拔、统一的存储接口（`app/storage.py` 的 `storage` 单例）访问：sqlite（本地默认，SQLite 索引 + JSON 内容）/ file（纯 JSON 落盘）/ upstash（外部 KV）/ postgres（Neon/PostgreSQL）/ memory（纯内存）。
+Rusin-Note 是一个受 note.ms 启发的轻量级云端剪贴板 / 在线记事本，基于 Flask 3，支持 VPS 与无服务器（Vercel / AWS Lambda）部署。核心是"随机短链公开笔记 + 用户私有笔记 + 分享链接 + 犇犇动态"，数据存储通过可插拔、统一的存储接口（`app/core/storage.py` 的 `storage` 单例）访问：sqlite（本地默认，SQLite 索引 + JSON 内容）/ file（纯 JSON 落盘）/ upstash（外部 KV）/ postgres（Neon/PostgreSQL）/ memory（纯内存）。
 
 ## 运行方式
 
@@ -20,7 +20,7 @@ Rusin-Note 是一个受 note.ms 启发的轻量级云端剪贴板 / 在线记事
 
 ## 数据模型（统一存储接口 + 可插拔后端）
 
-存储后端统一键布局（`app/storage.py` 内 `KV_FILE_MAP` / `_note_key`），内容均落盘到 `RUSIN_DATA_DIR`（默认 `data/`）；sqlite 后端另建 `index.db` 索引以加速查找：
+存储后端统一键布局（`app/core/storage.py` 内 `KV_FILE_MAP` / `_note_key`），内容均落盘到 `RUSIN_DATA_DIR`（默认 `data/`）；sqlite 后端另建 `index.db` 索引以加速查找：
 
 | 键 | 内容 JSON / 二进制落盘 | 内容 | 关键结构 |
 |---|---|---|---|
@@ -67,12 +67,14 @@ upstash 后端所有键统一加 `rusin:` 前缀；memory 后端 get/set 带 dee
 | `docs/todo.md` | 路线图（已实现 / 会实现 / 待讨论，链接对应 GitHub Issue） |
 | `docs/Disclaimer.md` / `docs/Disclaimer-en.md` | 中英文免责声明（`/disclaimer` 页面读取，路径见 `config.DOCS_DIR`） |
 | `tests/` | 测试目录（pytest + logging：`test_*.py` 端到端测试 + `conftest.py` 环境隔离 + `support.py` 共享辅助，`frontend_check.py` 前端语法检查 CLI）；运行 `pytest tests/`，各测试使用独立临时 `RUSIN_DATA_DIR` |
-| `app/static/favicon.ico` / `app/static/image/logo.png` / `app/static/image/screenshots1.png` | 站点图标与图片资源（由 `app/theme.py` / `app/views/static_routes.py` 依据包目录解析，`/favicon.ico` 与 `/image/<name>` 路由不变） |
+| `app/static/favicon.ico` / `app/static/image/logo.png` / `app/static/image/screenshots1.png` | 站点图标与图片资源（由 `app/core/theme.py` / `app/apps/attachments/views.py` 依据包目录解析，`/favicon.ico` 与 `/image/<name>` 路由不变） |
 | `.github/` | Issue 模板、issue-labeler、CI/CD workflows（check/codeql/release/auto-merge/upstream-sync 等）；`check.yml` 含 `changes`（paths-filter 判断 python/frontend 变更）、`test`（启动服务健康检查）、`frontend`（前端语法检查）三个 job |
 | `.gitignore` | Git 忽略规则 |
 | `LICENSE` | 许可证 |
 
-## app/ 核心模块
+## app/ 模块职责
+
+代码按功能拆分为两层：**共享内核 `app/core/`**（基础设施 + 跨功能领域服务）与**功能 App `app/apps/<feature>/`**（每个 App 自带视图，业务逻辑放 `service.py`，见下一节）。下表为模块职责索引（`__init__.py`/`__main__.py`/`wsgi.py` 仍在 `app/` 根）。
 
 | 模块 | 作用 |
 |---|---|
@@ -86,9 +88,9 @@ upstash 后端所有键统一加 `rusin:` 前缀；memory 后端 get/set 带 dee
 | `auth.py` | PBKDF2-HMAC-SHA256 密码哈希（兼容旧单轮 SHA-256 可验证、登录后自然升级）、会话 token 生成/校验（存哈希）、过期会话清理、密码复杂度检查 |
 | `notes.py` | 笔记读写走 `storage` 后端（无路径穿越代码——校验交给 `validate_username`/`validate_note_id` 正则）、ID/用户名校验（含保留名单）、`note_exists`、统计（30s TTL 缓存）、随机 ID 生成、过期笔记清理 |
 | `tags.py` / `folders.py` / `pins.py` | 笔记标签 / 文件夹（`/` 分层单归属，`build_folder_tree` 建树）/ 置顶；三者结构一致：内存缓存 + `storage.lock` 内重读合并 + 整值写回 KV（`note_tags`/`note_folders`/`note_pins`），并提供 `rename_user_*` 供改用户名迁移 |
-| `todos.py` | 首页工作台待办：KV 键 `todos`，`{username: [{id, text, done, created_at}]}`，受 `todos.max_items`/`max_length` 约束，写路径同上 |
-| `images.py` / `attachments.py` | 图床与附件的校验/配额/存取：图片魔数嗅探（PNG/JPEG/GIF/WebP，不依赖 Pillow）、扩展名黑名单（`attachments.blocked_extensions`，配置值不带前导点、代码自动补 `.`）、单文件/单笔记/用户三级配额、`note_attachment_usage` 按笔记内容统计已引用附件；附件下载/上传经 `concurrency.py` 的 `download_guard`/`upload_guard` 闸门（见下方安全约定） |
-| `comments.py` | 评论校验与读取接口（目标类型 `note`/`share`、长度、分页、冷却），实际存取在 `store.py` 评论段 |
+| `apps/todos/service.py` | 首页工作台待办：KV 键 `todos`，`{username: [{id, text, done, created_at}]}`，受 `todos.max_items`/`max_length` 约束，写路径同上 |
+| `apps/images/service.py` / `apps/attachments/service.py` | 图床与附件的校验/配额/存取：图片魔数嗅探（PNG/JPEG/GIF/WebP，不依赖 Pillow）、扩展名黑名单（`attachments.blocked_extensions`，配置值不带前导点、代码自动补 `.`）、单文件/单笔记/用户三级配额、`note_attachment_usage` 按笔记内容统计已引用附件；附件下载/上传经 `concurrency.py` 的 `download_guard`/`upload_guard` 闸门（见下方安全约定） |
+| `apps/comments/service.py` | 评论校验与读取接口（目标类型 `note`/`share`、长度、分页、冷却），实际存取在 `store.py` 评论段 |
 | `middleware.py` | `before_request` 钩子：向 `flask.g` 写入 `client_ip`/`client_ip_source`/`lang`/`theme`/`current_user`/`rate_limit_exempt`；命中 `ip_blocklist` 直接 403；`SERVERLESS` 时调用 `_opportunistic_cleanup()`（节流执行过期会话/笔记清理 + 视图刷盘）；`get_client_ip()` 委托 `ip_utils.analyze_client_ip`（仅可信代理才采信代理头） |
 | `ip_utils.py` | **客户端 IP 安全解析（防 XFF 伪造）**：`parse_ip`（严格 IP 规范化，支持 `ip:port`/`[ipv6]:port`/IPv4-mapped）、`analyze_client_ip`（只有 TCP 直连对端命中 `trusted_proxies` 才采信代理头；XFF 从右往左、跳过可信代理取真实客户端；`"*"` 为按 `proxy_hops` 取值的兼容模式）、`ip_in_any`（CIDR + 预设 `loopback`/`private`/`cloudflare`，带解析缓存）、`note_ignored_proxy_headers`（伪造告警节流）、`clear_caches` |
 | `concurrency.py` | **进程内并发闸门**（防慢速长连接占满 worker，#191）：`ConcurrencyLimiter.try_acquire(key, limit)` 返回 `Slot`（超限返回 `None`，`limit<=0` 返回不计数的一次性 Slot），`Slot.release()` **幂等**（可同时挂在生成器 `finally` 与 `Response.call_on_close`）；`active/total_active/peak/rejected/reset` + `reset_all()`（测试隔离用）。实例在 `attachments.py`：`download_guard`/`upload_guard`，key 为 `user:<名>`（未登录按 `ip:<ip>`），上限默认各 1 个在途队列 |
@@ -100,27 +102,30 @@ upstash 后端所有键统一加 `rusin:` 前缀；memory 后端 get/set 带 dee
 | `feature_flags.py` | **功能开关（#90）**：`FEATURES` 注册表共 17 项（world_notes / benben / share_links / open_register / note_refs / note_tags / note_folders / note_pins / heading_anchors / markdown_alerts / note_images / note_attachments / comments / latex_render / code_highlight / avatar / orgs）+ 运行时状态（KV 键 `feature_flags`，进程内 5s TTL 缓存）；`feature_enabled(key)` 查询、`set_flags` 整体写入、`require_feature(key)` 视图装饰器（停用→404，须放 `@bp.route` 后、缓存/限流装饰器前）、`is_admin`（`RUSIN_ADMIN` env + config `admin_users` 并集）；默认值：`_HERITAGE_DEFAULTS` 中的 7 个历史功能（note_refs/latex_render/code_highlight/avatar/note_images/note_attachments/comments）沿用各自配置段，其余读 `features` 段（缺省 True） |
 | `plugins.py` | 插件系统：`*.plugin.zip` 投放到 `RUSIN_DATA_DIR` 启动时解压安装到 `plugins/<namespace>/`（zip 路径穿越/体积防护、根目录白名单、auth_token 校验、命名空间冲突检查）并注册蓝图；`start_update_thread` 后台每 `update_interval_hours` 检查上游、`last_update` 超 `update_stale_days` 拉取 `upstream_repo` 重装；无服务器只读盘环境自动禁用 |
 | `background.py` | 后台守护线程：会话清理、分享视图定期刷盘、过期笔记清理（`start_background_threads()` 一次性启动；`SERVERLESS` 时为无操作） |
-| `user_settings.py` | 用户设置业务：简洁模式（账号级偏好，存 users.json，`middleware` 注入 `g.simple_mode` 供服务端渲染）、修改密码（校验原密码/复杂度，注销其它会话）、修改用户名（先复制笔记/图床/附件到新命名空间，再迁移标签/文件夹/置顶/分享/犇犇/评论/组织等用户标识，最后删除旧数据） |
+| `apps/user/service.py` | 用户设置业务：修改密码（校验原密码/复杂度，注销其它会话）、修改用户名（先复制笔记/图床/附件到新命名空间，再迁移标签/文件夹/置顶/分享/犇犇/评论/组织等用户标识，最后删除旧数据）；简洁模式的读写实现在 `core/prefs.py`（`middleware` 注入 `g.simple_mode`），本文件再导出以兼容旧调用 |
 
-## app/views/ 蓝图与路由
+## app/apps/ 功能 App 与路由
 
-注册顺序在 `views/__init__.py`：home → auth → benben → static_routes → world → user → share → admin → comments → org → todos → **插件蓝图** → **world_short（必须最后，因含 catch-all 短链）**。
+每个功能 App 位于 `app/apps/<feature>/`，自带 `views.py`（蓝图），业务逻辑放 `service.py`。注册顺序在 `app/apps/registry.py`：home → auth → benben → static → notes → images → attachments → user → share → world → admin → comments → org → todos → **插件蓝图** → **world_short（必须最后，因含 catch-all 短链）**。
 
 | 蓝图 | 模块 | 路由与作用 |
 |---|---|---|
-| home | `home.py` | `/` 首页（匿名态为功能开关过滤的卡片；登录态为工作台：最近笔记 + 待办清单，`cache.cached` 对登录态/简洁模式跳过缓存；简洁模式 302 直接到新建笔记）、`/count` 统计（含「功能状态」呈现区）、`/disclaimer` 免责声明 |
-| auth | `auth.py` | `/register` GET/POST（注册限流，密码复杂度校验；受 `open_register` 开关控制）、`/login` GET/POST、`/logout`、`/lang/<lang>` 语言切换（回跳 Referer） |
-| world | `world.py` | `/world`（生成随机 ID 重定向）、`/world/<id>` GET/POST（公开笔记，POST 走 SAVE 限流）、`/world/<id>/md` 与 `/world/<id>.md` Markdown 只读渲染；全部受 `world_notes` 开关控制 |
-| world_short | `world_short.py` | `/<id>`（短链重定向到 `/world/<id>`）、`/<id>.md`（短链 Markdown），catch-all 必须最后注册；受 `world_notes` 开关控制 |
-| user | `user.py` | `/user/<u>/` 笔记列表（支持 `?tag=` / `?folder=` 筛选）、`/user/<u>/new` 新建、`/user/<u>/settings` GET/POST 用户设置（简洁模式 / 修改密码 / 修改用户名，见 `user_settings.py`）、`/user/<u>/<id>` GET/POST、`/user/<u>/<id>/delete`、`/user/<u>/<id>/pin`（`note_pins`）、`/user/<u>/<id>/md`、`/user/<u>/refs` 引用搜索（`note_refs`）、`/user/<u>/images` GET/POST/delete（图床管理，`note_images`）、`/user/<u>/attachments` GET/POST/delete（附件管理，`note_attachments`）、`/user/<u>/shares` 分享管理（创建/删除，`share_links`）。全部 `_require_auth`（当前会话用户须等于 URL 用户名，否则 401） |
-| share | `share.py` | `/share/<token>`（可编辑则进编辑页、只读则进 Markdown 页；每次访问 `increment_share_views`）、POST 写回分享者原笔记（可编辑才允许，否则 403）、`/share/<token>/md` 与 `/share/<token>.md`；全部受 `share_links` 开关控制 |
-| benben | `benben.py` | `/benben` GET 分页查看（新→旧，`page` 参数）、POST 发布（需登录 + 内容长度 + 单用户冷却 + 限流）；受 `benben` 开关控制 |
-| admin | `admin.py` | `/admin/features` GET/POST 功能开关滑块管理页（仅管理员，非管理员 404；POST 保存后 `cache.clear()`） |
-| comments | `comments.py` | `/comments/<target_type>/<path:target_id>` GET（分页拉取评论，`cache.cached`）/ POST（发布，带冷却 + 限流）；`target_type` 为 `note` / `share`；受 `comments` 开关控制 |
-| org | `org.py` | `/org/mine`、`/org/create`、`/org/join/<invite_code>`、`/org/join-public/<org>`、`/org/join-approve/<org>`；`/org/<org>`（首页）、`/org/<org>/notes` 列表、`/org/<org>/notes/new`、`/org/<org>/notes/<id>` 查看、`.../edit`、`.../delete`、`/org/<org>/members`、`/org/<org>/settings`、`/org/<org>/invites`、`/org/<org>/requests`、`/org/<org>/leave`；组织笔记以 `_orgs/<org>` 为存储用户名，权限经 `_require_org_member/admin/owner`；全部受 `orgs` 开关控制 |
-| todos | `todos.py` | `/user/<u>/todos/add`、`/user/<u>/todos/<id>/toggle`、`/user/<u>/todos/<id>/delete`、`/user/<u>/todos/clear-done`（均 POST + 限流，模块内 `_require_auth` 校验会话用户等于 URL 用户名，成功后 302 回 `/`） |
-| static_routes | `static_routes.py` | `/favicon.ico`（内存缓存）、`/image/<name>`（`app/static/image/` 内置静态资源）、`/image/<u>/<id>`（用户图床，公开 + `public, max-age=86400`）、`/attachment/<u>/<id>`（用户附件：**默认禁止匿名下载**（未登录 401，`attachments.allow_anonymous_download` 可放开）、单用户同时下载上限（超限 429 + `Retry-After`）、按块流式产出并在结束/断开时释放并发槽位、缓存 `private`、路由带 `download_rate_limit` 每 IP 限流） |
-| — | `_helpers.py` | 共享：`check_note_id()`（非法 ID 分情况 400/404）、`build_note_context()`（构造 note_edit/note_md 模板上下文） |
+| home | `home/views.py` | `/` 首页（匿名态为功能开关过滤的卡片；登录态为工作台：最近笔记 + 待办清单，`cache.cached` 对登录态/简洁模式跳过缓存；简洁模式 302 直接到新建笔记）、`/count` 统计（含「功能状态」呈现区）、`/disclaimer` 免责声明 |
+| auth | `auth/views.py` | `/register` GET/POST（注册限流，密码复杂度校验；受 `open_register` 开关控制）、`/login` GET/POST、`/logout`、`/lang/<lang>` 语言切换（回跳 Referer） |
+| world | `world/views.py` | `/world`（生成随机 ID 重定向）、`/world/<id>` GET/POST（公开笔记，POST 走 SAVE 限流）、`/world/<id>/md` 与 `/world/<id>.md` Markdown 只读渲染；全部受 `world_notes` 开关控制 |
+| world_short | `world/short.py` | `/<id>`（短链重定向到 `/world/<id>`）、`/<id>.md`（短链 Markdown），catch-all 必须最后注册；受 `world_notes` 开关控制 |
+| notes | `notes/views.py` | `/user/<u>/` 笔记列表（支持 `?tag=` / `?folder=` 筛选）、`/user/<u>/new` 新建、`/user/<u>/<id>` GET/POST、`/user/<u>/<id>/delete`、`/user/<u>/<id>/pin`（`note_pins`）、`/user/<u>/<id>/md`、`/user/<u>/refs` 引用搜索（`note_refs`）。均经 `common.helpers.require_auth`（当前会话用户须等于 URL 用户名，否则 401） |
+| images | `images/views.py` | `/user/<u>/images` GET/POST/delete（图床管理，`note_images`）、`/image/<u>/<id>`（公开服务，`public, max-age=86400`） |
+| attachments | `attachments/views.py` | `/user/<u>/attachments` GET/POST/delete（附件管理，`note_attachments`）、`/attachment/<u>/<id>`（下载，见下方安全约定） |
+| user | `user/views.py` | `/user/<u>/settings` GET/POST 用户设置（简洁模式 / 修改密码 / 修改用户名，业务见 `user/service.py`） |
+| share | `share/views.py` | `/share/<token>`（可编辑则进编辑页、只读则进 Markdown 页；每次访问 `increment_share_views`）、POST 写回分享者原笔记（可编辑才允许，否则 403）、`/share/<token>/md` 与 `/share/<token>.md`；全部受 `share_links` 开关控制 |
+| benben | `benben/views.py` | `/benben` GET 分页查看（新→旧，`page` 参数）、POST 发布（需登录 + 内容长度 + 单用户冷却 + 限流）；受 `benben` 开关控制 |
+| admin | `admin/views.py` | `/admin/features` GET/POST 功能开关滑块管理页（仅管理员，非管理员 404；POST 保存后 `cache.clear()`） |
+| comments | `comments/views.py` | `/comments/<target_type>/<path:target_id>` GET（分页拉取评论，`cache.cached`）/ POST（发布，带冷却 + 限流）；`target_type` 为 `note` / `share`；受 `comments` 开关控制 |
+| org | `org/views.py` | `/org/mine`、`/org/create`、`/org/join/<invite_code>`、`/org/join-public/<org>`、`/org/join-approve/<org>`；`/org/<org>`（首页）、`/org/<org>/notes` 列表、`/org/<org>/notes/new`、`/org/<org>/notes/<id>` 查看、`.../edit`、`.../delete`、`/org/<org>/members`、`/org/<org>/settings`、`/org/<org>/invites`、`/org/<org>/requests`、`/org/<org>/leave`；组织笔记以 `_orgs/<org>` 为存储用户名，权限经 `_require_org_member/admin/owner`；全部受 `orgs` 开关控制 |
+| todos | `todos/views.py` | `/user/<u>/todos/add`、`/user/<u>/todos/<id>/toggle`、`/user/<u>/todos/<id>/delete`、`/user/<u>/todos/clear-done`（均 POST + 限流，模块内 `_require_auth` 校验会话用户等于 URL 用户名，成功后 302 回 `/`） |
+| static_routes | `static/views.py` | `/favicon.ico`（内存缓存）、`/image/<name>`（`app/static/image/` 内置静态资源） |
+| — | `common/helpers.py` | 共享：`require_auth()`（会话用户须等于 URL 用户名，否则 401）、`check_note_id()`（非法 ID 分情况 400/404）、`build_note_context()`（构造 note_edit/note_md 模板上下文）、`page_cache_key()`/`purge_page_cache()` |
 
 ## 模板（templates/，Jinja2）
 
@@ -139,7 +144,7 @@ upstash 后端所有键统一加 `rusin:` 前缀；memory 后端 get/set 带 dee
 - **CSRF**：Flask-WTF 全站开启（`WTF_CSRF_TIME_LIMIT=None`）
 - **限流**：Flask-Limiter，key 为安全解析后的客户端 IP。分层：路由级 POST `rate_limit`（30/60s）、GET `get_rate_limit`（45/60s，仅装饰器显式标注的路由，首页/`/count`/静态资源未标）、保存类 POST `save_rate_limit`（120/60s）、注册 `register_rate_limit`（1/120s）、**全站每 IP 总上限 `ip_rate_limit`（应用级作用域，300/60s，对所有路由累计生效）**。视图函数上用 `@limiter.limit(lambda: f"...")` 显式标注
 - **客户端 IP / 防 XFF 伪造**：`config.TRUST_PROXY_HEADERS` 默认 false（一律用 TCP 直连 IP）；置 true 后仍需 TCP 直连对端命中 `trusted_proxies`（默认 `["loopback","private"]`，可加 `"cloudflare"`；`"*"` 为不安全兼容模式）才采信代理头。头部值必须为合法 IP（单个头部超 256 字节整段丢弃、非法值丢弃，XFF 最多 16 项），XFF 从右往左解析并逐层跳过可信代理。**不要使用 `ProxyFix`**（会被伪造 XFF 改写 `remote_addr`）。`ip_blocklist` 命中直接 403，`ip_allowlist` 命中免限流；环境变量 `RUSIN_TRUSTED_PROXIES`/`RUSIN_PROXY_HOPS`/`RUSIN_IP_ALLOWLIST`/`RUSIN_IP_BLOCKLIST` 可覆盖/追加。测试：`pytest tests/test_ip_limiter.py`
-- **单用户并发闸门（长连接防护，#191）**：IP 限流只算「单位时间请求数」，拦不住「少量请求、超长时间占用」（如发起上千个队列、每个 1KB/s，或用 100 线程下载 100 个文件打满出站带宽）。附件下载/上传因此在限流之外再经 `app/concurrency.py` 限制**单用户同时在途数**（`attachments.max_concurrent_downloads` 默认 1、`max_concurrent_uploads` 默认 1，即每账号 1 个下载队列 + 1 个上传队列，`0` = 不限）：超限即拒绝、不排队；下载 `abort(429, description=...)`（全局 429 处理器补 `Retry-After`），上传直接返回 429 JSON（`/user/*/attachments` 的 POST 在全局处理器里也走 JSON 分支）。槽位必须在正常结束（生成器 `finally`）、客户端断开（`Response.call_on_close`）两条路径归还，`Slot` 幂等可双重挂载；视图内任何异常/404 也要先释放。计数在进程内，N 个 worker ≈ `N × 上限`。测试：`pytest tests/test_attachments.py`
+- **单用户并发闸门（长连接防护，#191）**：IP 限流只算「单位时间请求数」，拦不住「少量请求、超长时间占用」（如发起上千个队列、每个 1KB/s，或用 100 线程下载 100 个文件打满出站带宽）。附件下载/上传因此在限流之外再经 `app/core/concurrency.py` 限制**单用户同时在途数**（`attachments.max_concurrent_downloads` 默认 1、`max_concurrent_uploads` 默认 1，即每账号 1 个下载队列 + 1 个上传队列，`0` = 不限）：超限即拒绝、不排队；下载 `abort(429, description=...)`（全局 429 处理器补 `Retry-After`），上传直接返回 429 JSON（`/user/*/attachments` 的 POST 在全局处理器里也走 JSON 分支）。槽位必须在正常结束（生成器 `finally`）、客户端断开（`Response.call_on_close`）两条路径归还，`Slot` 幂等可双重挂载；视图内任何异常/404 也要先释放。计数在进程内，N 个 worker ≈ `N × 上限`。测试：`pytest tests/test_attachments.py`
 - **附件下载权限**：`/attachment/<u>/<id>` 默认仅登录可下载（未登录 401 + 登录提示文案），响应缓存为 `private`（`public` 会让共享缓存把附件回放给匿名访客）；当前策略为「登录用户凭链接即可下载」，如需「仅本人可下载」须在视图中补所有权校验（测试 B3 记录了当前语义）
 - **XSS**：Markdown 渲染后经 bleach 白名单清洗（`utils.render_markdown_html`）；提示卡片输出 `<details>/<summary>` 前同样过 bleach，新增标签/属性须同步 `allowed_tags`/`allowed_attrs`
 - **密码**：PBKDF2 10 万次迭代慢哈希 + 常量时间比较；`PW_MAX_LENGTH` 硬上限 128 防超长输入 CPU DoS
@@ -171,8 +176,8 @@ upstash 后端所有键统一加 `rusin:` 前缀；memory 后端 get/set 带 dee
 
 ## 常见改动点
 
-- **新增页面/路由**：在 `app/views/` 加蓝图模块并更新 `views/__init__.py` 注册；若新增根级 catch-all 路由注意注册顺序
-- **新增翻译文案**：`i18n.py` 的 zh/en 字典必须成对添加；模板用 `{{ t('key') }}`
+- **新增页面/路由**：在 `app/apps/<feature>/views.py` 加蓝图模块并更新 `app/apps/registry.py` 注册（顺序敏感：插件蓝图在 world_short catch-all 前）；若新增根级 catch-all 路由注意注册顺序
+- **新增翻译文案**：`app/core/i18n.py` 的 zh/en 字典必须成对添加；模板用 `{{ t('key') }}`
 - **新增头像显示位**：模板直接用 `{{ get_avatar(username) }}`（已由 i18n 注入全局），空串时用 `{% if av %}` 隐藏 `<img>`；生成逻辑见 `utils.get_avatar_url`，配置在 `config.json` 的 `avatar`
 - **改限流**：`config.json` 对应键 + 视图函数 `@limiter.limit` 字符串
 - **改数据格式**：留意 `store.py`/`auth.py` 中的旧数据兼容注释（BUG-7 损坏数据跳过等）；加字段时给 `get_*` 用 `.get()` 兜底

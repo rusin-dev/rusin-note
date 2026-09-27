@@ -12,14 +12,14 @@ import secrets
 
 from flask import Flask, render_template
 
-from . import config
-from .background import start_background_threads
-from .extensions import csrf, limiter, cache
-from .i18n import register_i18n
-from .ip_utils import log_ip_policy
-from .middleware import register_request_hooks
-from .storage import StorageError, storage
-from .views import register_blueprints
+from app.core import config
+from app.core.background import start_background_threads
+from app.core.extensions import csrf, limiter, cache
+from app.core.i18n import register_i18n
+from app.core.ip_utils import log_ip_policy
+from app.core.middleware import register_request_hooks
+from app.core.storage import StorageError, storage
+from app.apps.registry import register_blueprints
 
 logger = logging.getLogger("rusin-note")
 
@@ -99,7 +99,7 @@ def create_app() -> Flask:
     )
 
     # 注册 Jinja filter：format_note_time（将 Unix 时间戳格式化为可读时间）
-    from .utils import format_note_time
+    from app.core.utils import format_note_time
     app.jinja_env.filters["format_note_time"] = format_note_time
 
     secret = os.environ.get("RUSIN_SECRET_KEY")
@@ -137,7 +137,7 @@ def create_app() -> Flask:
     if not app.config.get("TESTING") and not config.SERVERLESS:
         start_background_threads()
         # 插件 Phase 2：定期检查上游更新（Phase 1 安装在 register_blueprints 内完成）
-        from . import plugins
+        from app.core import plugins
         plugins.start_update_thread(app)
 
     return app
@@ -147,7 +147,7 @@ def register_error_handlers(app: Flask) -> None:
     from flask import abort, g, jsonify, make_response, request
 
     from flask_wtf.csrf import CSRFError
-    from .i18n import t
+    from app.core.i18n import t
 
     @app.errorhandler(CSRFError)
     def err_csrf(e):
@@ -185,7 +185,7 @@ def register_error_handlers(app: Flask) -> None:
     def err_413(e):
         if request.path.startswith("/user/") and request.method == "POST":
             lang = getattr(g, "lang", "zh")
-            from . import config as app_config
+            from app.core import config as app_config
             return jsonify({"error": t(lang, "err_file_too_large", max=app_config.MAX_ATTACHMENT_SIZE_KB)}), 413
         return render_template("errors/400.html", message="Request body too large"), 413
 

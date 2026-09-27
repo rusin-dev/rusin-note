@@ -13,9 +13,9 @@ import os
 
 from support import expect
 
-from app import config
-from app.storage_sqlite import SqliteBackend
-from app.storage import select_backend
+from app.core import config
+from app.core.storage_sqlite import SqliteBackend
+from app.core.storage import select_backend
 
 
 def _backend(tmp_path) -> SqliteBackend:

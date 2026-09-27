@@ -18,9 +18,9 @@ import time
 
 import pytest
 
-from app.auth import hash_token
-from app.feature_flags import feature_enabled, set_flags
-from app.store import (
+from app.core.auth import hash_token
+from app.core.feature_flags import feature_enabled, set_flags
+from app.core.store import (
     add_org_member,
     approve_join_request,
     create_join_request,

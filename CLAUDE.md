@@ -17,7 +17,7 @@
 - 前端检查：`python tests/frontend_check.py`（Jinja2 语法 + 内联 JS/CSS + JSON）
 
 ## 数据存储
-存储层统一在 `app/storage.py`（`storage` 单例），后端由 `RUSIN_STORAGE` 显式指定或自动识别：
+存储层统一在 `app/core/storage.py`（`storage` 单例），后端由 `RUSIN_STORAGE` 显式指定或自动识别：
 - `sqlite`（默认）：`<DATA_DIR>/index.db` 存索引，内容 JSON 落盘
 - `file`：纯 JSON/二进制文件落盘（兼容旧部署）
 - `upstash` / `postgres`：外部 KV / PostgreSQL，多实例共享、冷启动不丢
@@ -30,16 +30,18 @@
 ## 关键安全约定
 - **CSRF**：全站启用，不要在任何表单中省略 `{{ csrf_token() }}`。
 - **限流**：基于 IP，使用 Flask-Limiter；新增路由时务必添加 `@limiter.limit` 装饰器。限流存储可用 `REDIS_URL` 切换为共享 Redis；另有 `ip_rate_limit` 全站每 IP 总上限。
-- **客户端 IP**：一律经 `app/ip_utils.py` 解析（仅可信代理才采信代理头，XFF 从右往左），不要直接读 `request.remote_addr` 或用 `ProxyFix`。
-- **附件下载/上传**：经 `app/concurrency.py` 的进程内闸门限制单用户在途数（`attachments.max_concurrent_*`），`Slot.release()` 幂等、异常/断开/正常结束三条路径都要归还；附件默认禁止匿名下载（未登录 401）。
+- **客户端 IP**：一律经 `app/core/ip_utils.py` 解析（仅可信代理才采信代理头，XFF 从右往左），不要直接读 `request.remote_addr` 或用 `ProxyFix`。
+- **附件下载/上传**：经 `app/core/concurrency.py` 的进程内闸门限制单用户在途数（`attachments.max_concurrent_*`），`Slot.release()` 幂等、异常/断开/正常结束三条路径都要归还；附件默认禁止匿名下载（未登录 401）。
 - **XSS 防护**：所有 Markdown 渲染必须通过 `utils.render_markdown_html`（内部使用 bleach 清洗）；新增标签/属性须同步 `allowed_tags`/`allowed_attrs` 白名单。
 - **路径安全**：笔记 ID 和用户名必须符合正则 `^[a-zA-Z0-9_\-]+$`，避免路径穿越。
 - **Cookie**：生产环境应开启 `secure_cookies`（仓库 config.json 已默认开启，本地开发请关闭）。
 
 ## 架构要点
 - 入口：`app/__main__.py`（waitress）、`app/wsgi.py`（gunicorn）、`api/index.py`（Vercel）、`lambda_handler.py`（Lambda）
-- 核心模块：`storage.py` / `storage_sqlite.py`（存储）、`store.py`（用户/会话/分享/犇犇/评论/组织）、`auth.py`（认证）、`notes.py`（笔记）、`tags.py`/`folders.py`/`pins.py`/`todos.py`（笔记组织与待办）、`images.py`/`attachments.py`（图床/附件）、`comments.py`、`user_settings.py`、`feature_flags.py`、`plugins.py`、`middleware.py`、`ip_utils.py`（客户端 IP 安全解析）、`concurrency.py`（单用户在途请求闸门）
-- 路由蓝图（注册顺序见 `app/views/__init__.py`）：home, auth, benben, static_routes, world, user, share, admin, comments, org, todos, 插件蓝图, world_short（catch-all 短链必须最后注册）
+- 代码分层：**共享内核 `app/core/`** + **功能 App `app/apps/<feature>/`**（每个 App 自带 `views.py`，必要时带 `service.py`）
+- 核心模块（`app/core/`）：`storage.py` / `storage_sqlite.py`（存储）、`store.py`（用户/会话/分享/犇犇/评论/组织）、`auth.py`（认证）、`notes.py`（笔记）、`tags.py`/`folders.py`/`pins.py`（笔记组织）、`prefs.py`（简洁模式）、`feature_flags.py`、`plugins.py`、`middleware.py`、`ip_utils.py`（客户端 IP 安全解析）、`concurrency.py`（单用户在途请求闸门）
+- 功能 App（`app/apps/`）：home / auth / notes / world / share / benben / comments / org / todos / images / attachments / user / admin / static（`comments`/`todos`/`images`/`attachments`/`user` 含 `service.py`）
+- 路由蓝图（注册顺序见 `app/apps/registry.py`）：home, auth, benben, static, notes, images, attachments, user, share, world, admin, comments, org, todos, 插件蓝图, world_short（catch-all 短链必须最后注册）
 - 功能开关：管理员在 `/admin/features` 切换，状态存 `feature_flags` KV 键，停用功能路由 404
 - 模板：Jinja2，支持 `{{ t('key') }}` 多语言
 

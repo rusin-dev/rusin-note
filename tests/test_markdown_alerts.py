@@ -10,8 +10,8 @@ from __future__ import annotations
 
 import logging
 
-from app.feature_flags import FEATURE_KEYS, set_flags
-from app.utils import render_markdown_html
+from app.core.feature_flags import FEATURE_KEYS, set_flags
+from app.core.utils import render_markdown_html
 from support import create_note, expect, register_and_login
 
 logger = logging.getLogger("rusin.tests.alerts")

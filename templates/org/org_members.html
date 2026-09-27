@@ -17,7 +17,7 @@
     <tbody>
         {% for username, info in members.items() %}
         <tr>
-            <td><a href="{{ url_for('user.user_root', username=username) }}">{{ username|e }}</a></td>
+            <td><a href="{{ url_for('notes.user_root', username=username) }}">{{ username|e }}</a></td>
             <td><span class="role-badge role-{{ info.role }}">{{ t('org_role_' ~ info.role) }}</span></td>
             <td>{{ info.joined_at | format_note_time }}</td>
         </tr>
