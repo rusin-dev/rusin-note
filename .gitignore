@@ -24,6 +24,7 @@ log/
 *.tmp
 *.lock
 attachments/
+!/app/apps/attachments/
 
 # 本地运行时数据
 /data/
