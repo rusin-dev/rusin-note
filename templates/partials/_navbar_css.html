@@ -52,6 +52,8 @@
         }
         .navbar .nav-links a.active { color: var(--text); }
         .navbar .nav-links a.active::after { opacity: 1; transform: scaleX(1); }
+        /* 悬浮：下划线同样平滑展开（active 常驻，优先级更高） */
+        .navbar .nav-links a:not(.active):hover::after { opacity: 0.7; transform: scaleX(1); }
         .navbar .nav-links .nav-icon-btn::after { left: 10px; right: 10px; }
         .navbar .nav-links i { font-size: 13px; }
         /* 图标入口（新建笔记 / 分享管理）：文字常显，无悬浮展开动效（悬浮只发光） */
