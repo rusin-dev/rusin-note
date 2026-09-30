@@ -149,7 +149,8 @@ def shares_post(username):
         return _render_shares(username, error=t(getattr(g, "lang", "zh"), "err_share_invalid_note")), 400
     if not note_exists(username, note_id):
         return _render_shares(username, error=t(getattr(g, "lang", "zh"), "err_share_note_missing")), 400
-    create_share(username, note_id, editable)
+    if not create_share(username, note_id, editable):
+        return _render_shares(username, error=t(getattr(g, "lang", "zh"), "err_settings_save_failed")), 500
     purge_page_cache([f"/user/{username}/shares", f"/user/{username}/shares/"],
                      viewers=(username,))
     return redirect(url_for("share.shares_get", username=username))
@@ -167,8 +168,10 @@ def shares_delete(username):
         abort(400)
     if not delete_share(username, token):
         return _render_shares(username, error=t(getattr(g, "lang", "zh"), "err_share_delete")), 400
-    purge_page_cache([f"/user/{username}/shares", f"/user/{username}/shares/"],
-                     viewers=(username,))
+    purge_page_cache([f"/user/{username}/shares", f"/user/{username}/shares/",
+                      f"/share/{token}", f"/share/{token}/",
+                      f"/share/{token}/md", f"/share/{token}.md"],
+                     viewers=(None, username))
     return redirect(url_for("share.shares_get", username=username))
 
 

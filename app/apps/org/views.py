@@ -162,9 +162,9 @@ def org_note_view(org_name, note_id):
         abort(404)
     _require_org_member(org_name)
     username = _org_username(org_name)
-    content = read_note(username, note_id)
-    if content is None:
+    if not note_exists(username, note_id):
         abort(404)
+    content = read_note(username, note_id)
     mtime = get_note_mtime(username, note_id)
     html = render_markdown_html(content)
     return render_template(
@@ -220,9 +220,9 @@ def org_note_edit(org_name, note_id):
         abort(404)
     _require_org_member(org_name, "member")
     username = _org_username(org_name)
-    content = read_note(username, note_id)
-    if content is None:
+    if not note_exists(username, note_id):
         abort(404)
+    content = read_note(username, note_id)
 
     if request.method == "GET":
         return render_template(
@@ -358,7 +358,14 @@ def org_invites(org_name):
         action = request.form.get("action")
         if action == "create_invite":
             invite_type = request.form.get("type", "invite")
-            expires_days = int(request.form.get("expires_days", 7))
+            if invite_type not in ("invite", "approve"):
+                invite_type = "invite"
+            try:
+                expires_days = int(request.form.get("expires_days", 7))
+            except (TypeError, ValueError):
+                expires_days = 7
+            # 负数/超大值会造出立即过期或永不过期的邀请码
+            expires_days = min(max(expires_days, 1), 365)
             code = create_org_invite(org_name, get_current_user(), invite_type, expires_days)
             if code:
                 return render_template(
@@ -371,7 +378,9 @@ def org_invites(org_name):
             abort(500)
         elif action == "delete_invite":
             code = request.form.get("code", "")
-            delete_org_invite(code)
+            # 必须限定在本组织：邀请码是全表键，只校验当前组织的管理员身份
+            # 会让 A 组织管理员能销毁 B 组织待用的邀请码
+            delete_org_invite(code, org_name)
             return redirect(url_for("org.org_invites", org_name=org_name))
 
     return render_template(

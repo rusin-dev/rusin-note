@@ -275,7 +275,7 @@ def render_markdown_html(content: str, ref_namespace: str | None = None,
                 lang = getattr(g, "lang", "zh") if has_request_context() else "zh"
                 extensions.append(_markdown_alert_extension(_alert_labels(lang)))
             raw_html = config.markdown.markdown(content, extensions=extensions)
-            raw_html = _highlight_code_blocks(raw_html)
+            raw_html = _normalize_table_alignment(_highlight_code_blocks(raw_html))
             allowed_tags = [
                 'p', 'br', 'strong', 'em', 'u', 'del', 'strike', 'a',
                 'ul', 'ol', 'li', 'blockquote', 'pre', 'code',
@@ -289,6 +289,10 @@ def render_markdown_html(content: str, ref_namespace: str | None = None,
                 'img': ['src', 'alt', 'title', 'width', 'height'],
                 'details': ['open'],
                 'i': ['aria-hidden'],
+                # markdown 的 tables 扩展会同时写 align 与 style="text-align:…"，
+                # 只放行取值为固定关键字的 align（style 仍整体禁止），否则对齐静默丢失
+                'th': ['align'],
+                'td': ['align'],
             }
             return config.bleach.clean(
                 raw_html, tags=allowed_tags, attributes=allowed_attrs, strip=True
@@ -306,7 +310,7 @@ _code_block_re = re.compile(
 )
 
 
-def _highlight_code_blocks(html: str) -> str:
+def _highlight_code_blocks(markup: str) -> str:
     """将 HTML 中的 fenced code block 用 Pygments 重新着色。
 
     无法识别语言时保留原样（交由客户端 highlight.js 处理）。
@@ -316,8 +320,9 @@ def _highlight_code_blocks(html: str) -> str:
 
     def _replace(match: re.Match) -> str:
         lang = match.group(1).lower()
-        code = match.group(2)
-        # 转义 HTML 实体（markdown 输出中 &lt; 等已由 markdown 处理，此处取原始字符）
+        # markdown 输出的代码正文已是 HTML 实体，Pygments 需要原始字符，
+        # 否则 < > & " 会被二次转义，页面上显示成字面量
+        code = html.unescape(match.group(2))
         try:
             lexer = get_lexer_by_name(lang)
         except Exception:
@@ -330,9 +335,24 @@ def _highlight_code_blocks(html: str) -> str:
             highlighted = buf.getvalue()
         except Exception:
             return match.group(0)
-        return f'<pre><code class="language-{lang}">{highlighted}</code></pre>'
+        # 标记服务端已着色：客户端 highlight.js 再跑一遍会读 textContent 重建
+        # innerHTML，把 Pygments 的 token span 与标识符配色全部丢掉
+        return f'<pre><code class="language-{lang} pygments-highlighted">{highlighted}</code></pre>'
 
-    return _code_block_re.sub(_replace, html)
+    return _code_block_re.sub(_replace, markup)
+
+
+# markdown 的 tables 扩展用 style="text-align: …" 表达列对齐，而 style 整体在
+# 白名单之外（放行等于开放 CSS 注入面）。值域只有三个固定关键字，因此把它改写
+# 成 align 属性承载：既保住对齐，也不得不放宽清洗规则。
+_TABLE_ALIGN_RE = re.compile(
+    r'<(th|td)\s+style="text-align:\s*(left|center|right);?"',
+    re.IGNORECASE,
+)
+
+
+def _normalize_table_alignment(markup: str) -> str:
+    return _TABLE_ALIGN_RE.sub(r'<\1 align="\2"', markup)
 
 
 # Pygments 高亮样式缓存（亮/暗两套 CSS，生成后不再计算）
@@ -526,7 +546,8 @@ def render_code_highlight_head() -> str:
         "            var block = blocks[i];\n"
         "            if (block.getAttribute('data-ch-highlighted')) continue;\n"
         "            block.setAttribute('data-ch-highlighted', '1');\n"
-        "            if (/(?:^|\\s)language-[\\w-]+/.test(block.className)) {\n"
+        "            if (/(?:^|\\s)language-[\\w-]+/.test(block.className)\n"
+        "                    && !/(?:^|\\s)pygments-highlighted(?:\\s|$)/.test(block.className)) {\n"
         "                try { hljs.highlightElement(block); } catch (e) {}\n"
         "            }\n"
         "            function normalizeNewlines(html) {\n"

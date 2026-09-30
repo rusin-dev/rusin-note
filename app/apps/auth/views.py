@@ -63,6 +63,7 @@ def logout():
 
 
 @bp.route("/lang/<lang>")
+@limiter.limit(lambda: f"{config.GET_RATE_MAX} per {config.GET_RATE_WINDOW} second")
 def lang_switch(lang):
     if lang not in ("zh", "en"):
         abort(400)
@@ -71,7 +72,8 @@ def lang_switch(lang):
     if referer:
         ref = urllib.parse.urlparse(referer)
         location = ref.path + (("?" + ref.query) if ref.query else "")
-        if not location:
+        # 仅接受站内绝对路径：//evil.com 与 /\evil.com 都会被浏览器解析为站外地址
+        if not location.startswith("/") or location[1:2] in ("/", "\\"):
             location = "/"
     resp = make_response(redirect(location))
     resp.set_cookie(LANG_COOKIE, value=lang, max_age=31536000, samesite="Lax", path="/")

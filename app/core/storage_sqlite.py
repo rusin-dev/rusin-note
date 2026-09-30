@@ -242,7 +242,13 @@ class SqliteBackend(FileBackend):
                 except (OSError, UnicodeDecodeError):
                     continue
                 try:
-                    self.write_note(username, note_id, content)
+                    # 保留 .txt 的原始修改时间：否则所有笔记的 mtime 都变成迁移时刻，
+                    # 列表排序塌成目录顺序，过期清理也会把刚导入的旧笔记再留一个周期
+                    try:
+                        file_mtime = os.path.getmtime(txt_path)
+                    except OSError:
+                        file_mtime = None
+                    self.write_note(username, note_id, content, mtime=file_mtime)
                     os.remove(txt_path)
                 except (StorageError, OSError):
                     continue
@@ -345,7 +351,9 @@ class SqliteBackend(FileBackend):
             return content if isinstance(content, str) else None
         return data if isinstance(data, str) else None
 
-    def write_note(self, username: str, note_id: str, content: str) -> bool:
+    def write_note(self, username: str, note_id: str, content: str, *, mtime=None) -> bool:
+        """mtime 仅用于旧数据导入：需要保留原始修改时间，否则列表排序与过期清理
+        都会把迁移时刻当成最后编辑时间。"""
         path = self._note_path(username, note_id)
         if content == "":
             try:
@@ -363,7 +371,8 @@ class SqliteBackend(FileBackend):
                 return False
             return True
 
-        now = time.time()
+        # 旧数据导入沿用文件时间戳；普通写入始终用当前时间
+        now = mtime if isinstance(mtime, (int, float)) else time.time()
         created = self._note_created_at(username, note_id) or now
         os.makedirs(os.path.dirname(path), exist_ok=True)
         payload = {"content": content, "created_at": created, "updated_at": now}

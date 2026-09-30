@@ -72,6 +72,9 @@ _HERITAGE_DEFAULTS = {
     "comments": lambda: config.COMMENTS_ENABLED,
 }
 _FEATURES_CFG = config.config.get("features", {})
+# config.json 缺少的键回退到 DEFAULT_CONFIG 声明的默认值（OAuth/2FA/验证类为 False），
+# 只有两处都未登记的较新功能才默认开启。
+_DEFAULT_FEATURES = config.DEFAULT_CONFIG.get("features", {})
 
 
 def _default_of(key: str) -> bool:
@@ -80,7 +83,9 @@ def _default_of(key: str) -> bool:
             return bool(_HERITAGE_DEFAULTS[key]())
         except Exception:
             return True
-    return bool(_FEATURES_CFG.get(key, True))
+    if key in _FEATURES_CFG:
+        return bool(_FEATURES_CFG[key])
+    return bool(_DEFAULT_FEATURES.get(key, True))
 
 
 # ---------- 运行时状态（进程内缓存 + 存储后端持久化） ----------

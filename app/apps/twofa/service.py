@@ -199,11 +199,15 @@ def _verify_totp(username: str, record: dict, code: str) -> bool:
         rec = data.get(username)
         if not isinstance(rec, dict):
             return False
+        # 防重放必须在读改写里判定：上面拿到的 record 可能是并发请求尚未落盘的
+        # 旧副本，两个携带同一个验证码的请求会双双通过外层检查
+        if step <= (rec.get("last_step") or 0):
+            return False
         rec["last_step"] = step
         return True
 
-    _update(_mutate)
-    return True
+    # 落盘失败（返回 None）时不能算校验成功，否则该验证码仍可重复使用
+    return _update(_mutate) is True
 
 
 def _consume_recovery_code(username: str, code: str) -> bool:

@@ -33,6 +33,7 @@ from app.core.folders import (
     set_note_folder,
 )
 from app.core.pins import get_user_pins, toggle_note_pin
+from app.core.store import list_user_shares
 from app.core.tags import (
     count_user_tags,
     get_note_tags,
@@ -241,13 +242,19 @@ def user_note_delete(username, note_id):
     require_auth(username)
     if not note_exists(username, note_id):
         abort(404)
+    # 删除会级联清掉指向该笔记的分享（notes.write_note 内），先取回 token 才能清分享页缓存
+    tokens = [tok for tok, s in list_user_shares(username) if s.get("note_id") == note_id]
     if not write_note(username, note_id, ""):
         abort(500)
     purge_page_cache(
         ["/", f"/user/{username}", f"/user/{username}/",
          f"/user/{username}/{note_id}", f"/user/{username}/{note_id}/",
-         f"/user/{username}/{note_id}.md", f"/user/{username}/{note_id}/md"],
-        viewers=(username,),
+         f"/user/{username}/{note_id}.md", f"/user/{username}/{note_id}/md",
+         f"/user/{username}/shares", f"/user/{username}/shares/"]
+        + [f"/share/{tok}" for tok in tokens]
+        + [f"/share/{tok}/md" for tok in tokens]
+        + [f"/share/{tok}.md" for tok in tokens],
+        viewers=(None, username),
     )
     return redirect(url_for("notes.user_root", username=username))
 

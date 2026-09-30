@@ -91,7 +91,12 @@ def _get_note_lock(username: str, note_id: str) -> Lock:
         return lock
 
 
-def write_note(username: str, note_id: str, content: str) -> bool:
+def write_note(username: str, note_id: str, content: str, cascade: bool = True) -> bool:
+    """写入笔记；content 为空串表示删除。
+
+    cascade=False 跳过分享/评论级联：改名流程会按旧用户名删除笔记副本，而此时
+    分享/评论尚未迁移，级联会把待迁移的数据一起删掉（见 user.service._delete_notes）。
+    """
     if not _namespace_ok(username) or not validate_note_id(note_id):
         return False
     with _get_note_lock(username, note_id):
@@ -100,11 +105,17 @@ def write_note(username: str, note_id: str, content: str) -> bool:
         except StorageError as e:
             logger.error(f"[错误] 保存笔记 {username}/{note_id} 失败: {e}")
             return False
-    # 空内容即删除（视图与过期清理都走这里），同步清掉标签、文件夹归属与置顶
+    # 空内容即删除（视图与过期清理都走这里），同步清掉标签、文件夹归属、置顶与分享
     if ok and not content:
         delete_note_tags(username, note_id)
         delete_note_folder(username, note_id)
         delete_note_pins(username, note_id)
+        if cascade:
+            # 分享必须级联删除：可编辑分享链接会把匿名访客的内容写回本命名空间，
+            # 删掉的笔记会被自己的分享链接复活，并继续占用作者配额
+            from app.core.store import delete_comments_for_note, delete_shares_for_note
+            delete_shares_for_note(username, note_id)
+            delete_comments_for_note(username, note_id)
     return ok
 
 

@@ -27,6 +27,7 @@ from app.apps.comments.service import (
     TARGET_NOTE,
 )
 from app.core.utils import render_latex_head, render_markdown_html, format_note_time
+from app.core.notes import note_exists
 from app.core.store import get_share
 from app.apps.common.helpers import delete_cache_keys
 
@@ -66,7 +67,9 @@ def comments_get(target_type: str, target_id: str):
     else:
         # 笔记类型：目标 ID 格式为 username/note_id
         parts = target_id.split("/", 1)
-        if len(parts) != 2:
+        # 笔记评论板必须挂在真实存在的笔记上：否则任何人能给不存在的笔记
+        # 建评论区（每个新目标都会往 comments:all 整表里加键），且删掉的笔记留下僵尸区
+        if len(parts) != 2 or not note_exists(parts[0], parts[1]):
             return render_template("errors/404.html"), 404
         target_title = f"笔记 {parts[1]}"
 
@@ -139,7 +142,9 @@ def comments_post(target_type: str, target_id: str):
     else:
         # 笔记类型：目标 ID 格式为 username/note_id
         parts = target_id.split("/", 1)
-        if len(parts) != 2:
+        # 笔记评论板必须挂在真实存在的笔记上：否则任何人能给不存在的笔记
+        # 建评论区（每个新目标都会往 comments:all 整表里加键），且删掉的笔记留下僵尸区
+        if len(parts) != 2 or not note_exists(parts[0], parts[1]):
             return render_template("errors/404.html"), 404
         target_title = f"笔记 {parts[1]}"
 

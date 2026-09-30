@@ -668,30 +668,56 @@ class FileBackend(StorageBackend):
             return []
 
     # ---------- 锁：fcntl/msvcrt 跨进程文件锁 ----------
+    _LOCK_WAIT_SECONDS = 15.0     # 与 upstash / postgres 锁的等待上限一致
+    _LOCK_RETRY_INTERVAL = 0.05
+
     @contextmanager
     def lock(self, name: str):
         lock_path = data_path(name.replace("/", "_").replace(":", "_") + ".lock")
-        fh = open(lock_path, "a+b")
         try:
-            if _HAS_FCNTL:
-                fcntl.flock(fh.fileno(), fcntl.LOCK_EX)
-            elif msvcrt is not None:
-                fh.seek(0)
-                if fh.read(1) == b"":
-                    fh.write(b"\0")
-                    fh.flush()
-                fh.seek(0)
-                msvcrt.locking(fh.fileno(), msvcrt.LK_LOCK, 1)
+            fh = open(lock_path, "a+b")
+        except OSError as e:
+            raise StorageError(f"无法打开锁文件 {name}: {e}")
+        acquired = False
+        try:
+            deadline = time.monotonic() + self._LOCK_WAIT_SECONDS
+            while True:
+                try:
+                    if _HAS_FCNTL:
+                        # 非阻塞 + 有界轮询：flock(LOCK_EX) 会无限期阻塞，一个卡死的
+                        # 写入者能把整个 worker 拖住（其它后端超时后抛 StorageError）
+                        fcntl.flock(fh.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                        acquired = True
+                    elif msvcrt is not None:
+                        fh.seek(0)
+                        if fh.read(1) == b"":
+                            fh.write(b"\0")
+                            fh.flush()
+                        fh.seek(0)
+                        # LK_LOCK 内置约 10 次重试后抛 OSError（不是 StorageError），
+                        # 上层只捕获 StorageError，竞争时直接变成 500
+                        msvcrt.locking(fh.fileno(), msvcrt.LK_NBLCK, 1)
+                        acquired = True
+                    else:
+                        # 无跨进程锁能力的平台：与旧实现一致，退化为仅进程内互斥
+                        pass
+                except OSError as e:
+                    if time.monotonic() >= deadline:
+                        raise StorageError(f"获取文件锁超时: {name}") from e
+                    time.sleep(self._LOCK_RETRY_INTERVAL)
+                    continue
+                break
             yield
         finally:
-            try:
-                if _HAS_FCNTL:
-                    fcntl.flock(fh.fileno(), fcntl.LOCK_UN)
-                elif msvcrt is not None:
-                    fh.seek(0)
-                    msvcrt.locking(fh.fileno(), msvcrt.LK_UNLCK, 1)
-            except Exception:
-                pass
+            if acquired:
+                try:
+                    if _HAS_FCNTL:
+                        fcntl.flock(fh.fileno(), fcntl.LOCK_UN)
+                    elif msvcrt is not None:
+                        fh.seek(0)
+                        msvcrt.locking(fh.fileno(), msvcrt.LK_UNLCK, 1)
+                except Exception:
+                    pass
             fh.close()
 
 
@@ -824,12 +850,15 @@ class UpstashBackend(StorageBackend):
         raw = self._request("GET", f"get/{urllib.parse.quote(self._key(key), safe='')}")
         if raw is None:
             return None
+        if key in _RAW_TEXT_KEYS:
+            return raw
         return _json_loads(raw)
 
     def set(self, key: str, value) -> bool:
+        raw = value if key in _RAW_TEXT_KEYS else _json_dumps(value)
         result = self._request(
             "POST", f"set/{urllib.parse.quote(self._key(key), safe='')}",
-            {"value": _json_dumps(value)},
+            {"value": raw},
         )
         return result == "OK" or result == 1 or result is not None
 

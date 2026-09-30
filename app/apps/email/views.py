@@ -88,6 +88,11 @@ def login_post():
                                    error=t(lang, "err_code_invalid")), 401
         username = pending["u"]
         session.pop(PENDING_OTP_KEY, None)
+        # 与密码登录 / OAuth 回调一致：验证码只是第一因素，已开启 TOTP 时转第二因素
+        from app.apps.twofa import service as twofa_service
+        if twofa_service.is_required(username):
+            session["pending_2fa"] = {"u": username, "t": time.time()}
+            return redirect("/login/2fa")
         token = create_session(username)
         resp = redirect("/")
         set_session_cookie(resp, token)

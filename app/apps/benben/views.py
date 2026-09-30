@@ -129,7 +129,9 @@ def benben_post():
     if remaining > 0:
         return _render_err("err_benben_cooldown", sec=int(remaining) + 1)
 
-    add_benben_post(current_user, content, get_client_ip())
+    if not add_benben_post(current_user, content, get_client_ip()):
+        # 写盘失败却标记冷却并按成功跳转：用户以为已发布，重试又被冷却拦住
+        return _render_err("err_settings_save_failed")
     mark_benben_post(current_user)
     # 新动态把旧内容顶到第 2 页：清掉匿名与发布者视角的第 1 页，
     # 其余访问者的键靠 60s TTL 过期

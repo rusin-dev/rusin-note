@@ -37,7 +37,11 @@ _USERNAME_RE = re.compile(r"^[a-zA-Z0-9_\-]+$")
 
 @bp.route("/image/<username>/<image_id>")
 def image_user(username, image_id):
-    """服务用户图床图片（/image/<username>/<id>）"""
+    """服务用户图床图片（/image/<username>/<id>）
+
+    刻意不加 @require_feature("note_images")：停用开关只关上传与管理入口，已存
+    图片要继续可访问，否则历史笔记全部裂图（见 tests/test_images.py 的 [G]）。
+    """
     if not _USERNAME_RE.match(username):
         abort(404)
     if not validate_image_id(image_id):

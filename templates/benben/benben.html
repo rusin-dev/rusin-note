@@ -17,6 +17,7 @@
 {{ code_highlight_head|safe }}
 {{ markdown_alerts_head|safe }}
 <script defer src="{{ config.GLOBAL_CDN }}/npm/marked@12.0.2/marked.min.js"></script>
+<script defer src="{{ config.GLOBAL_CDN }}/npm/dompurify@3.1.7/dist/purify.min.js"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     var L10N = {{ preview_l10n|tojson }};
@@ -28,20 +29,20 @@ document.addEventListener('DOMContentLoaded', function() {
         var text = ta.value.trim();
         if (!text) { pre.style.display = 'none'; return; }
         if (!window.marked) { pre.textContent = L10N.loadFailed; pre.style.display = 'block'; return; }
-        var html = '';
-        try { html = window.marked.parse(text); } catch (e) { html = '<p class="error">' + L10N.renderFailed + '</p>'; }
-        var tmp = document.createElement('div');
-        tmp.innerHTML = html;
-        tmp.querySelectorAll('script, iframe, object, embed, link, meta, style').forEach(function(el) { el.remove(); });
-        tmp.querySelectorAll('*').forEach(function(el) {
-            ['onerror','onclick','onload','onmouseover','onmouseout','onfocus','onblur','onchange','onsubmit'].forEach(function(a) { el.removeAttribute(a); });
+        var html = null;
+        try { html = window.marked.parse(text, { breaks: false, gfm: true }); } catch (e) { html = null; }
+        // 黑名单过滤可被 <details ontoggle> 等绕过，改为白名单清洗（与服务端 bleach 同一套标签/属性）；
+        // 清洗库不可用时退回纯文本，绝不注入未消毒的 HTML
+        if (html === null || !window.DOMPurify) {
+            pre.textContent = (html === null) ? L10N.renderFailed : text;
+            pre.style.display = 'block';
+            return;
+        }
+        pre.innerHTML = window.DOMPurify.sanitize(html, {
+            ALLOWED_TAGS: ['p','br','strong','em','u','del','strike','a','ul','ol','li','blockquote','pre','code','h1','h2','h3','h4','h5','h6','hr','table','thead','tbody','tr','th','td','div','span','img','i','details','summary'],
+            ALLOWED_ATTR: ['href','title','target','class','src','alt','width','height','open','aria-hidden']
         });
-        tmp.querySelectorAll('a').forEach(function(a) {
-            a.setAttribute('rel', 'noopener noreferrer');
-            var href = a.getAttribute('href') || '';
-            if (!/^(https?:|mailto:|#)/i.test(href)) a.removeAttribute('href');
-        });
-        pre.innerHTML = tmp.innerHTML;
+        pre.querySelectorAll('a[target]').forEach(function(a) { a.setAttribute('rel', 'noopener noreferrer'); });
         pre.style.display = 'block';
         if (window.MarkdownAlerts) window.MarkdownAlerts.apply(pre);
         if (window.CodeHighlight) window.CodeHighlight.apply(pre);

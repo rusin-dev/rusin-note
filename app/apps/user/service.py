@@ -89,10 +89,11 @@ def _copy_notes(old: str, new: str) -> bool:
 
 def _delete_notes(old: str) -> None:
     """删除 old 命名空间下的笔记。write_note 的删除钩子会顺手清理旧标签/
-    文件夹/置顶，因此必须在这些元数据迁移完成之后调用。"""
+    文件夹/置顶，因此必须在这些元数据迁移完成之后调用。分享/评论同理，但
+    它们由 rename_user_records 迁移，所以这里必须关掉级联删除。"""
     for note_id in list_user_notes(old):
         if note_exists(old, note_id):
-            write_note(old, note_id, "")
+            write_note(old, note_id, "", cascade=False)
 
 
 def _migrate_images(old: str, new: str) -> bool:

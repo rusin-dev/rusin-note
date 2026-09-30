@@ -70,6 +70,9 @@ def attachment_user(username, attachment_id):
 
     未登录访客默认被拒（401）；通过认证后受「单用户同时下载上限」约束，
     超出返回 429（附 Retry-After），避免单个账号用大量慢速连接占满 worker。
+
+    与图床一致，刻意不加 @require_feature("note_attachments")：停用开关只关上传
+    与管理入口，已有附件要继续可下载。
     """
     lang = getattr(g, "lang", "zh")
     if not _USERNAME_RE.match(username):
