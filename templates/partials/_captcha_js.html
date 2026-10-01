@@ -1,0 +1,14 @@
+{% if captcha_enabled %}
+<script>
+    function refreshCaptcha() {
+        fetch('/login/captcha')
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+                document.getElementById('captchaBox').innerHTML = d.svg;
+                document.getElementById('captchaToken').value = d.token;
+            })
+            .catch(function () {});
+    }
+    document.getElementById('captchaBox').addEventListener('click', refreshCaptcha);
+</script>
+{% endif %}

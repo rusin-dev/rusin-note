@@ -8,7 +8,7 @@ from flask import Blueprint, abort, redirect, render_template, request, url_for
 
 from app.core import config
 from app.core.extensions import cache, limiter
-from app.core.feature_flags import FEATURE_KEYS, get_all_features, is_admin, set_flags
+from app.core.feature_flags import FEATURE_KEYS, get_grouped_features, is_admin, set_flags
 from app.core.middleware import get_current_user
 
 bp = Blueprint("admin", __name__)
@@ -27,7 +27,7 @@ def features_get():
     _require_admin()
     return render_template(
         "admin/features.html",
-        features=get_all_features(),
+        feature_groups=get_grouped_features(),
         saved=request.args.get("saved") == "1",
     )
 

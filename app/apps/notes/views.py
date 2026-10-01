@@ -4,7 +4,7 @@
 app.core.tags / folders / pins。
 """
 from flask import (
-    Blueprint, abort, g, jsonify, redirect, render_template, request, url_for,
+    Blueprint, Response, abort, g, jsonify, redirect, render_template, request, url_for,
 )
 
 from app.core import config
@@ -49,6 +49,9 @@ from app.apps.common.helpers import (
     purge_page_cache,
     require_auth,
 )
+from app.apps.notes.service import (
+    build_export_md, build_export_zip, import_notes,
+)
 
 bp = Blueprint("notes", __name__)
 
@@ -56,9 +59,12 @@ bp = Blueprint("notes", __name__)
 def _list_view_filtered() -> bool:
     """?tag= / ?folder= 筛选视图不缓存：置顶切换、标签/文件夹保存等写操作
     只清理未过滤的基础缓存键，筛选变体若参与缓存会向刚操作完的用户展示
-    过期内容（写后立即可见优先于这部分缓存收益；未过滤列表仍正常缓存）。"""
+    过期内容（写后立即可见优先于这部分缓存收益；未过滤列表仍正常缓存）。
+    导入结果提示（?imported=/?import_err=）是一次性横幅，同样不得进缓存。"""
     return bool((request.args.get("tag") or "").strip()
-                or (request.args.get("folder") or "").strip())
+                or (request.args.get("folder") or "").strip()
+                or (request.args.get("imported") or "").strip()
+                or (request.args.get("import_err") or "").strip())
 
 
 @bp.route("/user/<username>", methods=["GET"])
@@ -105,6 +111,18 @@ def user_root(username):
             "pinned": nid in user_pins,
         })
     folder_tree = build_folder_tree(items) if folders_enabled else None
+    # 导入结果一次性提示（由 /import 重定向带回查询参数）
+    lang = getattr(g, "lang", "zh")
+    import_msg = ""
+    err_key = (request.args.get("import_err") or "").strip()
+    if err_key in ("no_file", "too_large", "not_a_zip", "too_many_notes", "unsupported_type"):
+        import_msg = t(lang, f"import_err_{err_key}")
+    else:
+        imported = (request.args.get("imported") or "").strip()
+        if imported.isdigit():
+            skipped = (request.args.get("skipped") or "").strip()
+            import_msg = t(lang, "import_result", imported=imported,
+                           skipped=skipped if skipped.isdigit() else "0")
     return render_template(
         "notes/user_list.html",
         username=username,
@@ -116,6 +134,8 @@ def user_root(username):
         folders_enabled=folders_enabled,
         active_folder=active_folder,
         pins_enabled=pins_enabled,
+        import_msg=import_msg,
+        transfer_enabled=feature_enabled("notes_import_export"),
     )
 
 
@@ -127,6 +147,50 @@ def user_new(username):
     require_auth(username)
     new_id = generate_random_id()
     return redirect(url_for("notes.user_note_get", username=username, note_id=new_id))
+
+
+@bp.route("/user/<username>/export", methods=["GET"])
+@require_feature("notes_import_export")
+@limiter.limit(lambda: f"{config.GET_RATE_MAX} per {config.GET_RATE_WINDOW} second")
+def user_export(username):
+    """批量导出当前用户全部笔记：默认 ZIP（含 manifest，可还原归类），
+    ?format=md 导出为单个 Markdown 文件。仅本人可导出。"""
+    if not validate_username(username):
+        abort(400)
+    require_auth(username)
+    fmt = (request.args.get("format") or "zip").lower()
+    if fmt == "md":
+        data, filename = build_export_md(username)
+        mimetype = "text/markdown; charset=utf-8"
+    else:
+        data, filename = build_export_zip(username)
+        mimetype = "application/zip"
+    resp = Response(data, mimetype=mimetype)
+    resp.headers["Content-Disposition"] = f'attachment; filename="{filename}"'
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
+
+
+@bp.route("/user/<username>/import", methods=["POST"])
+@require_feature("notes_import_export")
+@limiter.limit(lambda: f"{config.RATE_MAX} per {config.RATE_WINDOW} second")
+def user_import(username):
+    """批量导入：接收 multipart 文件（.zip / .md / .txt），写入当前用户笔记。
+    不覆盖既有笔记（ID 冲突自动改名），完成后带结果参数重定向回列表页。"""
+    if not validate_username(username):
+        abort(400)
+    require_auth(username)
+    upload = request.files.get("file")
+    if not upload or not upload.filename:
+        result = {"imported": [], "skipped": 0, "error": "no_file"}
+    else:
+        raw = upload.read(config.NOTE_TRANSFER_MAX_FILE_BYTES + 1)
+        result = import_notes(username, upload.filename, raw)
+    purge_page_cache([f"/user/{username}", f"/user/{username}/"], viewers=(username,))
+    base = url_for("notes.user_root", username=username)
+    if result.get("error"):
+        return redirect(f"{base}?import_err={result['error']}")
+    return redirect(f"{base}?imported={len(result['imported'])}&skipped={result['skipped']}")
 
 
 @bp.route("/user/<username>/refs", methods=["GET"])

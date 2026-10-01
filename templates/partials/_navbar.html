@@ -1,20 +1,4 @@
-{#- 导航链接状态：与当前 request.path 比对，命中时输出 active 类与 aria-current。
-    exact=true 仅精确匹配；否则按前缀匹配（如 /count、/user/<u>/settings）。
-    exclude 可列出需排除的前缀，用于「我的笔记」页下的 settings / shares 等子页。 -#}
-{%- macro nav_attrs(match, cls='nav-link', exact=false, exclude=()) -%}
-{%- set p = (request.path or '/') -%}
-{%- set m = match -%}
-{%- if exact -%}
-{%- set on = (p == m or p == m.rstrip('/')) -%}
-{%- else -%}
-{%- set on = (p == m or p.startswith(m if m.endswith('/') else m + '/')) -%}
-{%- endif -%}
-{%- set ns = namespace(on=on) -%}
-{%- for ex in exclude -%}
-{%- if ns.on and p.startswith(ex) -%}{%- set ns.on = false -%}{%- endif -%}
-{%- endfor -%}
-{{ ('class="' ~ cls ~ (' active' if ns.on else '') ~ '"') | safe }}{{ (' aria-current="page"' if ns.on else '') | safe }}
-{%- endmacro -%}
+{% from "partials/_nav_attrs.html" import nav_attrs %}
 <div class="navbar">
     <a class="navbar-brand" href="/" title="Home">
         <img src="/favicon.ico" alt="" class="navbar-brand-icon">
@@ -55,43 +39,6 @@
             <span class="user-name">{{ current_user|e }}</span>
         </span>
         {% endif %}
-        <button type="button" class="account-menu-btn" id="userMenuBtn"
-                aria-haspopup="dialog" aria-expanded="false" aria-controls="userMenu"
-                title="{{ t('nav_account_menu') }}" aria-label="{{ t('nav_account_menu') }}">
-            <i class="fa-solid fa-gear" aria-hidden="true"></i>
-        </button>
-        <div class="user-menu-backdrop" id="userMenuBackdrop" hidden></div>
-        <aside class="user-menu" id="userMenu" role="dialog" aria-modal="true" aria-label="{{ t('nav_account_menu') }}" hidden>
-            <div class="user-menu-head">
-                <div class="user-menu-head-main">
-                    {% if av %}<img class="avatar" src="{{ av|e }}" alt="" width="36" height="36" loading="lazy" referrerpolicy="no-referrer">{% endif %}
-                    <span class="user-menu-name">{{ current_user|e }}</span>
-                </div>
-                <button type="button" class="user-menu-close" id="userMenuClose" aria-label="{{ t('nav_close') }}">
-                    <i class="fa-solid fa-xmark" aria-hidden="true"></i>
-                </button>
-            </div>
-            <nav class="user-menu-body" aria-label="{{ t('nav_account_menu') }}">
-                <a class="user-menu-item" href="/user/{{ current_user|e }}/">
-                    <i class="fa-solid fa-file-lines" aria-hidden="true"></i>{{ t('nav_my_notes') }}
-                </a>
-                <a class="user-menu-item" href="/user/{{ current_user|e }}/new">
-                    <i class="fa-solid fa-square-plus" aria-hidden="true"></i>{{ t('nav_new_note') }}
-                </a>
-                {% if feature_enabled('share_links') and not simple_mode %}
-                <a class="user-menu-item" href="/user/{{ current_user|e }}/shares/">
-                    <i class="fa-solid fa-share-nodes" aria-hidden="true"></i>{{ t('nav_share_mgmt') }}
-                </a>
-                {% endif %}
-                <a class="user-menu-item" href="/user/{{ current_user|e }}/settings">
-                    <i class="fa-solid fa-gear" aria-hidden="true"></i>{{ t('nav_settings') }}
-                </a>
-                <form action="/logout" method="POST" class="user-menu-form">
-                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <button type="submit" class="user-menu-item user-menu-logout"><i class="fa-solid fa-right-from-bracket" aria-hidden="true"></i>{{ t('nav_logout') }}</button>
-                </form>
-            </nav>
-        </aside>
         <span class="nav-links">
             <a {{ nav_attrs('/user/' ~ current_user ~ '/', 'nav-link', false, ['/user/' ~ current_user ~ '/settings', '/user/' ~ current_user ~ '/shares/']) |safe }} href="/user/{{ current_user|e }}/"><i class="fa-solid fa-file-lines" aria-hidden="true"></i>{{ t('nav_my_notes') }}</a>
             <a {{ nav_attrs('/user/' ~ current_user ~ '/new', 'nav-link nav-icon-btn')|safe }} href="/user/{{ current_user|e }}/new" title="{{ t('nav_new_note') }}" aria-label="{{ t('nav_new_note') }}"><i class="fa-solid fa-square-plus" aria-hidden="true"></i><span class="nav-icon-label">{{ t('nav_new_note') }}</span></a>
@@ -118,74 +65,7 @@
         <i class="fa-solid fa-globe" aria-hidden="true"></i>
         <span>{% if lang == 'zh' %}En{% else %}中{% endif %}</span>
     </a>
-    <button type="button" id="themeBtn" class="theme-toggle" onclick="toggleTheme()" title="Theme">
-        <i class="fa-solid {% if theme == 'dark' %}fa-sun{% else %}fa-moon{% endif %}" aria-hidden="true"></i>
-    </button>
 </div>
-<script>
-(function () {
-    var btn = document.getElementById('userMenuBtn');
-    var menu = document.getElementById('userMenu');
-    var backdrop = document.getElementById('userMenuBackdrop');
-    var closeBtn = document.getElementById('userMenuClose');
-    if (!btn || !menu) return;
-    var closeTimer = null;
-
-    // 侧边栏用 position: fixed 抽屉定位，避免被 .navbar 的 overflow: hidden 裁剪。
-    // .navbar 不可加 transform/filter/backdrop-filter，否则会成为 fixed 的
-    // 包含块而再次被裁剪（样式见 partials/_navbar_css.html）。
-    function open() {
-        if (closeTimer) { clearTimeout(closeTimer); closeTimer = null; }
-        if (!menu.hidden && menu.classList.contains('open')) return;
-        menu.hidden = false;
-        if (backdrop) backdrop.hidden = false;
-        // 下一帧加 open，触发抽屉滑入过渡而非初始态直接显示
-        requestAnimationFrame(function () {
-            menu.classList.add('open');
-            if (backdrop) backdrop.classList.add('open');
-        });
-        btn.setAttribute('aria-expanded', 'true');
-        document.body.style.overflow = 'hidden';
-        if (closeBtn) closeBtn.focus();
-    }
-
-    function close() {
-        menu.classList.remove('open');
-        if (backdrop) backdrop.classList.remove('open');
-        btn.setAttribute('aria-expanded', 'false');
-        document.body.style.overflow = '';
-        closeTimer = setTimeout(function () {
-            menu.hidden = true;
-            if (backdrop) backdrop.hidden = true;
-            closeTimer = null;
-        }, 260);
-        btn.focus();
-    }
-
-    window.toggleUserMenu = function () {
-        if (menu.hidden) open(); else close();
-    };
-
-    btn.addEventListener('click', function (e) {
-        e.preventDefault();
-        window.toggleUserMenu();
-    });
-    btn.addEventListener('keydown', function (e) {
-        if (e.key === 'Enter' || e.key === ' ' || e.key === 'Spacebar') {
-            e.preventDefault();
-            window.toggleUserMenu();
-        }
-    });
-    if (backdrop) backdrop.addEventListener('click', close);
-    if (closeBtn) closeBtn.addEventListener('click', close);
-    document.addEventListener('click', function (e) {
-        if (!menu.hidden && !menu.contains(e.target) && !btn.contains(e.target)) close();
-    });
-    document.addEventListener('keydown', function (e) {
-        if (e.key === 'Escape' && !menu.hidden) { close(); }
-    });
-})();
-</script>
 <script>
 (function () {
     var btn = document.getElementById('orgMenuBtn');

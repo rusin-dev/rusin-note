@@ -7,8 +7,45 @@
 </div>
 {% endif %}
 {% if current_user %}
-{# ===== 工作台（VSCode 欢迎页风格）：最近编辑 + TODO LIST ===== #}
-<div class="wb-grid">
+{# ===== 工作台：问候 + 近一年笔记热力图 + 最近修改 ===== #}
+<header class="wb-greeting">
+    {% set av = get_avatar(current_user) %}
+    {% if av %}<img class="avatar" src="{{ av|e }}" alt="" width="44" height="44" loading="lazy" referrerpolicy="no-referrer">{% endif %}
+    <h1>{{ greeting|e }}</h1>
+</header>
+<div class="wb-panels">
+    <section class="wb-panel">
+        <div class="wb-panel-head">
+            <h2><i class="fa-solid fa-chart-simple" aria-hidden="true"></i>{{ t('wb_heatmap_title') }}</h2>
+            <span class="wb-heatmap-total">{{ t('wb_heatmap_total', n=heatmap.total) }}</span>
+        </div>
+        <div class="hm-scroll">
+            <div class="hm-inner">
+                <div class="hm-month-row" aria-hidden="true">
+                    {% for week in heatmap.weeks %}<span class="hm-month">{{ week.m }}</span>{% endfor %}
+                </div>
+                <div class="hm-grid">
+                    {% for week in heatmap.weeks %}
+                    <div class="hm-week">
+                        {% for day in week.days %}
+                        {% if day %}
+                        <span class="hm-cell hm-l{{ day.lv }}" title="{{ t('wb_heatmap_cell', date=day.k, c=day.c) }}"></span>
+                        {% else %}
+                        <span class="hm-cell hm-blank"></span>
+                        {% endif %}
+                        {% endfor %}
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+        <div class="hm-legend">
+            <span>{{ t('wb_heatmap_less') }}</span>
+            <span class="hm-cell hm-l0"></span><span class="hm-cell hm-l1"></span><span class="hm-cell hm-l2"></span><span class="hm-cell hm-l3"></span><span class="hm-cell hm-l4"></span>
+            <span>{{ t('wb_heatmap_more') }}</span>
+        </div>
+    </section>
+
     <section class="wb-panel">
         <div class="wb-panel-head">
             <h2><i class="fa-solid fa-clock-rotate-left" aria-hidden="true"></i>{{ t('home_recent_notes') }}</h2>
@@ -30,45 +67,6 @@
         {% else %}
         <p class="wb-empty">{{ t('wb_empty_notes') }}</p>
         {% endif %}
-    </section>
-
-    <section class="wb-panel wb-todo-panel">
-        <div class="wb-panel-head">
-            <h2><i class="fa-solid fa-list-check" aria-hidden="true"></i>{{ t('wb_todo_title') }}</h2>
-            {% if todos %}
-            <form method="POST" action="/user/{{ current_user|e }}/todos/clear-done">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <button type="submit" class="wb-todo-clear">{{ t('wb_todo_clear_done') }}</button>
-            </form>
-            {% endif %}
-        </div>
-        {% if todo_err %}<p class="wb-todo-err">{{ todo_err }}</p>{% endif %}
-        <form class="wb-todo-add" method="POST" action="/user/{{ current_user|e }}/todos/add">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <input type="text" name="text" maxlength="{{ todo_max_length }}" placeholder="{{ t('wb_todo_placeholder') }}" autocomplete="off" aria-label="{{ t('wb_todo_placeholder') }}">
-            <button type="submit" aria-label="{{ t('wb_todo_add') }}" title="{{ t('wb_todo_add') }}"><i class="fa-solid fa-plus" aria-hidden="true"></i></button>
-        </form>
-        <ul class="wb-todos">
-            {% for todo in todos %}
-            <li class="wb-todo{% if todo.done %} done{% endif %}">
-                <form method="POST" action="/user/{{ current_user|e }}/todos/{{ todo.id|e }}/toggle">
-                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <button type="submit" class="wb-todo-check" aria-label="{{ t('wb_todo_toggle') }}" title="{{ t('wb_todo_toggle') }}">
-                        <i class="fa-{% if todo.done %}solid fa-square-check{% else %}regular fa-square{% endif %}" aria-hidden="true"></i>
-                    </button>
-                </form>
-                <span class="wb-todo-text">{{ todo.text }}</span>
-                <form method="POST" action="/user/{{ current_user|e }}/todos/{{ todo.id|e }}/delete">
-                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <button type="submit" class="wb-todo-del" aria-label="{{ t('wb_todo_delete') }}" title="{{ t('wb_todo_delete') }}">
-                        <i class="fa-solid fa-xmark" aria-hidden="true"></i>
-                    </button>
-                </form>
-            </li>
-            {% else %}
-            <li class="wb-empty">{{ t('wb_todo_empty') }}</li>
-            {% endfor %}
-        </ul>
     </section>
 </div>
 {% else %}

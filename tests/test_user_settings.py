@@ -161,10 +161,7 @@ class TestUserSettings:
         expect(fresh.get(f"/user/{USER}/").status_code == 200, "新密码可登录")
 
         stale = ctx.app.test_client()
-        response = stale.post("/login", data={
-            "username": USER, "password": PASSWORD,
-            "csrf_token": csrf_from(stale, "/login"),
-        })
+        response = login(stale, USER, PASSWORD)
         expect(response.status_code == 401, "旧密码无法登录")
 
     def test_username_change(self, ctx):

@@ -1,4 +1,4 @@
-"""请求钩子：客户端 IP、语言、主题、当前用户
+"""请求钩子：客户端 IP、语言、当前用户
 
 将每次请求共用的字段写入 flask.g，供视图与限流 key_func 复用。
 
@@ -32,17 +32,6 @@ def get_client_ip() -> str:
     if resolution.headers_ignored:
         note_ignored_proxy_headers(resolution.ip, request.remote_addr)
     return resolution.ip
-
-
-def get_theme_from_cookie() -> str | None:
-    cookie = request.headers.get("Cookie", "")
-    for pair in cookie.split(";"):
-        pair = pair.strip()
-        if pair.startswith("rusin-theme="):
-            value = pair[len("rusin-theme="):]
-            if value in ("dark", "light"):
-                return value
-    return None
 
 
 def get_session_token() -> str | None:
@@ -94,7 +83,6 @@ def register_request_hooks(app: Flask) -> None:
         g.client_ip = resolution.ip
         g.client_ip_source = resolution.source
         g.lang = detect_lang_from_request()
-        g.theme = get_theme_from_cookie()
         g.current_user = get_current_user()
         # IP 黑名单：直接拒绝（在读取会话之后，保证错误页能按语言渲染）
         if config.IP_BLOCKLIST and ip_in_any(g.client_ip, config.IP_BLOCKLIST):

@@ -132,7 +132,7 @@ upstash 后端所有键统一加 `rusin:` 前缀；memory 后端 get/set 带 dee
 | user | `user/views.py` | `/user/<u>/settings` GET/POST 用户设置（简洁模式 / 修改密码 / 修改用户名，业务见 `user/service.py`） |
 | share | `share/views.py` | `/share/<token>`（可编辑则进编辑页、只读则进 Markdown 页；每次访问 `increment_share_views`）、POST 写回分享者原笔记（可编辑才允许，否则 403）、`/share/<token>/md` 与 `/share/<token>.md`；全部受 `share_links` 开关控制 |
 | benben | `benben/views.py` | `/benben` GET 分页查看（新→旧，`page` 参数）、POST 发布（需登录 + 内容长度 + 单用户冷却 + 限流）；受 `benben` 开关控制 |
-| admin | `admin/views.py` | `/admin/features` GET/POST 功能开关滑块管理页（仅管理员，非管理员 404；POST 保存后 `cache.clear()`） |
+| admin | `admin/views.py` | `/admin/features` GET/POST 功能开关滑块管理页（按 `FEATURE_GROUPS` 分组，各组 `<details>` 折叠默认收起；仅管理员，非管理员 404；POST 保存后 `cache.clear()`） |
 | comments | `comments/views.py` | `/comments/<target_type>/<path:target_id>` GET（分页拉取评论，`cache.cached`）/ POST（发布，带冷却 + 限流）；`target_type` 为 `note` / `share`；受 `comments` 开关控制 |
 | org | `org/views.py` | `/org/mine`、`/org/create`、`/org/join/<invite_code>`、`/org/join-public/<org>`、`/org/join-approve/<org>`；`/org/<org>`（首页）、`/org/<org>/notes` 列表、`/org/<org>/notes/new`、`/org/<org>/notes/<id>` 查看、`.../edit`、`.../delete`、`/org/<org>/members`、`/org/<org>/settings`、`/org/<org>/invites`、`/org/<org>/requests`、`/org/<org>/leave`；组织笔记以 `_orgs/<org>` 为存储用户名，权限经 `_require_org_member/admin/owner`；全部受 `orgs` 开关控制 |
 | todos | `todos/views.py` | `/user/<u>/todos/add`、`/user/<u>/todos/<id>/toggle`、`/user/<u>/todos/<id>/delete`、`/user/<u>/todos/clear-done`（均 POST + 限流，模块内 `_require_auth` 校验会话用户等于 URL 用户名，成功后 302 回 `/`） |
@@ -198,7 +198,7 @@ upstash 后端所有键统一加 `rusin:` 前缀；memory 后端 get/set 带 dee
 - **新增头像显示位**：模板直接用 `{{ get_avatar(username) }}`（已由 i18n 注入全局），空串时用 `{% if av %}` 隐藏 `<img>`；生成逻辑见 `utils.get_avatar_url`，配置在 `config.json` 的 `avatar`
 - **改限流**：`config.json` 对应键 + 视图函数 `@limiter.limit` 字符串
 - **改数据格式**：留意 `store.py`/`auth.py` 中的旧数据兼容注释（BUG-7 损坏数据跳过等）；加字段时给 `get_*` 用 `.get()` 兜底
-- **新增可开关功能（#90）**：`feature_flags.py` 的 `FEATURES` 注册表登记（key/icon）+ i18n 加 `feature_<key>` zh/en 文案 + 视图加 `@require_feature(key)`（放 `@bp.route` 之后、`@cache.cached`/`@limiter.limit` 之前）+ config.json `features` 段加默认值；模板用 `feature_enabled(key)` 条件渲染。Provider 级动态开关（`oauth_<key>`）在视图内用 `feature_enabled()` 判定后 `abort(404)`
+- **新增可开关功能（#90）**：`feature_flags.py` 的 `FEATURES` 注册表登记（key/icon/group，group 须为 `FEATURE_GROUPS` 中已存在的组 id：notes/rendering/media/account/security）+ i18n 加 `feature_<key>` zh/en 文案 + 视图加 `@require_feature(key)`（放 `@bp.route` 之后、`@cache.cached`/`@limiter.limit` 之前）+ config.json `features` 段加默认值；模板用 `feature_enabled(key)` 条件渲染。Provider 级动态开关（`oauth_<key>`）在视图内用 `feature_enabled()` 判定后 `abort(404)`
 - **新增第三方登录 Provider**：在 `oauth/service.py` 的 `PROVIDERS` 注册表加条目（authorize/token/scope/creds/prefix），实现对应的 `exchange_code` 与 `fetch_profile` 分支，config.json `oauth.providers` 加凭据键，`feature_flags.py` 加 `oauth_<key>`，i18n 加 `feature_oauth_<key>`
 - **新增清理任务**：在 App 的 service 中通过 `app.core.cleanup.register_cleanup(fn)` 注册，避免 core 直接 import app（`background.cleanup_loop` 与无服务器机会式清理会调用）
 - **新增存储键/后端**：键布局在 `storage.py`（`KV_FILE_MAP`/`_note_key`），sqlite/file 后端新键需在 `KV_FILE_MAP` 登记路径（否则 sqlite 落到 `kv/<hash>.json`）；新增后端需实现 `StorageBackend` 全部方法并在 `select_backend()` 注册（sqlite 在 `storage_sqlite.py`，postgres 后端新表需在 `_ensure_schema` 增加 DDL）

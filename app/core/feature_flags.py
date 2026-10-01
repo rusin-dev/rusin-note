@@ -3,7 +3,8 @@
 管理员在 /admin/features 用滑块开关决定启用哪些功能，启用的功能在
 /count 数据汇总页呈现；被停用的功能在路由层直接 404。
 
-- 注册表 FEATURES 定义全部可控功能与展示信息（顺序即页面展示顺序）；
+- 注册表 FEATURES 定义全部可控功能与展示信息（key/icon/group），
+  FEATURE_GROUPS 定义分组及其展示顺序（组内按 FEATURES 顺序）；
 - 默认值来自 config.json：新增功能读 features 段，历史功能沿用各自
   原有配置段（如 latex_render.enabled、avatar.enabled）；
 - 运行时状态整体持久化在存储后端 KV 键 feature_flags（file 后端即
@@ -28,38 +29,49 @@ logger = create_logger("feature_flags")
 FLAGS_KEY = "feature_flags"
 
 # ---------- 功能注册表 ----------
-# label 取 i18n 键 feature_<key>；icon 为 FontAwesome 类名
+# label 取 i18n 键 feature_<key>；icon 为 FontAwesome 类名；group 为分组 id
+# （展示顺序：FEATURE_GROUPS 的组顺序，组内按 FEATURES 顺序）
+FEATURE_GROUPS = [
+    {"id": "notes"},       # 笔记核心
+    {"id": "rendering"},   # 渲染增强
+    {"id": "media"},       # 媒体与社交
+    {"id": "account"},     # 账号与协作
+    {"id": "security"},    # 登录与安全
+]
 FEATURES = [
-    {"key": "world_notes", "icon": "fa-globe"},         # 公开笔记（/world 与 /<id> 短链）
-    {"key": "benben", "icon": "fa-sticky-note"},        # 犇犇动态
-    {"key": "share_links", "icon": "fa-share-nodes"},   # 分享链接
-    {"key": "open_register", "icon": "fa-user-plus"},   # 开放注册
-    {"key": "note_refs", "icon": "fa-link"},            # 笔记快捷引用（#87）
-    {"key": "note_tags", "icon": "fa-tags"},            # 笔记标签（编辑页底部标签栏 + 列表页筛选）
-    {"key": "note_folders", "icon": "fa-folder"},       # 笔记文件夹（单归属归类 + 列表页筛选）
-    {"key": "note_pins", "icon": "fa-thumbtack"},       # 笔记置顶（列表页图钉开关，置顶浮前）
-    {"key": "heading_anchors", "icon": "fa-anchor"},    # Markdown 标题锚点（slug id + 页内 #链接 + 深链定位）
-    {"key": "markdown_alerts", "icon": "fa-circle-exclamation"},  # Markdown 提示卡片（[!NOTE] 等 GitHub 风格可折叠卡片）
-    {"key": "note_images", "icon": "fa-image"},         # 笔记图床（编辑器粘贴/拖拽上传 + /image/<u>/<id> 服务）
-    {"key": "note_attachments", "icon": "fa-paperclip"}, # 笔记附件（编辑器上传 + /attachment/<u>/<id> 服务）
-    {"key": "comments", "icon": "fa-comments"},         # 评论系统（笔记/分享页面评论功能）
-    {"key": "latex_render", "icon": "fa-square-root-variable"},
-    {"key": "code_highlight", "icon": "fa-code"},
-    {"key": "avatar", "icon": "fa-user"},
-    {"key": "orgs", "icon": "fa-users"},                # 组织/团队协作
+    {"key": "world_notes", "icon": "fa-globe", "group": "notes"},         # 公开笔记（/world 与 /<id> 短链）
+    {"key": "share_links", "icon": "fa-share-nodes", "group": "notes"},   # 分享链接
+    {"key": "note_refs", "icon": "fa-link", "group": "notes"},            # 笔记快捷引用（#87）
+    {"key": "note_tags", "icon": "fa-tags", "group": "notes"},            # 笔记标签（编辑页底部标签栏 + 列表页筛选）
+    {"key": "note_folders", "icon": "fa-folder", "group": "notes"},       # 笔记文件夹（单归属归类 + 列表页筛选）
+    {"key": "note_pins", "icon": "fa-thumbtack", "group": "notes"},       # 笔记置顶（列表页图钉开关，置顶浮前）
+    {"key": "notes_import_export", "icon": "fa-file-export", "group": "notes"},  # 笔记批量导入/导出（/user/<u>/export|import）
+    {"key": "heading_anchors", "icon": "fa-anchor", "group": "rendering"},    # Markdown 标题锚点（slug id + 页内 #链接 + 深链定位）
+    {"key": "markdown_alerts", "icon": "fa-circle-exclamation", "group": "rendering"},  # Markdown 提示卡片（[!NOTE] 等 GitHub 风格可折叠卡片）
+    {"key": "latex_render", "icon": "fa-square-root-variable", "group": "rendering"},
+    {"key": "code_highlight", "icon": "fa-code", "group": "rendering"},
+    {"key": "note_images", "icon": "fa-image", "group": "media"},         # 笔记图床（编辑器粘贴/拖拽上传 + /image/<u>/<id> 服务）
+    {"key": "note_attachments", "icon": "fa-paperclip", "group": "media"}, # 笔记附件（编辑器上传 + /attachment/<u>/<id> 服务）
+    {"key": "benben", "icon": "fa-sticky-note", "group": "media"},        # 犇犇动态
+    {"key": "comments", "icon": "fa-comments", "group": "media"},         # 评论系统（笔记/分享页面评论功能）
+    {"key": "open_register", "icon": "fa-user-plus", "group": "account"}, # 开放注册
+    {"key": "avatar", "icon": "fa-user", "group": "account"},
+    {"key": "orgs", "icon": "fa-users", "group": "account"},              # 组织/团队协作
     # 第三方登录（各 Provider 需要先在 config.json 的 oauth.providers 填入凭据，
     # 未配置时即使开关打开也不会在登录页展示）
-    {"key": "oauth_github", "icon": "fa-code-branch"},
-    {"key": "oauth_google", "icon": "fa-g"},
-    {"key": "oauth_microsoft", "icon": "fa-windows"},
-    {"key": "oauth_wechat", "icon": "fa-comment-dots"},
-    {"key": "oauth_qq", "icon": "fa-comment"},
+    {"key": "oauth_github", "icon": "fa-code-branch", "group": "security"},
+    {"key": "oauth_google", "icon": "fa-g", "group": "security"},
+    {"key": "oauth_microsoft", "icon": "fa-windows", "group": "security"},
+    {"key": "oauth_wechat", "icon": "fa-comment-dots", "group": "security"},
+    {"key": "oauth_qq", "icon": "fa-comment", "group": "security"},
     # 双因素 / 联系方式验证
-    {"key": "two_factor_auth", "icon": "fa-shield-halved"},
-    {"key": "email_verify", "icon": "fa-envelope"},
-    {"key": "phone_verify", "icon": "fa-mobile-screen"},
+    {"key": "login_captcha", "icon": "fa-shield-halved", "group": "security"},   # 登录图形验证码（SVG，纯标准库）
+    {"key": "two_factor_auth", "icon": "fa-shield-halved", "group": "security"},
+    {"key": "email_verify", "icon": "fa-envelope", "group": "security"},
+    {"key": "phone_verify", "icon": "fa-mobile-screen", "group": "security"},
 ]
 FEATURE_KEYS = [f["key"] for f in FEATURES]
+GROUP_IDS = [g["id"] for g in FEATURE_GROUPS]
 
 # 历史功能的默认值沿用各自原有配置段（config.json），行为与旧版一致
 _HERITAGE_DEFAULTS = {
@@ -130,11 +142,19 @@ def feature_enabled(key: str) -> bool:
 
 
 def get_all_features() -> list:
-    """返回全部功能的展示信息（key/icon/enabled），供 /count 与管理页使用"""
+    """返回全部功能的展示信息（key/icon/group/enabled），供 /count 与管理页使用"""
     _load_state()
     with _guard:
         state = dict(_state)
     return [dict(f, enabled=state.get(f["key"], _default_of(f["key"]))) for f in FEATURES]
+
+
+def get_grouped_features() -> list:
+    """按分组返回功能信息：[{"id": 组id, "features": [...]}, ...]，供页面分组渲染"""
+    by_group = {gid: [] for gid in GROUP_IDS}
+    for f in get_all_features():
+        by_group[f["group"]].append(f)
+    return [{"id": gid, "features": by_group[gid]} for gid in GROUP_IDS]
 
 
 def set_flags(new_state: dict) -> bool:

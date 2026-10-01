@@ -1,0 +1,16 @@
+{% if captcha_enabled %}
+<input type="hidden" name="captcha_token" id="captchaToken" value="{{ captcha_token }}">
+<div class="form-group">
+    <label for="captchaInput">{{ t('login_captcha') }}</label>
+    <div class="captcha-row">
+        <input type="text" id="captchaInput" name="captcha" maxlength="8"
+               placeholder="{{ t('login_captcha_placeholder') }}"
+               autocomplete="off" autocapitalize="none" spellcheck="false" required>
+        <span class="captcha-img" id="captchaBox" title="{{ t('login_captcha_refresh') }}">{{ captcha_svg|safe }}</span>
+        <button type="button" class="captcha-refresh" onclick="refreshCaptcha()"
+                title="{{ t('login_captcha_refresh') }}" aria-label="{{ t('login_captcha_refresh') }}">
+            <i class="fa-solid fa-rotate" aria-hidden="true"></i>
+        </button>
+    </div>
+</div>
+{% endif %}

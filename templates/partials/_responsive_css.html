@@ -1,0 +1,88 @@
+/* ===== 全局控件与小屏适配（base.html 与 note_edit.html 共用；在所有组件样式之后加载，负责兜底与覆盖） ===== */
+
+/* --- 通用按钮体系：覆盖全局 button/input 的 width:100%，供 org / 列表 / 表单页统一使用 --- */
+.btn, .btn-primary, .btn-secondary, .btn-danger, .btn-success, .btn-sm, .btn-link {
+    width: auto;
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    padding: 9px 18px;
+    border-radius: 10px; border: 1px solid var(--border);
+    font: inherit; font-size: 14px; font-weight: 500; line-height: 1.4;
+    background: var(--btn-bg); color: var(--text); text-decoration: none; cursor: pointer;
+    transition: background 0.15s ease, box-shadow 0.2s ease, border-color 0.2s ease, color 0.15s ease;
+}
+.btn:hover, .btn-primary:hover, .btn-secondary:hover, .btn-danger:hover, .btn-success:hover, .btn-sm:hover {
+    background: var(--btn-hover); color: var(--text); text-decoration: none; box-shadow: var(--glow-shadow);
+}
+.btn-primary { background: var(--link); border-color: var(--link); color: #fff; }
+.btn-primary:hover { background: var(--link); color: #fff; filter: brightness(1.08); }
+.btn-secondary { background: var(--card-bg); }
+.btn-danger { background: transparent; color: var(--error); border-color: var(--error); }
+.btn-danger:hover { background: var(--error); color: #fff; }
+.btn-success { background: #1a7f37; border-color: #1a7f37; color: #fff; }
+.btn-success:hover { background: #1a7f37; color: #fff; filter: brightness(1.1); }
+.btn-sm { padding: 5px 12px; font-size: 13px; border-radius: 8px; }
+.btn-link { background: none; border: none; padding: 4px 6px; color: var(--link); text-decoration: none; }
+.btn-link:hover { background: none; color: var(--link); text-decoration: underline; box-shadow: none; }
+/* 表格单元格 / 工具栏内的小按钮与下拉不允许被全局规则拉成整行宽 */
+td .btn, td .btn-sm, td .btn-primary, td .btn-danger, td .btn-success, td .btn-link, td button, td select { width: auto; }
+td select { padding: 5px 10px; font-size: 13px; }
+
+/* --- 图片不越界（错误页大图、外链图片等） --- */
+img { max-width: 100%; height: auto; }
+
+/* --- Markdown 内容里的宽表格：横向滚动而非撑破容器 --- */
+.markdown-body table { display: block; overflow-x: auto; max-width: 100%; }
+
+/* --- 组织页组件：模板引用了这些类名但此前无任何定义，统一补齐 --- */
+.org-header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; margin-bottom: 16px; }
+.members-table, .invites-table, .requests-table, .notes-table, .orgs-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.members-table th, .invites-table th, .requests-table th, .notes-table th, .orgs-table th {
+    text-align: left; font-size: 13px; font-weight: 500; color: var(--muted);
+    padding: 8px 10px; border-bottom: 1px solid var(--border); white-space: nowrap;
+}
+.members-table td, .invites-table td, .requests-table td, .notes-table td, .orgs-table td {
+    padding: 9px 10px; border-bottom: 1px solid var(--list-border); vertical-align: middle;
+}
+.members-table tr:last-child td, .invites-table tr:last-child td, .requests-table tr:last-child td,
+.notes-table tr:last-child td, .orgs-table tr:last-child td { border-bottom: none; }
+.role-badge { display: inline-flex; padding: 2px 10px; border-radius: 999px; border: 1px solid var(--card-border); background: var(--card-bg); font-size: 12px; white-space: nowrap; }
+.role-badge.role-owner { color: var(--link); border-color: var(--link); }
+.status-badge { display: inline-flex; padding: 2px 10px; border-radius: 999px; border: 1px solid var(--card-border); background: var(--card-bg); font-size: 12px; white-space: nowrap; }
+.status-badge.status-pending { color: #9a6700; border-color: #9a6700; }
+.status-badge.status-approved { color: #1a7f37; border-color: #1a7f37; }
+.status-badge.status-rejected { color: var(--error); border-color: var(--error); }
+.org-meta { display: flex; flex-wrap: wrap; gap: 6px 18px; color: var(--muted); font-size: 14px; }
+.org-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 8px; }
+.org-join-section { margin-bottom: 8px; }
+.org-join-section form { display: flex; flex-wrap: wrap; gap: 10px; }
+.org-join-section input { flex: 1 1 200px; width: auto; min-width: 0; }
+.org-join-section .btn-primary { flex: 0 0 auto; }
+
+/* --- 窄屏数据表格：整表横向滚动 --- */
+@media (max-width: 768px) {
+    .share-table, .members-table, .invites-table, .requests-table, .notes-table, .orgs-table {
+        display: block; overflow-x: auto; max-width: 100%;
+    }
+    .container { margin: 16px auto 32px; padding: 20px 18px 24px; }
+}
+
+/* --- 小屏（≤640px）：容器、标题、workbench 面板、列表工具条与触控尺寸阶梯 --- */
+@media (max-width: 640px) {
+    .container { margin: 10px auto 24px; padding: 16px 12px 20px; border-radius: 12px; }
+    h1 { font-size: 23px; }
+    h2 { font-size: 18px; }
+    .home-hero { padding: 18px 4px 4px; }
+    .home-hero h1 { font-size: 26px; }
+    .home-grid { margin-top: 20px; gap: 12px; }
+    .wb-panel { padding: 14px 12px 12px; }
+    .wb-panel-head { flex-wrap: wrap; }
+    .wb-greeting { gap: 12px; margin-bottom: 16px; }
+    .wb-greeting h1 { font-size: 22px; }
+    .form-group { margin-bottom: 14px; }
+    input, textarea, select { font-size: 16px; } /* 保持 16px，避免 iOS 聚焦自动缩放 */
+    .list-toolbar > .tool-btn { flex: 1 1 auto; justify-content: center; }
+    .pin-btn, .note-del-btn { width: 32px; height: 32px; }
+    .tree-children { padding-left: 10px; margin-left: 4px; }
+    .hm-cell { width: 10px; height: 10px; }
+    .hm-month { width: 10px; }
+}

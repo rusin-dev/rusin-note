@@ -35,7 +35,7 @@
         }
         .navbar .nav-links a:hover { background: var(--card-bg); color: var(--text); text-decoration: none; box-shadow: var(--glow-shadow); }
         .navbar .nav-links a:active { background: var(--card-bg); }
-        /* 当前页面：菜单链接下划线指示（::after 绘制，居中平滑展开） */
+        /* 当前页面：菜单链接下划线指示（::after 绘制，仅选中项常驻，悬浮不再出现下划线） */
         .navbar .nav-links a { position: relative; }
         .navbar .nav-links a::after {
             content: "";
@@ -52,8 +52,6 @@
         }
         .navbar .nav-links a.active { color: var(--text); }
         .navbar .nav-links a.active::after { opacity: 1; transform: scaleX(1); }
-        /* 悬浮：下划线同样平滑展开（active 常驻，优先级更高） */
-        .navbar .nav-links a:not(.active):hover::after { opacity: 0.7; transform: scaleX(1); }
         .navbar .nav-links .nav-icon-btn::after { left: 10px; right: 10px; }
         .navbar .nav-links i { font-size: 13px; }
         /* 图标入口（新建笔记 / 分享管理）：文字常显，无悬浮展开动效（悬浮只发光） */
@@ -65,80 +63,6 @@
             overflow: visible;
             white-space: nowrap;
         }
-        /* 账号侧边栏：position: fixed 右侧抽屉，避免被 .navbar 的 overflow: hidden 裁剪。
-           .navbar 不可加 transform/filter/backdrop-filter，否则会成为 fixed 的
-           包含块而再次被裁剪（逻辑见 partials/_navbar.html 内联脚本）。 */
-        .user-menu-backdrop {
-            position: fixed;
-            inset: 0;
-            z-index: 59;
-            background: rgba(0, 0, 0, 0.32);
-            opacity: 0;
-            transition: opacity 0.24s ease;
-        }
-        [data-theme="dark"] .user-menu-backdrop { background: rgba(0, 0, 0, 0.55); }
-        .user-menu-backdrop[hidden] { display: none; }
-        .user-menu-backdrop.open { opacity: 1; }
-        .user-menu {
-            position: fixed;
-            top: 0;
-            right: 0;
-            bottom: 0;
-            z-index: 60;
-            width: min(320px, calc(100vw - 32px));
-            height: 100vh;
-            padding: 0;
-            display: flex;
-            flex-direction: column;
-            background: var(--card-bg);
-            border-left: 1px solid var(--card-border);
-            box-shadow: -16px 0 40px rgba(0, 0, 0, 0.16);
-            transform: translateX(100%);
-            transition: transform 0.24s cubic-bezier(0.4, 0, 0.2, 1);
-        }
-        .user-menu[hidden] { display: none; }
-        .user-menu.open { transform: translateX(0); }
-        .user-menu-head {
-            display: flex; align-items: center; justify-content: space-between; gap: 10px;
-            padding: 16px;
-            flex-shrink: 0;
-            border-bottom: 1px solid var(--list-border);
-        }
-        .user-menu-head-main { display: flex; align-items: center; gap: 12px; min-width: 0; }
-        .user-menu-head .avatar { width: 36px; height: 36px; }
-        .user-menu-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
-        .user-menu-close {
-            width: 32px; height: 32px;
-            display: inline-flex; align-items: center; justify-content: center;
-            flex-shrink: 0;
-            border: none; border-radius: 8px;
-            background: none; color: var(--muted);
-            font-size: 16px; cursor: pointer;
-            transition: background 0.16s ease, color 0.16s ease;
-        }
-        .user-menu-close:hover { background: var(--bg); color: var(--text); }
-        .user-menu-body {
-            flex: 1;
-            overflow-y: auto;
-            display: flex;
-            flex-direction: column;
-            gap: 2px;
-            padding: 8px;
-        }
-        .user-menu-item {
-            display: flex; align-items: center; gap: 10px;
-            padding: 11px 12px;
-            border-radius: 8px;
-            color: var(--text);
-            text-decoration: none;
-            font-size: 14px;
-            transition: background 0.16s ease, color 0.16s ease, transform 0.16s ease;
-        }
-        .user-menu-item i { width: 18px; text-align: center; color: var(--muted); transition: color 0.16s ease; flex-shrink: 0; }
-        .user-menu-item:hover { background: var(--bg); color: var(--link); box-shadow: var(--glow-shadow); }
-        .user-menu-item:hover i { color: var(--link); }
-        .user-menu-form { margin: 0; }
-        .user-menu-logout { width: 100%; background: none; border: none; font: inherit; cursor: pointer; text-align: left; }
         /* 组织切换下拉框：position: fixed，避免被 .navbar 的 overflow: hidden 裁剪 */
         .org-menu {
             position: fixed;
@@ -180,6 +104,7 @@
         .org-menu-manage { color: var(--muted); font-size: 13px; }
         .nav-link-btn {
             display: inline-flex; align-items: center; gap: 6px;
+            width: auto;
             padding: 6px 12px;
             border-radius: 999px;
             color: var(--link);
@@ -194,7 +119,7 @@
         .nav-link-btn:active { background: var(--card-bg); }
         .avatar { width: 20px; height: 20px; border-radius: 50%; object-fit: cover; vertical-align: middle; flex-shrink: 0; }
         .navbar .user-info .avatar { margin-right: 6px; }
-        .theme-toggle, .nav-menu-btn, .account-menu-btn {
+        .nav-menu-btn {
             width: 36px; height: 36px;
             display: inline-flex; align-items: center; justify-content: center;
             padding: 0; font-size: 15px;
@@ -206,7 +131,7 @@
             flex-shrink: 0;
             transition: background 0.2s ease, border-color 0.2s ease;
         }
-        .theme-toggle:hover, .nav-menu-btn:hover, .account-menu-btn:hover { background: var(--card-bg); }
+        .nav-menu-btn:hover { background: var(--card-bg); }
         .lang-toggle {
             display: inline-flex; align-items: center; gap: 6px;
             height: 36px; padding: 0 10px;
@@ -225,7 +150,6 @@
         .nav-menu-btn { display: none; }
         .navbar.menu-collapsed { flex-wrap: wrap; }
         .navbar.menu-collapsed .nav-menu-btn { display: inline-flex; }
-        .navbar.menu-collapsed .theme-toggle { display: none; }
         .navbar.menu-collapsed .nav-links {
             order: 10;
             flex-basis: 100%;
@@ -258,10 +182,9 @@
             padding: 6px 16px;
             margin-top: 2px;
         }
-        /* 简洁模式：隐藏高级入口，保留账号侧边栏（内含「设置/登出」） */
-        .simple-mode .nav-links { display: none !important; }
+        /* 简洁模式：顶栏仅保留必要入口（我的笔记/新建/设置/登出），账号抽屉已移除 */
         .simple-mode .navbar { padding: 7px 24px; }
-        /* 匿名用户在简洁模式下无账号下拉框，保留登录快捷入口 */
+        /* 匿名用户在简洁模式下无登录入口时，保留登录快捷入口 */
         .simple-mode .simple-auth-btn { display: inline-flex !important; }
         .simple-auth-btn { display: none; }
         .simple-auth-btn-inner {
@@ -283,8 +206,8 @@
         }
         @media (prefers-reduced-motion: reduce) {
             .navbar .nav-links .nav-icon-btn .nav-icon-label,
-            .user-menu, .user-menu-backdrop, .org-menu, .user-caret { transition: none; }
+            .org-menu, .user-caret { transition: none; }
             .navbar .nav-links a::after { transition: none; }
             .navbar .nav-links a:hover { transform: none; }
-            .user-menu-item:hover, .org-menu-item:hover { transform: none; }
+            .org-menu-item:hover { transform: none; }
         }

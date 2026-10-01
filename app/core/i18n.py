@@ -59,6 +59,15 @@ STRINGS = {
         # 工作台（登录后的首页）
         "wb_title": "工作台",
         "wb_welcome": "欢迎回来，{name}",
+        "greeting_morning": "上午好",
+        "greeting_noon": "中午好",
+        "greeting_afternoon": "下午好",
+        "greeting_evening": "晚上好",
+        "wb_heatmap_title": "笔记热力图",
+        "wb_heatmap_total": "近一年共修改 {n} 次",
+        "wb_heatmap_cell": "{date} 修改 {c} 次",
+        "wb_heatmap_less": "少",
+        "wb_heatmap_more": "多",
         "wb_subtitle": "随手记录，高效管理",
         "wb_new_note": "写新笔记",
         "wb_quick_actions": "快捷入口",
@@ -127,6 +136,12 @@ STRINGS = {
         "login_submit": "登录",
         "login_no_account": "没有账号？注册",
         "err_login_failed": "用户名或密码错误",
+        # 登录图形验证码
+        "login_captcha": "图形验证码",
+        "login_captcha_placeholder": "请输入图中字符",
+        "login_captcha_refresh": "看不清？点击刷新",
+        "err_captcha": "验证码错误或已过期，请重试",
+        "feature_login_captcha": "登录图形验证码",
         # 第三方登录（OAuth）
         "login_or": "或使用以下方式登录",
         "otp_login_link": "使用邮箱 / 手机号验证码登录",
@@ -217,6 +232,16 @@ STRINGS = {
         "user_notes_title": "{username} 的笔记",
         "user_new_note": "+ 新建笔记",
         "user_no_notes": "还没有笔记，创建一个吧",
+        # 笔记批量导入 / 导出
+        "user_export": "导出",
+        "user_import": "导入",
+        "user_import_hint": "支持 .zip / .md / .txt，不会覆盖同名笔记",
+        "import_result": "导入完成：新增 {imported} 篇，跳过 {skipped} 篇",
+        "import_err_no_file": "导入失败：未选择文件",
+        "import_err_too_large": "导入失败：文件过大",
+        "import_err_not_a_zip": "导入失败：压缩包无效或已损坏",
+        "import_err_too_many_notes": "导入失败：笔记数量超过单次上限",
+        "import_err_unsupported_type": "导入失败：仅支持 .zip / .md / .txt 文件",
         # 统计
         "stats_title": "笔记统计",
         "stats_public": "公开笔记",
@@ -428,6 +453,11 @@ STRINGS = {
         "feature_two_factor_auth": "两步验证（2FA）",
         "feature_email_verify": "邮箱验证",
         "feature_phone_verify": "手机号验证",
+        "feature_group_notes": "笔记核心",
+        "feature_group_rendering": "渲染增强",
+        "feature_group_media": "媒体与社交",
+        "feature_group_account": "账号与协作",
+        "feature_group_security": "登录与安全",
         "org_owner": "创建者",
         "org_join_policy_invite": "邀请制",
         "org_join_policy_public": "公开加入",
@@ -570,6 +600,15 @@ STRINGS = {
         # Workbench (homepage after login)
         "wb_title": "Workspace",
         "wb_welcome": "Welcome back, {name}",
+        "greeting_morning": "Good morning",
+        "greeting_noon": "Good afternoon",
+        "greeting_afternoon": "Good afternoon",
+        "greeting_evening": "Good evening",
+        "wb_heatmap_title": "Note Activity",
+        "wb_heatmap_total": "{n} edits in the past year",
+        "wb_heatmap_cell": "{c} edits on {date}",
+        "wb_heatmap_less": "Less",
+        "wb_heatmap_more": "More",
         "wb_subtitle": "Capture ideas and manage them efficiently",
         "wb_new_note": "New Note",
         "wb_quick_actions": "Quick actions",
@@ -638,6 +677,12 @@ STRINGS = {
         "login_submit": "Log In",
         "login_no_account": "No account? Register",
         "err_login_failed": "Invalid username or password",
+        # Login captcha
+        "login_captcha": "Captcha",
+        "login_captcha_placeholder": "Enter the characters shown",
+        "login_captcha_refresh": "Can't read it? Click to refresh",
+        "err_captcha": "Captcha is wrong or expired, please try again",
+        "feature_login_captcha": "Login image captcha",
         # OAuth third-party login
         "login_or": "Or continue with",
         "otp_login_link": "Sign in with an email / phone code",
@@ -728,6 +773,16 @@ STRINGS = {
         "user_notes_title": "{username}'s Notes",
         "user_new_note": "+ New Note",
         "user_no_notes": "No notes yet, create one",
+        # Note bulk import / export
+        "user_export": "Export",
+        "user_import": "Import",
+        "user_import_hint": "Accepts .zip / .md / .txt; existing notes are never overwritten",
+        "import_result": "Import complete: {imported} added, {skipped} skipped",
+        "import_err_no_file": "Import failed: no file selected",
+        "import_err_too_large": "Import failed: file too large",
+        "import_err_not_a_zip": "Import failed: invalid or corrupted archive",
+        "import_err_too_many_notes": "Import failed: too many notes for one import",
+        "import_err_unsupported_type": "Import failed: only .zip / .md / .txt are supported",
         # Stats
         "stats_title": "Note Statistics",
         "stats_public": "Public Notes",
@@ -938,6 +993,11 @@ STRINGS = {
         "feature_two_factor_auth": "Two-factor authentication (2FA)",
         "feature_email_verify": "Email verification",
         "feature_phone_verify": "Phone verification",
+        "feature_group_notes": "Notes Core",
+        "feature_group_rendering": "Rendering",
+        "feature_group_media": "Media & Social",
+        "feature_group_account": "Account & Collaboration",
+        "feature_group_security": "Login & Security",
         "org_owner": "Owner",
         "org_join_policy_invite": "Invite only",
         "org_join_policy_public": "Public",
@@ -1073,10 +1133,10 @@ def detect_lang_from_request() -> str:
 
 
 def register_i18n(app: Flask) -> None:
-    """注册 Jinja2 全局上下文，使模板可直接用 {{ t('key') }} / {{ lang }} / {{ theme }} / {{ theme_script }} / {{ theme_vars }} / {{ current_user }} / {{ site_name }}"""
+    """注册 Jinja2 全局上下文，使模板可直接用 {{ t('key') }} / {{ lang }} / {{ theme_vars }} / {{ current_user }} / {{ site_name }}"""
     from app.core import config as _cfg
     from app.core.feature_flags import feature_enabled
-    from app.core.theme import THEME_VARS, get_theme_script
+    from app.core.theme import THEME_VARS
     from app.core.utils import (
         get_avatar_url, render_code_highlight_head, render_heading_anchors_head,
         render_markdown_alerts_head, render_pygments_head,
@@ -1098,8 +1158,6 @@ def register_i18n(app: Flask) -> None:
             "t": lambda key, **kw: t(lang, key, **kw),
             "lang": lang,
             "lang_switch_url": "/lang/" + ("en" if lang == "zh" else "zh"),
-            "theme": getattr(g, "theme", None),
-            "theme_script": get_theme_script(lang),
             "theme_vars": THEME_VARS,
             "simple_mode": getattr(g, "simple_mode", False),
             "pygments_head": render_pygments_head(),

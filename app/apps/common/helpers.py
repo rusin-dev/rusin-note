@@ -6,7 +6,7 @@ from app.core.extensions import cache
 from app.core.i18n import LANGS, t
 from app.core.middleware import get_current_user
 from app.core.notes import validate_note_id
-from app.core.theme import get_theme_script, THEME_VARS
+from app.core.theme import THEME_VARS
 from app.core.utils import format_note_time, render_latex_head
 
 
@@ -129,7 +129,6 @@ def build_note_context(
 
     return {
         "theme_vars": THEME_VARS,
-        "theme_script": get_theme_script(lang),
         "simple_mode": getattr(g, "simple_mode", False),
         "site_name": config.SITE_NAME,
         "title_prefix": title_prefix,

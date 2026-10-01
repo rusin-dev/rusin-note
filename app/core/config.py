@@ -119,6 +119,10 @@ DEFAULT_CONFIG = {
         "search_limit": 8,
         "scan_limit": 100
     },
+    "note_transfer": {                           # 笔记批量导入 / 导出（/user/<u>/export|import）
+        "max_file_kb": 4096,                     # 导入文件大小上限（KB，另受全局请求体上限约束）
+        "max_notes": 300                         # 单次导入笔记数上限
+    },
     "avatar": {
         "enabled": True,
         "url_template": "https://cn.cravatar.com/avatar/{hash}?d=identicon&f=y",
@@ -200,6 +204,7 @@ DEFAULT_CONFIG = {
         "note_tags": True,
         "note_folders": True,
         "note_pins": True,
+        "notes_import_export": True,
         "heading_anchors": True,
         "note_images": True,
         "note_attachments": True,
@@ -211,6 +216,7 @@ DEFAULT_CONFIG = {
         "oauth_wechat": False,
         "oauth_qq": False,
         # 双因素 / 联系方式验证：默认关闭
+        "login_captcha": True,
         "two_factor_auth": False,
         "email_verify": False,
         "phone_verify": False,
@@ -498,6 +504,17 @@ try:
     NOTE_REF_SCAN_LIMIT = max(1, int(NOTE_REF_SCAN_LIMIT))
 except (TypeError, ValueError):
     NOTE_REF_SCAN_LIMIT = 100
+
+# ---------- 笔记批量导入 / 导出配置 ----------
+NOTE_TRANSFER_CFG = config.get("note_transfer", DEFAULT_CONFIG["note_transfer"])
+try:
+    NOTE_TRANSFER_MAX_FILE_BYTES = max(1, int(NOTE_TRANSFER_CFG.get("max_file_kb", 4096))) * 1024
+except (TypeError, ValueError):
+    NOTE_TRANSFER_MAX_FILE_BYTES = 4096 * 1024
+try:
+    NOTE_TRANSFER_MAX_NOTES = max(1, int(NOTE_TRANSFER_CFG.get("max_notes", 300)))
+except (TypeError, ValueError):
+    NOTE_TRANSFER_MAX_NOTES = 300
 
 # ---------- 首页显示配置 ----------
 HOME_PAGE_CFG = config.get("home_page", {})

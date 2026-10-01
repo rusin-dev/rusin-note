@@ -2,7 +2,7 @@
 {% block extra_head %}
 <style>
     .image-usage { color: var(--muted); font-size: 14px; margin: 12px 0 20px; }
-    .image-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px; }
+    .image-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(220px, 100%), 1fr)); gap: 16px; }
     .image-card {
         background: var(--card-bg); border: 1px solid var(--card-border);
         border-radius: 10px; padding: 12px; display: flex; flex-direction: column; gap: 8px;

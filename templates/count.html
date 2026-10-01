@@ -29,15 +29,23 @@
 </div>
 <h2 style="margin-top: 36px;">{{ t('features_status_title') }}</h2>
 <p class="empty" style="margin-top: 8px;">{{ t('features_status_desc') }}</p>
-<div class="ff-grid">
-    {% for f in features %}
-    <div class="ff-card{% if not f.enabled %} ff-disabled{% endif %}">
-        <i class="fa-solid {{ f.icon }}" aria-hidden="true"></i>
-        <span class="ff-name">{{ t('feature_' ~ f.key) }}</span>
-        <span class="ff-badge {% if f.enabled %}ff-on{% else %}ff-off{% endif %}">{{ t('feature_on') if f.enabled else t('feature_off') }}</span>
+{% for group in feature_groups %}
+<details class="ff-group">
+    <summary>
+        <span>{{ t('feature_group_' ~ group.id) }}</span>
+        <span class="ff-group-stat">{{ group.features|selectattr('enabled')|list|length }}/{{ group.features|length }}</span>
+    </summary>
+    <div class="ff-grid">
+        {% for f in group.features %}
+        <div class="ff-card{% if not f.enabled %} ff-disabled{% endif %}">
+            <i class="fa-solid {{ f.icon }}" aria-hidden="true"></i>
+            <span class="ff-name">{{ t('feature_' ~ f.key) }}</span>
+            <span class="ff-badge {% if f.enabled %}ff-on{% else %}ff-off{% endif %}">{{ t('feature_on') if f.enabled else t('feature_off') }}</span>
+        </div>
+        {% endfor %}
     </div>
-    {% endfor %}
-</div>
+</details>
+{% endfor %}
 {% if is_admin_page %}<p style="margin-top: 20px;"><a href="/admin/features">{{ t('admin_features_link') }}</a></p>{% endif %}
 <p style="margin-top: 24px;"><a href="/">{{ t('back_home') }}</a></p>
 {% endblock %}

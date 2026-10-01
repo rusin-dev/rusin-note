@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html{% if theme %} data-theme="{{ theme }}"{% endif %}{% if simple_mode %} class="simple-mode"{% endif %} lang="{{ lang }}">
+<html{% if simple_mode %} class="simple-mode"{% endif %} lang="{{ lang }}">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -9,7 +9,6 @@
     <link rel="preload" href="{{ config.GLOBAL_CDN }}/npm/@fortawesome/fontawesome-free@6.5.2/webfonts/fa-brands-400.woff2" as="font" type="font/woff2" crossorigin>
     <link rel="stylesheet" href="{{ config.GLOBAL_CDN }}/npm/@fortawesome/fontawesome-free@6.5.2/css/all.min.css" media="print" onload="this.media='all'">
     <noscript><link rel="stylesheet" href="{{ config.GLOBAL_CDN }}/npm/@fortawesome/fontawesome-free@6.5.2/css/all.min.css"></noscript>
-    {{ theme_script|safe }}
     <script defer src="{{ config.GLOBAL_CDN }}/npm/marked@12.0.2/marked.min.js"></script>
     <script defer src="{{ config.GLOBAL_CDN }}/npm/dompurify@3.1.7/dist/purify.min.js"></script>
     {{ latex_head|safe }}
@@ -65,7 +64,7 @@
         .note-mtime { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); font-size: 12px; color: var(--muted); z-index: 10; user-select: none; }
 
         /* 笔记快捷引用（#）：自动补全下拉框 */
-        .ref-popover { position: fixed; z-index: 40; min-width: 280px; max-width: 380px; background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,.18); overflow: hidden; display: none; }
+        .ref-popover { position: fixed; z-index: 40; min-width: min(280px, calc(100vw - 16px)); max-width: min(380px, calc(100vw - 16px)); background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,.18); overflow: hidden; display: none; }
         .ref-popover.show { display: block; }
         .ref-popover .ref-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 6px 12px; font-size: 12px; color: var(--muted); border-bottom: 1px solid var(--border); background: var(--navbar-bg); }
         .ref-popover .ref-head .ref-scope { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -131,7 +130,7 @@
         @media (max-width: 768px) {
             .pane.preview-pane { display: none; }
             .pane.editor-pane { border-right: none; }
-            .editor-shell.show-preview .pane.preview-pane { display: flex; position: absolute; top: 50px; left: 0; right: 0; bottom: 0; background: var(--bg); z-index: 5; }
+            .editor-shell.show-preview .pane.preview-pane { display: flex; position: absolute; top: var(--nav-h, 50px); left: 0; right: 0; bottom: 0; background: var(--bg); z-index: 5; }
             .editor-shell.show-preview .pane.editor-pane { display: none; }
         }
         @media (min-width: 769px) {
@@ -149,6 +148,14 @@
             .save-hint { bottom: 70px; padding: 8px 16px; font-size: 12px; white-space: nowrap; }
             .save-status { bottom: 70px; right: 16px; font-size: 12px; padding: 4px 14px; }
             .note-mtime { bottom: 16px; font-size: 11px; }
+            /* 元信息栏：收窄保存按钮预留空间，输入框允许收缩换行 */
+            .tag-bar { padding: 8px 96px 8px 14px; gap: 6px; }
+            .tag-bar input { min-width: 0; flex: 1 1 80px; }
+        }
+        @media (max-width: 480px) {
+            /* 极窄屏：隐藏居中时间戳，避免与左删除/右保存重叠 */
+            .note-mtime { display: none; }
+            .save-hint { white-space: normal; max-width: calc(100vw - 24px); text-align: center; }
         }
         /* 简易模式：只保留读写保存，隐藏标签栏、预览窗格、附件、评论 */
         .simple-mode .tag-bar { display: none !important; }
@@ -162,6 +169,11 @@
         .simple-mode .note-mtime { display: none !important; }
     </style>
     <style>{% include "partials/_card_theme_css.html" %}</style>
+    <style>
+        {% include "partials/_responsive_css.html" %}
+        /* 编辑器顶部留白跟随导航栏实际高度（JS 测量写入 --nav-h，顶栏折叠换行变高时不遮挡面板头） */
+        .editor-shell { padding-top: calc(var(--nav-h, 50px) + 8px); }
+    </style>
     <style>
         /* 编辑器 / 预览 分隔条：可拖动自定义两栏宽度（见文件末尾脚本） */
         .editor-shell { gap: 0; }
@@ -304,15 +316,13 @@
                 var menuBtn = document.querySelector('.nav-menu-btn');
                 var brand = document.querySelector('.navbar-brand');
                 var user = document.querySelector('.user-info');
-                var theme = document.querySelector('.theme-toggle');
                 var lang = document.querySelector('.lang-toggle');
-                var accountBtn = document.querySelector('.account-menu-btn');
                 if (!navbar || !links || !menuBtn || !brand) return;
                 var wasOpen = navbar.classList.contains('menu-open');
                 navbar.classList.remove('menu-collapsed', 'menu-open');
                 // measuring：强制图标按钮文字展开后再量宽度，避免悬浮展开时溢出
                 navbar.classList.add('measuring');
-                [links, user, theme].forEach(function (el) {
+                [links, user].forEach(function (el) {
                     if (!el) return;
                     el.style.position = 'absolute';
                     el.style.visibility = 'hidden';
@@ -321,12 +331,10 @@
                 if (user) user.style.flex = 'none';
                 var linksW = links.scrollWidth;
                 var userW = user ? user.scrollWidth : 0;
-                var themeW = theme ? theme.offsetWidth : 0;
                 var langW = lang ? lang.offsetWidth : 0;
-                var accountW = accountBtn ? accountBtn.offsetWidth : 0;
                 var menuW = menuBtn.offsetWidth;
-                var total = brand.offsetWidth + userW + linksW + accountW + themeW + langW + menuW + GAP * 3;
-                [links, user, theme].forEach(function (el) {
+                var total = brand.offsetWidth + userW + linksW + langW + menuW + GAP * 3;
+                [links, user].forEach(function (el) {
                     if (!el) return;
                     el.style.position = '';
                     el.style.visibility = '';
@@ -338,6 +346,7 @@
                     navbar.classList.add('menu-collapsed');
                     if (wasOpen) navbar.classList.add('menu-open');
                 }
+                document.documentElement.style.setProperty('--nav-h', navbar.offsetHeight + 'px');
             }
             window.toggleMenu = function () {
                 var navbar = document.querySelector('.navbar');

@@ -1,22 +1,42 @@
 {% extends "base.html" %}
+{% block body_class %}auth-page{% endblock %}
 {% block content %}
-<h1>{{ t('register_title') }}</h1>
-{% if error %}<p class="error">{{ error }}</p>{% endif %}
-<form method="POST" action="/register">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <div class="form-group">
-        <label>{{ t('reg_username_label') }}</label>
-        <input type="text" name="username" required pattern="[a-zA-Z0-9_\-]+">
+<div class="auth-split">
+    <aside class="auth-art" aria-hidden="true">
+        <img src="/image/login-hero.webp" alt="">
+    </aside>
+    <div class="auth-main">
+        <a href="{{ lang_switch_url }}" class="lang-toggle auth-lang" title="{{ t('lang_switch') }}" aria-label="{{ t('lang_switch') }}">
+            <i class="fa-solid fa-globe" aria-hidden="true"></i>
+            <span>{% if lang == 'zh' %}En{% else %}中{% endif %}</span>
+        </a>
+        <div class="auth-form">
+            <h1>{{ t('register_title') }}</h1>
+            {% if error %}<p class="error">{{ error }}</p>{% endif %}
+            <form method="POST" action="/register">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="form-group">
+                    <label>{{ t('reg_username_label') }}</label>
+                    <input type="text" name="username" required pattern="[a-zA-Z0-9_\-]+">
+                </div>
+                <div class="form-group">
+                    <label>{{ t('reg_password_label', req=req_desc) }}</label>
+                    <input type="password" name="password" required>
+                </div>
+                <div class="form-group">
+                    <label>{{ t('reg_confirm_label') }}</label>
+                    <input type="password" name="confirm" required>
+                </div>
+                {% include "partials/_captcha_row.html" %}
+                <button type="submit">{{ t('reg_submit') }}</button>
+            </form>
+            <p style="margin-top:12px;"><a href="/login">{{ t('reg_have_account') }}</a></p>
+        </div>
     </div>
-    <div class="form-group">
-        <label>{{ t('reg_password_label', req=req_desc) }}</label>
-        <input type="password" name="password" required>
-    </div>
-    <div class="form-group">
-        <label>{{ t('reg_confirm_label') }}</label>
-        <input type="password" name="confirm" required>
-    </div>
-    <button type="submit">{{ t('reg_submit') }}</button>
-</form>
-<p style="margin-top:12px;"><a href="/login">{{ t('reg_have_account') }}</a></p>
+</div>
+
+<style>
+    {% include "partials/_auth_split_css.html" %}
+</style>
+{% include "partials/_captcha_js.html" %}
 {% endblock %}

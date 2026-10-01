@@ -1,0 +1,30 @@
+/* 认证页（登录/注册共用）：全幅左右分栏、无卡片外壳——左列通高插画、右列居中表单；窄屏仅表单 */
+body.auth-page .navbar { display: none; }
+body.auth-page .container {
+    max-width: none; margin: 0; padding: 0;
+    background: none; border: none; border-radius: 0; box-shadow: none;
+}
+.auth-split { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); min-height: 100vh; }
+.auth-art { position: relative; overflow: hidden; background: var(--card-bg); }
+.auth-art img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
+.auth-main { position: relative; display: flex; align-items: center; justify-content: center; padding: 48px 32px; min-width: 0; }
+.auth-form { width: 100%; max-width: 420px; }
+.auth-form h1 { border-bottom: none; padding-bottom: 0; margin-bottom: 22px; }
+.auth-lang { position: absolute; top: 18px; right: 22px; }
+/* 认证页控件统一：输入框与按钮同高同圆角；主按钮用主题色 */
+.auth-form .form-group { margin-bottom: 18px; }
+.auth-form input:not([type="hidden"]), .auth-form button { height: 46px; border-radius: 10px; font-size: 15px; }
+.auth-form input:not([type="hidden"]) { width: 100%; padding: 0 14px; }
+.auth-form button[type="submit"] { width: 100%; background: var(--link); border: 1px solid var(--link); color: #ffffff; font-weight: 600; }
+.auth-form button[type="submit"]:hover { background: var(--link); border-color: var(--link); filter: brightness(0.9); }
+/* 图形验证码：输入框 + 图片 + 刷新按钮同行 */
+.captcha-row { display: flex; align-items: center; gap: 10px; }
+.auth-form .captcha-row input { flex: 1 1 auto; min-width: 0; width: auto; }
+.captcha-img { flex-shrink: 0; cursor: pointer; line-height: 0; border-radius: 10px; border: 1px solid var(--card-border); overflow: hidden; }
+.captcha-refresh { flex: 0 0 auto; width: 40px; height: 46px; padding: 0; display: inline-flex; align-items: center; justify-content: center; font-size: 14px; background: var(--btn-bg); border: 1px solid var(--border); color: var(--text); cursor: pointer; }
+.captcha-refresh:hover { background: var(--btn-hover); }
+@media (max-width: 768px) {
+    .auth-split { grid-template-columns: 1fr; }
+    .auth-art { display: none; }
+    .auth-main { padding: 64px 20px 40px; }
+}

@@ -75,6 +75,7 @@ KV_FILE_MAP = {
     "two_factor": "two_factor.json",
     "user_contacts": "user_contacts.json",
     "verification_codes": "verification_codes.json",
+    "login_captchas": "login_captchas.json",
     "secret_key": ".secret_key",
     # 组织相关
     "orgs": "orgs.json",

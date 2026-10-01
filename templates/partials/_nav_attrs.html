@@ -1,0 +1,18 @@
+{#- 导航链接状态：与当前 request.path 比对，命中时输出 active 类与 aria-current。
+    exact=true 仅精确匹配；否则按前缀匹配（如 /count、/user/<u>/settings）。
+    exclude 可列出需排除的前缀，用于「我的笔记」页下的 settings / shares 等子页。
+    顶部导航栏（_navbar.html）与登录侧边栏（_sidebar.html）共用。 -#}
+{%- macro nav_attrs(match, cls='nav-link', exact=false, exclude=()) -%}
+{%- set p = (request.path or '/') -%}
+{%- set m = match -%}
+{%- if exact -%}
+{%- set on = (p == m or p == m.rstrip('/')) -%}
+{%- else -%}
+{%- set on = (p == m or p.startswith(m if m.endswith('/') else m + '/')) -%}
+{%- endif -%}
+{%- set ns = namespace(on=on) -%}
+{%- for ex in exclude -%}
+{%- if ns.on and p.startswith(ex) -%}{%- set ns.on = false -%}{%- endif -%}
+{%- endfor -%}
+{{ ('class="' ~ cls ~ (' active' if ns.on else '') ~ '"') | safe }}{{ (' aria-current="page"' if ns.on else '') | safe }}
+{%- endmacro -%}

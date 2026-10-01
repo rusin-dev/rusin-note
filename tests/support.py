@@ -15,7 +15,8 @@ DEFAULT_PASSWORD = "TestPass1!"
 
 _CSRF_RE = re.compile(r'name="csrf_token"[^>]*value="([^"]+)"')
 # 列表页中笔记链接（排除 /new、/images、/attachments、/settings、/shares 等入口）
-_ENTRY_IDS = {"new", "images", "attachments", "settings", "shares", "todos"}
+_ENTRY_IDS = {"new", "images", "attachments", "settings", "shares", "todos",
+              "export", "import"}
 
 
 def expect(condition, message: str) -> None:
@@ -39,26 +40,41 @@ def csrf_from(client, path: str) -> str:
     return csrf_of(client.get(path).get_data(as_text=True))
 
 
+def _captcha_data(html: str) -> dict:
+    """开启图形验证码时读取一次性 token 与答案，返回可并入表单的字段。"""
+    token_match = re.search(r'name="captcha_token"[^>]*value="([^"]+)"', html)
+    if not token_match:
+        return {}
+    from app.core import captcha
+    token = token_match.group(1)
+    return {"captcha_token": token, "captcha": captcha.peek(token)}
+
+
 def register(client, username: str, password: str = DEFAULT_PASSWORD):
-    """注册新用户（自动获取并回填 CSRF token）。"""
+    """注册新用户（自动获取并回填 CSRF token 与图形验证码）。"""
     page = client.get("/register")
     assert page.status_code == 200, f"注册页不可访问: {page.status_code}"
+    html = page.get_data(as_text=True)
     return client.post("/register", data={
         "username": username,
         "password": password,
         "confirm": password,
-        "csrf_token": csrf_of(page.get_data(as_text=True)),
+        "csrf_token": csrf_of(html),
+        **_captcha_data(html),
     })
 
 
 def login(client, username: str, password: str = DEFAULT_PASSWORD):
-    """登录（自动获取并回填 CSRF token）。"""
+    """登录（自动回填 CSRF token；图形验证码开启时自动读取答案一并提交）。"""
     page = client.get("/login")
-    return client.post("/login", data={
+    html = page.get_data(as_text=True)
+    data = {
         "username": username,
         "password": password,
-        "csrf_token": csrf_of(page.get_data(as_text=True)),
-    })
+        "csrf_token": csrf_of(html),
+        **_captcha_data(html),
+    }
+    return client.post("/login", data=data)
 
 
 def register_and_login(client, username: str, password: str = DEFAULT_PASSWORD) -> None:

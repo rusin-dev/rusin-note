@@ -1,7 +1,10 @@
 """注册、登录、登出、语言切换"""
 import os
 import urllib.parse
-from flask import Blueprint, abort, g, make_response, redirect, render_template, request, session, url_for
+from flask import (
+    Blueprint, abort, g, jsonify, make_response, redirect, render_template,
+    request, session, url_for,
+)
 
 from app.core import config
 from app.core.auth import (
@@ -15,7 +18,7 @@ from app.core.auth import (
     verify_password,
 )
 from app.core.extensions import limiter
-from app.core.feature_flags import require_feature
+from app.core.feature_flags import feature_enabled, require_feature
 from app.core.i18n import LANG_COOKIE, t
 from app.core.notes import RESERVED_USERNAMES, validate_username
 from app.core.store import get_user, register_user
@@ -28,10 +31,23 @@ bp = Blueprint("auth", __name__)
 PENDING_2FA_KEY = "pending_2fa"
 
 
-def _login_ctx():
-    """登录/注册页上下文：当前启用的第三方登录 Provider（可能为空）。"""
+def _login_ctx(with_captcha: bool = False):
+    """登录/注册页上下文：启用的第三方登录 Provider；with_captcha 为真且开关
+    打开时生成一次性图形验证码（token + 内联 SVG）。"""
     from app.apps.oauth import service as oauth_service
-    return {"oauth_providers": oauth_service.available_providers()}
+    ctx = {
+        "oauth_providers": oauth_service.available_providers(),
+        "captcha_enabled": False, "captcha_token": "", "captcha_svg": "",
+    }
+    if with_captcha and feature_enabled("login_captcha"):
+        from app.core import captcha
+        token, code = captcha.generate()
+        ctx.update({
+            "captcha_enabled": True,
+            "captcha_token": token,
+            "captcha_svg": captcha.render_svg(code),
+        })
+    return ctx
 
 
 # ---------- GET ----------
@@ -40,7 +56,9 @@ def _login_ctx():
 @require_feature("open_register")
 @limiter.limit(lambda: f"{config.GET_RATE_MAX} per {config.GET_RATE_WINDOW} second")
 def register_get():
-    return render_template("auth/register.html", error="", **_login_ctx())
+    resp = make_response(render_template("auth/register.html", error="", **_login_ctx(with_captcha=True)))
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
 
 
 @bp.route("/login", methods=["GET"])
@@ -49,7 +67,21 @@ def login_get():
     lang = getattr(g, "lang", "zh")
     err_key = request.args.get("oauth_error", "")
     error = t(lang, err_key) if err_key else ""
-    return render_template("auth/login.html", error=error, **_login_ctx())
+    resp = make_response(render_template("auth/login.html", error=error, **_login_ctx(with_captcha=True)))
+    # 防止浏览器缓存/BFCache 回退到旧版页面
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
+
+
+@bp.route("/login/captcha", methods=["GET"])
+@limiter.limit(lambda: f"{config.GET_RATE_MAX} per {config.GET_RATE_WINDOW} second")
+def login_captcha_refresh():
+    """刷新图形验证码：返回新的一次性 token 与 SVG 标记（登录页 JS 调用）。"""
+    from app.core import captcha
+    if not feature_enabled("login_captcha"):
+        abort(404)
+    token, code = captcha.generate()
+    return jsonify({"token": token, "svg": captcha.render_svg(code)})
 
 
 @bp.route("/logout", methods=["POST"])
@@ -86,34 +118,40 @@ def lang_switch(lang):
 @require_feature("open_register")
 @limiter.limit(lambda: f"{config.REGISTER_RATE_MAX} per {config.REGISTER_RATE_WINDOW} second")
 def register_post():
+    lang = getattr(g, "lang", "zh")
+
+    def _fail(error: str):
+        return render_template("auth/register.html", error=error,
+                               **_login_ctx(with_captcha=True)), 400
+
+    # 图形验证码先行校验（与登录一致）：一次性 token，成败即销毁，失败重新签发
+    if feature_enabled("login_captcha"):
+        from app.core import captcha
+        if not captcha.verify(request.form.get("captcha_token", ""),
+                              request.form.get("captcha", "")):
+            return _fail(t(lang, "err_captcha"))
+
     username = request.form.get("username", "").strip()
     password = request.form.get("password", "")
     confirm = request.form.get("confirm", "")
 
     if not validate_username(username):
         if username.lower() in RESERVED_USERNAMES:
-            error = "err_username_reserved"
-        else:
-            error = "err_username_invalid"
-        return render_template("auth/register.html", error=error, **_login_ctx()), 400
+            return _fail(t(lang, "err_username_reserved"))
+        return _fail(t(lang, "err_username_invalid"))
 
     if password != confirm:
-        return render_template("auth/register.html", error="err_password_mismatch",
-                               **_login_ctx()), 400
+        return _fail(t(lang, "err_password_mismatch"))
 
     if not check_password_complexity(password):
         from app.core.config import get_password_requirements_description
-        lang = getattr(g, "lang", "zh")
         req_desc = get_password_requirements_description(lang)
-        from app.core.i18n import t
-        msg = t(lang, "err_password_weak", req=req_desc)
-        return render_template("auth/register.html", error=msg, **_login_ctx()), 400
+        return _fail(t(lang, "err_password_weak", req=req_desc))
 
     salt = generate_salt()
     hashed = hash_password(password, salt)
     if not register_user(username, {"salt": salt, "hash": hashed}):
-        return render_template("auth/register.html", error="err_username_taken",
-                               **_login_ctx()), 400
+        return _fail(t(lang, "err_username_taken"))
 
     token = create_session(username)
     # 注册后直接进入工作台首页（而不是编辑器）
@@ -125,12 +163,21 @@ def register_post():
 @bp.route("/login", methods=["POST"])
 @limiter.limit(lambda: f"{config.RATE_MAX} per {config.RATE_WINDOW} second")
 def login_post():
+    lang = getattr(g, "lang", "zh")
+    # 图形验证码先行校验：一次性 token，无论成败即销毁（防重放），失败重新签发
+    if feature_enabled("login_captcha"):
+        from app.core import captcha
+        if not captcha.verify(request.form.get("captcha_token", ""),
+                              request.form.get("captcha", "")):
+            return render_template("auth/login.html", error=t(lang, "err_captcha"),
+                                   **_login_ctx(with_captcha=True)), 400
+
     username = request.form.get("username", "").strip()
     password = request.form.get("password", "")
 
     if len(password) > config.PW_MAX_LENGTH:
-        return render_template("auth/login.html", error="err_login_failed",
-                               **_login_ctx()), 401
+        return render_template("auth/login.html", error=t(lang, "err_login_failed"),
+                               **_login_ctx(with_captcha=True)), 401
 
     user = get_user(username)
 
@@ -139,8 +186,8 @@ def login_post():
     if not salt or not hashed or not isinstance(salt, str) or not isinstance(hashed, str):
         salt, hashed = None, None
     if salt is None or not verify_password(password, salt, hashed):
-        return render_template("auth/login.html", error="err_login_failed",
-                               **_login_ctx()), 401
+        return render_template("auth/login.html", error=t(lang, "err_login_failed"),
+                               **_login_ctx(with_captcha=True)), 401
 
     # 已开启 TOTP 双因素认证：先写入待验证标记，转到第二因素校验页
     from app.apps.twofa import service as twofa_service

@@ -1,0 +1,59 @@
+{% from "partials/_nav_attrs.html" import nav_attrs %}
+{#- 登录态左侧侧边栏（非编辑页），替代顶部导航栏；账号抽屉已移除，入口直接平铺 -#}
+<aside class="sidebar" aria-label="Navigation">
+    <a class="navbar-brand sidebar-brand" href="/" title="Home">
+        <img src="/favicon.ico" alt="" class="navbar-brand-icon">
+        <span class="navbar-brand-name side-text">{{ (site_name or 'rusin-note')|e }}</span>
+    </a>
+    <nav class="sidebar-links" aria-label="{{ t('nav_my_notes') }}">
+        <a {{ nav_attrs('/user/' ~ current_user ~ '/', 'side-link', false, ['/user/' ~ current_user ~ '/settings', '/user/' ~ current_user ~ '/shares/'])|safe }} href="/user/{{ current_user|e }}/" title="{{ t('nav_my_notes') }}">
+            <i class="fa-solid fa-file-lines" aria-hidden="true"></i><span class="side-text">{{ t('nav_my_notes') }}</span>
+        </a>
+        <a {{ nav_attrs('/user/' ~ current_user ~ '/new', 'side-link')|safe }} href="/user/{{ current_user|e }}/new" title="{{ t('nav_new_note') }}">
+            <i class="fa-solid fa-square-plus" aria-hidden="true"></i><span class="side-text">{{ t('nav_new_note') }}</span>
+        </a>
+        {% if feature_enabled('share_links') and not simple_mode %}
+        <a {{ nav_attrs('/user/' ~ current_user ~ '/shares/', 'side-link')|safe }} href="/user/{{ current_user|e }}/shares/" title="{{ t('nav_share_mgmt') }}">
+            <i class="fa-solid fa-share-nodes" aria-hidden="true"></i><span class="side-text">{{ t('nav_share_mgmt') }}</span>
+        </a>
+        {% endif %}
+        <a {{ nav_attrs('/user/' ~ current_user ~ '/settings', 'side-link')|safe }} href="/user/{{ current_user|e }}/settings" title="{{ t('nav_settings') }}">
+            <i class="fa-solid fa-gear" aria-hidden="true"></i><span class="side-text">{{ t('nav_settings') }}</span>
+        </a>
+        <form action="/logout" method="POST" class="sidebar-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="side-link side-logout" title="{{ t('nav_logout') }}">
+                <i class="fa-solid fa-right-from-bracket" aria-hidden="true"></i><span class="side-text">{{ t('nav_logout') }}</span>
+            </button>
+        </form>
+    </nav>
+    {% if feature_enabled('orgs') and not simple_mode %}
+    <div class="sidebar-section side-text">
+        <i class="fa-solid fa-users" aria-hidden="true"></i>{{ t('nav_switch_org') }}
+    </div>
+    <nav class="sidebar-links" aria-label="{{ t('nav_switch_org') }}">
+        <a class="side-link" href="/user/{{ current_user|e }}/" title="{{ t('nav_personal_space') }}">
+            <i class="fa-solid fa-house-user" aria-hidden="true"></i><span class="side-text">{{ t('nav_personal_space') }}</span>
+        </a>
+        {% for org in user_orgs %}
+        <a {{ nav_attrs('/org/' ~ org.id, 'side-link')|safe }} href="/org/{{ org.id|e }}/" title="{{ org.name|e }}">
+            <i class="fa-solid fa-people-group" aria-hidden="true"></i><span class="side-text org-menu-org-name">{{ org.name|e }}</span>
+        </a>
+        {% endfor %}
+        <a {{ nav_attrs('/org/mine', 'side-link')|safe }} href="/org/mine" title="{{ t('nav_manage_orgs') }}">
+            <i class="fa-solid fa-sliders" aria-hidden="true"></i><span class="side-text">{{ t('nav_manage_orgs') }}</span>
+        </a>
+    </nav>
+    {% endif %}
+    <div class="sidebar-foot">
+        {% set av = get_avatar(current_user) %}
+        <div class="sidebar-user">
+            {% if av %}<img class="avatar" src="{{ av|e }}" alt="" width="28" height="28" loading="lazy" referrerpolicy="no-referrer">{% endif %}
+            <span class="user-name side-text">{{ current_user|e }}</span>
+        </div>
+        <a href="{{ lang_switch_url }}" class="lang-toggle" title="{{ t('lang_switch') }}" aria-label="{{ t('lang_switch') }}">
+            <i class="fa-solid fa-globe" aria-hidden="true"></i>
+            <span class="side-text">{% if lang == 'zh' %}En{% else %}中{% endif %}</span>
+        </a>
+    </div>
+</aside>

@@ -7,6 +7,27 @@
 </h1>
 <style>
     .page-avatar { width: 32px; height: 32px; margin-right: 8px; }
+    /* 顶部工具条：新建笔记 / 图床管理 / 附件管理 */
+    .list-toolbar { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 16px; }
+    .tool-btn { display: inline-flex; align-items: center; padding: 8px 16px; font-size: 14px; font-weight: 500; background: var(--btn-bg); border: 1px solid var(--border); border-radius: 10px; color: var(--text); text-decoration: none; cursor: pointer; transition: background 0.15s ease; }
+    .tool-btn:hover { background: var(--btn-hover); color: var(--text); text-decoration: none; }
+    /* 批量导入表单：文件选择框 + 提交按钮，与工具条按钮同行 */
+    .tool-form { display: inline-flex; align-items: center; gap: 8px; flex: 1 1 260px; min-width: 0; }
+    .tool-file { flex: 1; min-width: 0; }
+    .tool-file input[type="file"] {
+        width: 100%; min-width: 0; padding: 7px 10px; font-size: 13px;
+        border: 1px dashed var(--border); border-radius: 10px;
+        background: var(--input-bg); color: var(--muted); cursor: pointer;
+    }
+    .tool-file input[type="file"]::file-selector-button {
+        margin-right: 8px; padding: 3px 10px; font-size: 13px; font-family: inherit;
+        border: 1px solid var(--border); border-radius: 8px;
+        background: var(--btn-bg); color: var(--text); cursor: pointer;
+    }
+    .tool-form .tool-btn { flex: 0 0 auto; }
+    @media (max-width: 640px) {
+        .tool-form { flex: 1 1 100%; }
+    }
     .tag-cloud { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 16px; }
     .tag-chip { display: inline-flex; align-items: center; gap: 5px; padding: 3px 12px; border-radius: 999px; font-size: 13px; background: var(--card-bg); border: 1px solid var(--card-border); color: var(--text); text-decoration: none; }
     .tag-chip:hover { text-decoration: none; border-color: var(--hover); }
@@ -123,10 +144,28 @@
     </ul>
 </li>
 {% endmacro %}
-<div style="margin-bottom: 16px;">
-    <a href="/user/{{ username|e }}/new">{{ t('user_new_note') }}</a>
-    {% if feature_enabled('note_images') %} · <a href="/user/{{ username|e }}/images">{{ t('user_images_link') }}</a>{% endif %}
-    {% if feature_enabled('note_attachments') %} · <a href="/user/{{ username|e }}/attachments">{{ t('user_attachments_link') }}</a>{% endif %}
+{% if import_msg %}
+<div class="home-notice" role="status">
+    <i class="fa-solid fa-circle-info" aria-hidden="true"></i>
+    <span class="home-notice-text">{{ import_msg }}</span>
+</div>
+{% endif %}
+<div class="list-toolbar">
+    <a class="tool-btn" href="/user/{{ username|e }}/new">{{ t('user_new_note') }}</a>
+    {% if feature_enabled('note_images') %}<a class="tool-btn" href="/user/{{ username|e }}/images">{{ t('user_images_link') }}</a>{% endif %}
+    {% if feature_enabled('note_attachments') %}<a class="tool-btn" href="/user/{{ username|e }}/attachments">{{ t('user_attachments_link') }}</a>{% endif %}
+    {% if transfer_enabled %}
+    <a class="tool-btn" href="/user/{{ username|e }}/export" title="ZIP"><i class="fa-solid fa-file-export" aria-hidden="true"></i>{{ t('user_export') }}</a>
+    <a class="tool-btn" href="/user/{{ username|e }}/export?format=md" title="Markdown"><i class="fa-brands fa-markdown" aria-hidden="true"></i>MD</a>
+    <form class="tool-form" method="post" action="/user/{{ username|e }}/import" enctype="multipart/form-data"
+          title="{{ t('user_import_hint') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <label class="tool-file">
+            <input type="file" name="file" accept=".zip,.md,.txt,.markdown" required>
+        </label>
+        <button type="submit" class="tool-btn"><i class="fa-solid fa-file-import" aria-hidden="true"></i>{{ t('user_import') }}</button>
+    </form>
+    {% endif %}
 </div>
 {% if folders_enabled and active_folder %}
 <nav class="folder-breadcrumb" aria-label="{{ t('note_folders_label') }}">
