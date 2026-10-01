@@ -71,7 +71,7 @@ def _build_heatmap(username: str, lang: str) -> dict:
                 days.append({"k": d.isoformat(), "c": c, "lv": lv})
             d += timedelta(days=1)
         weeks.append({"m": month_label, "days": days})
-    return {"weeks": weeks, "total": total}
+    return {"weeks": weeks, "total": total, "days": len(counts)}
 
 
 @bp.route("/")

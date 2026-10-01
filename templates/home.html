@@ -7,70 +7,201 @@
 </div>
 {% endif %}
 {% if current_user %}
-{# ===== 工作台：问候 + 近一年笔记热力图 + 最近修改 ===== #}
-<header class="wb-greeting">
+{# ===== 登录后首页：产品风格互动落地页 ===== #}
+<header class="lp-hero">
     {% set av = get_avatar(current_user) %}
-    {% if av %}<img class="avatar" src="{{ av|e }}" alt="" width="44" height="44" loading="lazy" referrerpolicy="no-referrer">{% endif %}
-    <h1>{{ greeting|e }}</h1>
+    {% if av %}<img class="avatar lp-avatar" src="{{ av|e }}" alt="" width="56" height="56" loading="lazy" referrerpolicy="no-referrer">{% endif %}
+    <p class="lp-hello">{{ greeting|e }}</p>
+    <h1 class="lp-tagline">{{ t('lp_tagline') }}</h1>
+    <p class="lp-sub">{{ t('lp_sub') }}</p>
+    <div class="lp-cta">
+        <a class="lp-btn primary" href="/user/{{ current_user|e }}/new"><i class="fa-solid fa-square-plus" aria-hidden="true"></i> {{ t('nav_new_note') }}</a>
+        <a class="lp-btn ghost" href="/user/{{ current_user|e }}/"><i class="fa-solid fa-file-lines" aria-hidden="true"></i> {{ t('nav_my_notes') }}</a>
+    </div>
+    <div class="lp-stats">
+        <div class="lp-stat"><span class="lp-stat-num">{{ note_count }}</span><span class="lp-stat-label">{{ t('lp_stat_notes') }}</span></div>
+        <div class="lp-stat"><span class="lp-stat-num">{{ heatmap.total }}</span><span class="lp-stat-label">{{ t('lp_stat_updates') }}</span></div>
+        <div class="lp-stat"><span class="lp-stat-num">{{ heatmap.days }}</span><span class="lp-stat-label">{{ t('lp_stat_days') }}</span></div>
+    </div>
 </header>
-<div class="wb-panels">
-    <section class="wb-panel">
-        <div class="wb-panel-head">
-            <h2><i class="fa-solid fa-chart-simple" aria-hidden="true"></i>{{ t('wb_heatmap_title') }}</h2>
-            <span class="wb-heatmap-total">{{ t('wb_heatmap_total', n=heatmap.total) }}</span>
+
+<section class="lp-sec">
+    <h2>{{ t('lp_sec_features') }}</h2>
+    <div class="home-grid lp-grid">
+        <a class="home-card" href="/user/{{ current_user|e }}/">
+            <span class="home-card-icon"><i class="fa-solid fa-file-lines" aria-hidden="true"></i></span>
+            <span class="home-card-body">
+                <span class="home-card-title">{{ t('nav_my_notes') }}</span>
+                <span class="home-card-desc">{{ t('lp_card_notes_d') }}</span>
+            </span>
+            <span class="home-card-arrow"><i class="fa-solid fa-arrow-right" aria-hidden="true"></i></span>
+        </a>
+        <a class="home-card" href="/user/{{ current_user|e }}/new">
+            <span class="home-card-icon"><i class="fa-solid fa-square-plus" aria-hidden="true"></i></span>
+            <span class="home-card-body">
+                <span class="home-card-title">{{ t('nav_new_note') }}</span>
+                <span class="home-card-desc">{{ t('lp_card_new_d') }}</span>
+            </span>
+            <span class="home-card-arrow"><i class="fa-solid fa-arrow-right" aria-hidden="true"></i></span>
+        </a>
+        <a class="home-card" href="/user/{{ current_user|e }}/shares/">
+            <span class="home-card-icon"><i class="fa-solid fa-share-nodes" aria-hidden="true"></i></span>
+            <span class="home-card-body">
+                <span class="home-card-title">{{ t('nav_share_mgmt') }}</span>
+                <span class="home-card-desc">{{ t('lp_card_shares_d') }}</span>
+            </span>
+            <span class="home-card-arrow"><i class="fa-solid fa-arrow-right" aria-hidden="true"></i></span>
+        </a>
+        <a class="home-card" href="/user/{{ current_user|e }}/settings">
+            <span class="home-card-icon"><i class="fa-solid fa-gear" aria-hidden="true"></i></span>
+            <span class="home-card-body">
+                <span class="home-card-title">{{ t('nav_settings') }}</span>
+                <span class="home-card-desc">{{ t('lp_card_settings_d') }}</span>
+            </span>
+            <span class="home-card-arrow"><i class="fa-solid fa-arrow-right" aria-hidden="true"></i></span>
+        </a>
+        {% if feature_enabled('notes_import_export') %}
+        <a class="home-card" href="/user/{{ current_user|e }}/export">
+            <span class="home-card-icon"><i class="fa-solid fa-file-arrow-down" aria-hidden="true"></i></span>
+            <span class="home-card-body">
+                <span class="home-card-title">{{ t('lp_card_transfer_t') }}</span>
+                <span class="home-card-desc">{{ t('lp_card_transfer_d') }}</span>
+            </span>
+            <span class="home-card-arrow"><i class="fa-solid fa-arrow-right" aria-hidden="true"></i></span>
+        </a>
+        {% endif %}
+        {% if show_benben %}
+        <a class="home-card" href="/benben">
+            <span class="home-card-icon"><i class="fa-solid fa-sticky-note" aria-hidden="true"></i></span>
+            <span class="home-card-body">
+                <span class="home-card-title">{{ t('home_benben') }}</span>
+                <span class="home-card-desc">{{ t('home_benben_desc') }}</span>
+            </span>
+            <span class="home-card-arrow"><i class="fa-solid fa-arrow-right" aria-hidden="true"></i></span>
+        </a>
+        {% endif %}
+        {% if feature_enabled('orgs') %}
+        <a class="home-card" href="/org/mine">
+            <span class="home-card-icon"><i class="fa-solid fa-users" aria-hidden="true"></i></span>
+            <span class="home-card-body">
+                <span class="home-card-title">{{ t('nav_manage_orgs') }}</span>
+                <span class="home-card-desc">{{ t('lp_card_org_d') }}</span>
+            </span>
+            <span class="home-card-arrow"><i class="fa-solid fa-arrow-right" aria-hidden="true"></i></span>
+        </a>
+        {% endif %}
+    </div>
+</section>
+
+<section class="lp-sec">
+    <h2>{{ t('lp_sec_steps') }}</h2>
+    <div class="lp-steps">
+        <div class="lp-step">
+            <span class="lp-step-no">1</span>
+            <h3>{{ t('lp_step1_t') }}</h3>
+            <p>{{ t('lp_step1_d') }}</p>
         </div>
-        <div class="hm-scroll">
-            <div class="hm-inner">
-                <div class="hm-month-row" aria-hidden="true">
-                    {% for week in heatmap.weeks %}<span class="hm-month">{{ week.m }}</span>{% endfor %}
-                </div>
-                <div class="hm-grid">
-                    {% for week in heatmap.weeks %}
-                    <div class="hm-week">
-                        {% for day in week.days %}
-                        {% if day %}
-                        <span class="hm-cell hm-l{{ day.lv }}" title="{{ t('wb_heatmap_cell', date=day.k, c=day.c) }}"></span>
-                        {% else %}
-                        <span class="hm-cell hm-blank"></span>
-                        {% endif %}
+        <div class="lp-step">
+            <span class="lp-step-no">2</span>
+            <h3>{{ t('lp_step2_t') }}</h3>
+            <p>{{ t('lp_step2_d') }}</p>
+        </div>
+        <div class="lp-step">
+            <span class="lp-step-no">3</span>
+            <h3>{{ t('lp_step3_t') }}</h3>
+            <p>{{ t('lp_step3_d') }}</p>
+        </div>
+    </div>
+</section>
+
+<section class="lp-sec">
+    <h2>{{ t('lp_sec_activity') }}</h2>
+    <div class="wb-panels">
+        <section class="wb-panel">
+            <div class="wb-panel-head">
+                <h2><i class="fa-solid fa-chart-simple" aria-hidden="true"></i>{{ t('wb_heatmap_title') }}</h2>
+                <span class="wb-heatmap-total">{{ t('wb_heatmap_total', n=heatmap.total) }}</span>
+            </div>
+            <div class="hm-scroll">
+                <div class="hm-inner">
+                    <div class="hm-month-row" aria-hidden="true">
+                        {% for week in heatmap.weeks %}<span class="hm-month">{{ week.m }}</span>{% endfor %}
+                    </div>
+                    <div class="hm-grid">
+                        {% for week in heatmap.weeks %}
+                        <div class="hm-week">
+                            {% for day in week.days %}
+                            {% if day %}
+                            <span class="hm-cell hm-l{{ day.lv }}" title="{{ t('wb_heatmap_cell', date=day.k, c=day.c) }}"></span>
+                            {% else %}
+                            <span class="hm-cell hm-blank"></span>
+                            {% endif %}
+                            {% endfor %}
+                        </div>
                         {% endfor %}
                     </div>
-                    {% endfor %}
                 </div>
             </div>
-        </div>
-        <div class="hm-legend">
-            <span>{{ t('wb_heatmap_less') }}</span>
-            <span class="hm-cell hm-l0"></span><span class="hm-cell hm-l1"></span><span class="hm-cell hm-l2"></span><span class="hm-cell hm-l3"></span><span class="hm-cell hm-l4"></span>
-            <span>{{ t('wb_heatmap_more') }}</span>
-        </div>
-    </section>
+            <div class="hm-legend">
+                <span>{{ t('wb_heatmap_less') }}</span>
+                <span class="hm-cell hm-l0"></span><span class="hm-cell hm-l1"></span><span class="hm-cell hm-l2"></span><span class="hm-cell hm-l3"></span><span class="hm-cell hm-l4"></span>
+                <span>{{ t('wb_heatmap_more') }}</span>
+            </div>
+        </section>
 
-    <section class="wb-panel">
-        <div class="wb-panel-head">
-            <h2><i class="fa-solid fa-clock-rotate-left" aria-hidden="true"></i>{{ t('home_recent_notes') }}</h2>
-            <a href="/user/{{ current_user|e }}/">{{ t('wb_view_all') }} <i class="fa-solid fa-arrow-right" aria-hidden="true"></i></a>
-        </div>
-        {% if recent_notes %}
-        <div class="wb-list">
-            {% for note in recent_notes %}
-            <a class="wb-note" href="/user/{{ current_user|e }}/{{ note.id|e }}">
-                <span class="wb-note-icon"><i class="fa-regular fa-file-lines" aria-hidden="true"></i></span>
-                <span class="wb-note-main">
-                    <span class="wb-note-title">{{ note.title[:40] }}{% if note.title|length > 40 %}…{% endif %}</span>
-                    <span class="wb-note-meta">{{ note.id|e }} · {{ note.mtime|format_note_time }}</span>
-                </span>
-                <i class="fa-solid fa-chevron-right wb-note-arrow" aria-hidden="true"></i>
-            </a>
-            {% endfor %}
-        </div>
-        {% else %}
-        <p class="wb-empty">{{ t('wb_empty_notes') }}</p>
-        {% endif %}
-    </section>
-</div>
+        <section class="wb-panel">
+            <div class="wb-panel-head">
+                <h2><i class="fa-solid fa-clock-rotate-left" aria-hidden="true"></i>{{ t('home_recent_notes') }}</h2>
+                <a href="/user/{{ current_user|e }}/">{{ t('wb_view_all') }} <i class="fa-solid fa-arrow-right" aria-hidden="true"></i></a>
+            </div>
+            {% if recent_notes %}
+            <div class="wb-list">
+                {% for note in recent_notes %}
+                <a class="wb-note" href="/user/{{ current_user|e }}/{{ note.id|e }}">
+                    <span class="wb-note-icon"><i class="fa-regular fa-file-lines" aria-hidden="true"></i></span>
+                    <span class="wb-note-main">
+                        <span class="wb-note-title">{{ note.title[:40] }}{% if note.title|length > 40 %}…{% endif %}</span>
+                        <span class="wb-note-meta">{{ note.id|e }} · {{ note.mtime|format_note_time }}</span>
+                    </span>
+                    <i class="fa-solid fa-chevron-right wb-note-arrow" aria-hidden="true"></i>
+                </a>
+                {% endfor %}
+            </div>
+            {% else %}
+            <p class="wb-empty">{{ t('wb_empty_notes') }}</p>
+            {% endif %}
+        </section>
+    </div>
+</section>
+
+<section class="lp-sec">
+    <h2>{{ t('lp_sec_faq') }}</h2>
+    <details class="lp-faq">
+        <summary>{{ t('lp_faq1_q') }}<i class="fa-solid fa-chevron-down lp-faq-caret" aria-hidden="true"></i></summary>
+        <div class="lp-faq-body">{{ t('lp_faq1_a') }}</div>
+    </details>
+    <details class="lp-faq">
+        <summary>{{ t('lp_faq2_q') }}<i class="fa-solid fa-chevron-down lp-faq-caret" aria-hidden="true"></i></summary>
+        <div class="lp-faq-body">{{ t('lp_faq2_a') }}</div>
+    </details>
+    <details class="lp-faq">
+        <summary>{{ t('lp_faq3_q') }}<i class="fa-solid fa-chevron-down lp-faq-caret" aria-hidden="true"></i></summary>
+        <div class="lp-faq-body">{{ t('lp_faq3_a') }}</div>
+    </details>
+    <details class="lp-faq">
+        <summary>{{ t('lp_faq4_q') }}<i class="fa-solid fa-chevron-down lp-faq-caret" aria-hidden="true"></i></summary>
+        <div class="lp-faq-body">{{ t('lp_faq4_a') }}</div>
+    </details>
+</section>
+
+<section class="lp-band">
+    <h2>{{ t('lp_cta_t') }}</h2>
+    <p>{{ t('lp_cta_d') }}</p>
+    <a class="lp-btn primary" href="/user/{{ current_user|e }}/new">{{ t('nav_new_note') }}</a>
+</section>
+
 {% else %}
-{# ===== 未登录：站点落地页 ===== #}
+{# ===== 未登录：站点入口页 ===== #}
 <div class="home-hero">
     <h1>{{ site_name|e }}</h1>
     <p>{{ t('home_tagline') }}</p>
@@ -95,8 +226,6 @@
         <span class="home-card-arrow"><i class="fa-solid fa-arrow-right" aria-hidden="true"></i></span>
     </a>
 </div>
-{% endif %}
-
 {% if show_benben %}
 <a class="home-card home-benben-card" href="/benben">
     <span class="home-card-icon"><i class="fa-solid fa-sticky-note" aria-hidden="true"></i></span>
@@ -106,5 +235,58 @@
     </span>
     <span class="home-card-arrow"><i class="fa-solid fa-arrow-right" aria-hidden="true"></i></span>
 </a>
+{% endif %}
+{% endif %}
+
+{% if current_user %}
+<style>
+    /* 登录后落地页（workbench landing）：Hero / 数据亮点 / 步骤 / FAQ / CTA */
+    .lp-hero { text-align: center; padding: 44px 8px 4px; }
+    .lp-avatar { width: 56px; height: 56px; border-radius: 50%; display: inline-block; margin-bottom: 12px; }
+    .lp-hello { border: none; margin: 0; font-size: 18px; font-weight: 500; color: var(--muted); }
+    .lp-tagline {
+        border: none; padding: 0; margin: 10px auto 0; max-width: 720px;
+        font-size: 34px; font-weight: 700;
+        background: linear-gradient(135deg, var(--hero-grad-a), var(--hero-grad-b));
+        -webkit-background-clip: text; background-clip: text;
+        -webkit-text-fill-color: transparent; color: transparent;
+    }
+    .lp-sub { color: var(--muted); font-size: 15px; margin-top: 12px; }
+    .lp-cta { display: flex; justify-content: center; gap: 12px; margin-top: 24px; flex-wrap: wrap; }
+    .lp-btn { display: inline-flex; align-items: center; gap: 8px; padding: 11px 24px; border-radius: 999px; text-decoration: none; font-size: 15px; font-weight: 600; }
+    .lp-btn.primary { background: var(--link); color: #ffffff; border: 1px solid var(--link); }
+    .lp-btn.primary:hover { background: var(--link); filter: brightness(0.9); text-decoration: none; color: #ffffff; }
+    .lp-btn.ghost { background: var(--card-bg); color: var(--text); border: 1px solid var(--card-border); }
+    .lp-btn.ghost:hover { text-decoration: none; color: var(--text); }
+    .lp-stats { display: flex; justify-content: center; gap: 40px; margin-top: 32px; flex-wrap: wrap; }
+    .lp-stat { display: flex; flex-direction: column; gap: 2px; }
+    .lp-stat-num { font-size: 26px; font-weight: 700; }
+    .lp-stat-label { font-size: 13px; color: var(--muted); }
+    .lp-sec { margin-top: 44px; }
+    .lp-sec > h2 { font-size: 20px; font-weight: 600; border: none; padding: 0; margin: 0 0 16px; }
+    .lp-grid { margin-top: 0; }
+    .lp-steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr)); gap: 16px; }
+    .lp-step { background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 12px; padding: 22px 20px; }
+    .lp-step-no { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: 50%; background: var(--card-icon-bg); color: var(--link); font-weight: 700; font-size: 14px; margin-bottom: 12px; }
+    .lp-step h3 { font-size: 16px; font-weight: 600; margin: 0 0 6px; }
+    .lp-step p { font-size: 13px; line-height: 1.7; color: var(--muted); margin: 0; }
+    .lp-faq { background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 12px; padding: 0 18px; margin-bottom: 10px; }
+    .lp-faq summary { display: flex; align-items: center; justify-content: space-between; gap: 10px; cursor: pointer; padding: 15px 0; font-weight: 500; font-size: 15px; list-style: none; }
+    .lp-faq summary::-webkit-details-marker { display: none; }
+    .lp-faq-caret { color: var(--muted); font-size: 12px; flex-shrink: 0; transition: transform 0.2s ease; }
+    .lp-faq[open] .lp-faq-caret { transform: rotate(180deg); }
+    .lp-faq-body { padding: 0 0 15px; font-size: 14px; line-height: 1.7; color: var(--muted); }
+    .lp-band { margin-top: 48px; text-align: center; padding: 42px 20px; border-radius: 16px; background: linear-gradient(135deg, var(--hero-grad-a), var(--hero-grad-b)); }
+    .lp-band h2 { font-size: 24px; font-weight: 700; color: #ffffff; border: none; padding: 0; margin: 0; }
+    .lp-band p { color: rgba(255, 255, 255, 0.88); margin: 10px 0 22px; font-size: 15px; }
+    .lp-band .lp-btn.primary { background: #ffffff; color: var(--link); border-color: #ffffff; }
+    .lp-band .lp-btn.primary:hover { background: #ffffff; filter: brightness(0.95); color: var(--link); }
+    @media (max-width: 640px) {
+        .lp-hero { padding-top: 28px; }
+        .lp-tagline { font-size: 25px; }
+        .lp-stats { gap: 24px; }
+        .lp-band h2 { font-size: 20px; }
+    }
+</style>
 {% endif %}
 {% endblock %}
