@@ -632,7 +632,7 @@ python tests/frontend_check.py          # front-end syntax check (Jinja2 + inlin
     - `max_comments`: max comments per target (note/share), default `200`;
     - `cooldown_seconds`: minimum interval between two comments by the same user (in **seconds**), default `3`;
     - `page_size`: comments loaded per batch, default `50`;
-    - `max_height_px`: maximum display height of rendered comment content (in **px**), default `1000`, overflow scrolls within the content area.
+    - `max_height_px`: maximum display height of rendered comment content (in **px**), default `280`, overflow scrolls within the content area.
 - `password_policy`: password policy, defining the complexity requirements for guest passwords.  
    - `min_length`: minimum password length, default `8`;  
    - `max_length`: maximum password length, default `128` (hard cap `128`, preventing oversized passwords from entering the PBKDF2 slow hash and consuming CPU);  
@@ -649,7 +649,7 @@ python tests/frontend_check.py          # front-end syntax check (Jinja2 + inlin
    - `max_length`: max length of a single feed post (in **characters**), default `1024` (~1KB);
    - `page_size`: posts loaded per batch, default `50`;
    - `cooldown_seconds`: minimum interval between two posts by the same user (in **seconds**), default `3`;
-   - `max_height_px`: maximum display height of rendered feed content (in **px**), default `1000`, overflow scrolls within the content area;
+   - `max_height_px`: maximum display height of rendered feed content (in **px**), default `280`, overflow scrolls within the content area (keeps long posts from dominating the screen);
    - `max_posts`: maximum number of posts persisted, default `200` (keeps external KV value size bounded; oldest posts are dropped);
 
    Content supports Markdown and LaTeX math (`$...$` / `$$...$$`, controlled by the `latex_render` switch); the form provides a sanitized marked.js live preview; server-rendered Markdown is sanitized with Bleach; loading and posting are rate-limited, and posting also has a per-user cooldown. Logged-in users can click Reply to replace the editor content with `|| @username: original content`.

@@ -103,7 +103,7 @@ DEFAULT_CONFIG = {
         "max_length": 1024,
         "page_size": 50,
         "cooldown_seconds": 3,
-        "max_height_px": 1000,
+        "max_height_px": 280,
         "max_posts": 200
     },
     "todos": {
@@ -165,7 +165,7 @@ DEFAULT_CONFIG = {
         "max_comments": 200,                 # 每个目标（笔记/分享）最多评论数
         "cooldown_seconds": 3,               # 单用户发布评论冷却时间（秒）
         "page_size": 50,                     # 每页显示评论数
-        "max_height_px": 1000,               # 评论内容渲染后最大显示高度（px）
+        "max_height_px": 280,                # 评论内容渲染后最大显示高度（px），超出滚动
     },
     "oauth": {                                # 第三方登录（GitHub/Google/Microsoft/微信/QQ）
         "enabled": False,                      # 总开关：默认关闭所有 OAuth（即使功能开关被打开也需此开关为 true）
@@ -467,16 +467,16 @@ BENBEN_MAX_LENGTH = BENBEN_CFG.get("max_length", 1024)
 BENBEN_PAGE_SIZE = BENBEN_CFG.get("page_size", 50)
 # 犇犇发布冷却时间（秒）：单个用户两次发布犇犇的最小间隔，默认 3 秒
 BENBEN_COOLDOWN_SECONDS = BENBEN_CFG.get("cooldown_seconds", 3)
-# 犇犇内容渲染后的最大显示高度（px）：超出部分在内容区内滚动，默认 1000px
-BENBEN_MAX_HEIGHT_PX = BENBEN_CFG.get("max_height_px", 1000)
+# 犇犇内容渲染后的最大显示高度（px）：超出部分在内容区内滚动，默认 280px（防止长帖霸屏）
+BENBEN_MAX_HEIGHT_PX = BENBEN_CFG.get("max_height_px", 280)
 # 犇犇持久化条数上限（外部存储单键体积控制，超出丢弃最旧）
 BENBEN_MAX_POSTS = BENBEN_CFG.get("max_posts", 200)
 try:
     BENBEN_MAX_HEIGHT_PX = int(BENBEN_MAX_HEIGHT_PX)
     if BENBEN_MAX_HEIGHT_PX <= 0:
-        BENBEN_MAX_HEIGHT_PX = 1000
+        BENBEN_MAX_HEIGHT_PX = 280
 except (TypeError, ValueError):
-    BENBEN_MAX_HEIGHT_PX = 1000
+    BENBEN_MAX_HEIGHT_PX = 280
 
 # ---------- 笔记编辑器配置 ----------
 # 实时渲染开关的默认值（访客可在编辑页手动切换，选择以 localStorage 记住）。
@@ -616,13 +616,13 @@ COMMENTS_MAX_LENGTH = COMMENTS_CFG.get("max_length", 1024)
 COMMENTS_MAX_POSTS = COMMENTS_CFG.get("max_comments", 200)
 COMMENTS_COOLDOWN_SECONDS = COMMENTS_CFG.get("cooldown_seconds", 3)
 COMMENTS_PAGE_SIZE = COMMENTS_CFG.get("page_size", 50)
-COMMENTS_MAX_HEIGHT_PX = COMMENTS_CFG.get("max_height_px", 1000)
+COMMENTS_MAX_HEIGHT_PX = COMMENTS_CFG.get("max_height_px", 280)
 try:
     COMMENTS_MAX_HEIGHT_PX = int(COMMENTS_MAX_HEIGHT_PX)
     if COMMENTS_MAX_HEIGHT_PX <= 0:
-        COMMENTS_MAX_HEIGHT_PX = 1000
+        COMMENTS_MAX_HEIGHT_PX = 280
 except (TypeError, ValueError):
-    COMMENTS_MAX_HEIGHT_PX = 1000
+    COMMENTS_MAX_HEIGHT_PX = 280
 
 # ---------- 第三方登录（OAuth）配置 ----------
 # 各 Provider 的授权/令牌/用户信息端点硬编码在 app/core/oauth.py，这里只放

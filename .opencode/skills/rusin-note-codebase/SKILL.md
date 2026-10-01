@@ -177,8 +177,8 @@ upstash 后端所有键统一加 `rusin:` 前缀；memory 后端 get/set 带 dee
 - `latex_render`（KaTeX，默认开，资源从 `global_cdn` 拼）、`code_highlight`（客户端 highlight.js + 行号，默认开；服务端 Pygments 着色不受该开关影响）
 - `cache`（页面缓存：`enabled` / `backend` 默认 `redis` / `default_timeout` 300 / `redis_url`，`REDIS_URL` 可覆盖；Redis 不可达自动降级 SimpleCache）
 - `password_policy`（密码复杂度，`PW_*` 常量，硬上限 128）
-- `benben`（犇犇最大长度 1024 / 每页 50 / 冷却 3s / 最大高度 1000px / 持久化上限 `max_posts` 200）
-- `comments`（评论：`max_length` 1024 / `max_comments` 200 / `cooldown_seconds` 3 / `page_size` 50 / `max_height_px` 1000）
+- `benben`（犇犇最大长度 1024 / 每页 50 / 冷却 3s / 最大高度 280px / 持久化上限 `max_posts` 200）
+- `comments`（评论：`max_length` 1024 / `max_comments` 200 / `cooldown_seconds` 3 / `page_size` 50 / `max_height_px` 280）
 - `images`（图床：`enabled` / `max_size_kb` 2048 / `max_total_kb` 51200，图片公开读取）、`attachments`（附件：`enabled` / `max_size_kb` 50 / `max_per_note_kb` 500 / `max_total_kb` 10240 / `blocked_extensions` 黑名单（含 `.exe`/`.zip` 等，config 值写 `exe`/`zip` 不带点）+ `allow_anonymous_download`（默认 false，禁匿名下载）/ `max_concurrent_downloads`（1，#191）/ `max_concurrent_uploads`（1，#191）/ `download_rate_limit`（60s/120 次））
 - `note_editor`（`live_preview_default` 编辑页实时渲染默认值，默认 false，访客可手动开、以 localStorage 记住）、`markdown_manual_url`
 - `note_refs`（`#` 引用：`enabled` / `search_limit` 8 / `scan_limit` 100）

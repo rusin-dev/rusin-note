@@ -36,7 +36,8 @@
 
 - 统一接口在基类 `StorageBackend` 提供笔记元数据/检索能力：`note_title`、`list_notes_detailed`、`search_notes`、`notes_stats`（与后端无关的退化实现），SQLite 后端覆盖为单次索引查询（`notes.py` 的 `search_user_notes`/`get_stats` 与列表页据此避免逐篇读取内容）。
 
-- 犇犇动态已改为持久化（最多 `benben.max_posts` 条，默认 200），不再纯内存。
+- 犇犇动态已改为持久化（最多 `benben.max_posts` 条，默认 200），不再纯内存。犇犇/评论内容限高滚动：`benben.max_height_px` / `comments.max_height_px` 默认 280（超出在内容区内滑动，防长帖霸屏；视图渲染时必须传 `max_height_px`，模板变量为空会让 `max-height` 静默失效）。
+- **尾斜杠路由**：POST 型动作路由（笔记删除 `/user/<u>/<id>/delete`、组织笔记删除、待办删除）统一 `strict_slashes=False`，同时接受带/不带尾斜杠——否则尾斜杠触发重定向链，经代理层降级为 GET 后 404。回归测试：`pytest tests/test_regression_fixes.py`
 - 写路径统一锁序：**threading.Lock（进程内）→ storage.lock（跨进程/跨实例）**，顺序颠倒会死锁（见 `store.flush_share_views` 注释）。
 - 无服务器环境（`VERCEL`/`NETLIFY`/`AWS_LAMBDA_FUNCTION_NAME`）不启动后台线程，清理由 `middleware._opportunistic_cleanup()` 请求内机会式执行；日志回退 stderr。
 - `RUSIN_SECRET_KEY` 必填于无服务器平台；可持久化后端会自动生成并存储（键 `secret_key`）。
@@ -66,10 +67,10 @@
 - 插件系统（`app/core/plugins.py`；无服务器只读盘环境自动禁用）：`*.plugin.zip` 投放到 `RUSIN_DATA_DIR` 自动解压安装到 `plugins/<namespace>/` 并删除包；desc.json 缺 `auth_token` 须 `--skip-auth`（或 `RUSIN_PLUGIN_SKIP_AUTH=1`）放行；命名空间冲突非同源且未声明 OVERRIDE 拒绝；后台线程每 `plugins.update_interval_hours`（默认 6h）检查，`last_update` 超过 `update_stale_days`（默认 3 天）则请求 `upstream_repo`（3s 超时）后重跑安装。
 - 组织/团队协作（`app/apps/org/views.py` + `app/core/store.py` 组织段）：组织笔记以 `_orgs/<org_name>` 作为存储用户名命名空间，与个人笔记完全隔离；Owner / Admin / Member 三级角色，加入方式支持邀请码 / 公开加入 / 审批制，受 `orgs` 功能开关控制。端到端测试：`pytest tests/test_org.py`
 - 评论系统（`app/apps/comments/service.py` + `app/apps/comments/views.py`）：目标类型为 `note` / `share`，统一存 KV 键 `comments:all`（file 后端即 `comments.json`），受 `comments` 功能开关与 `comments` 配置段（长度 / 上限 / 冷却 / 分页）控制。
-- 首页工作台（`app/apps/home/views.py`）：登录态首页为「问候语（上午/中午/下午/晚上好 + 头像）→ 近一年笔记热力图（GitHub 风格按周列，笔记 mtime 聚合）→ 最近编辑笔记（`home_page.recent_notes_limit`）」；TODO 待办 UI 已移出首页（`app/apps/todos/` 后端路由保留）；简洁模式下首页 302 直接跳到新建笔记。
+- 首页落地页（`app/apps/home/views.py` + `templates/home.html`）：登录态 `/` 为类 ChatGPT 官网风格互动落地页，自上而下为「居中 Hero（头像+问候语、渐变大标题、双 CTA）→ 数据亮点（笔记总数/近一年更新/活跃天数）→ 常用功能入口卡片（按功能开关过滤：导入导出、犇犇、组织等）→ 使用指南三步 → 记录轨迹（近一年笔记热力图 + 最近编辑）→ FAQ（`<details>` 折叠）→ 渐变 CTA 横幅」，样式在 home.html 内 `.lp-*` 且仅登录分支输出；匿名 `/` 保持站点入口页；TODO 待办 UI 已移出首页（`app/apps/todos/` 后端路由保留）；简洁模式下首页 302 直接跳到新建笔记。端到端测试：`pytest tests/test_home_landing.py`
 - 笔记批量导入 / 导出（`app/apps/notes/service.py` + `/user/<u>/export|import`，受 `notes_import_export` 开关控制）：导出默认 ZIP（每篇 `notes/<id>.md` + `manifest.json` 记录文件夹/标签，导入可还原），`?format=md` 导出为单文件 Markdown（`<!-- rusin-note-id: X -->` 标记）；导入接受 .zip/.md/.txt，同名笔记**跳过不覆盖**，受 `note_transfer`（max_file_kb / max_notes）与单笔记大小上限约束，全程内存处理不落盘解压。端到端测试：`pytest tests/test_note_transfer.py`
 - 登录/注册页与图形验证码（`app/core/captcha.py`，受 `login_captcha` 开关控制，默认开）：登录页与注册页为全幅左右分栏、无卡片外壳，共用结构（`.auth-split` 左通高插画 `/image/login-hero.webp` + 右居中表单）与样式 partial `templates/partials/_auth_split_css.html`（`base.html` 的 `{% block body_class %}` 钩子加 `auth-page` 类：隐藏顶栏并重置 `.container` 卡片；≤768px 隐藏插画回退单列+浮动语言切换；输入框/按钮统一 46px 高、10px 圆角，主按钮主题色）。验证码行与刷新 JS 也抽为 `partials/_captcha_row.html` / `_captcha_js.html`，登录与注册共用；POST 时验证码先行校验，失败 400 并重签发；两页 GET 均回 `Cache-Control: no-store`，`create_app` 开 `TEMPLATES_AUTO_RELOAD=True`（注意 auto-reload 不覆盖被 include 的 partial，改 partial 需重启）。验证码为纯标准库生成的 SVG（旋转字符 + 噪点干扰线，4 位去混淆字符集），答案存 KV 键 `login_captchas`（TTL 10 分钟、一次性、verify 即销毁、写入时清理过期项），token 经十六进制格式校验；`GET /login/captcha` 返回新 token/SVG 供刷新按钮使用。端到端测试：`pytest tests/test_login_captcha.py`
-- 测试清单：`tests/` 覆盖 `test_org` / `test_user_settings` / `test_images` / `test_pins` / `test_folders` / `test_sqlite_storage` / `test_markdown_alerts` / `test_home_notice` / `test_attachments` / `test_ip_limiter` / `test_frontend` / `test_oauth` / `test_twofa` / `test_email_verify` / `test_note_transfer` / `test_login_captcha`，统一 `pytest tests/` 运行。
+- 测试清单：`tests/` 覆盖 `test_org` / `test_user_settings` / `test_images` / `test_pins` / `test_folders` / `test_sqlite_storage` / `test_markdown_alerts` / `test_home_notice` / `test_home_landing` / `test_attachments` / `test_ip_limiter` / `test_frontend` / `test_oauth` / `test_twofa` / `test_email_verify` / `test_note_transfer` / `test_login_captcha`，统一 `pytest tests/` 运行。
 - 模板：Jinja2，支持 `{{ t('key') }}` 多语言
 - 无服务器默认存储：Vercel 绑定 Neon 后 `DATABASE_URL` 自动注入 → 自动切到 postgres 后端
 - 前端检查：前端资源全部内联在 Jinja2 模板中，无独立 JS/CSS 文件；`tests/frontend_check.py` 做静态语法检查（Jinja2 `Environment.parse` + Node `--check` 校验内联 JS + CSS 括号配平 + JSON 解析），由 `.github/workflows/check.yml` 的 `frontend` job 在前端文件变更时运行

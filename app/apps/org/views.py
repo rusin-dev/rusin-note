@@ -242,7 +242,7 @@ def org_note_edit(org_name, note_id):
 
 
 # ---------- 删除组织笔记 ----------
-@bp.route("/org/<org_name>/notes/<note_id>/delete", methods=["POST"])
+@bp.route("/org/<org_name>/notes/<note_id>/delete", methods=["POST"], strict_slashes=False)
 @require_feature("orgs")
 @limiter.limit(lambda: f"{config.SAVE_RATE_MAX} per {config.SAVE_RATE_WINDOW} second")
 def org_note_delete(org_name, note_id):

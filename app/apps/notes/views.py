@@ -295,7 +295,7 @@ def user_note_post(username, note_id):
     return redirect(url_for("notes.user_note_get", username=username, note_id=note_id))
 
 
-@bp.route("/user/<username>/<note_id>/delete", methods=["POST"])
+@bp.route("/user/<username>/<note_id>/delete", methods=["POST"], strict_slashes=False)
 @limiter.limit(lambda: f"{config.RATE_MAX} per {config.RATE_WINDOW} second")
 def user_note_delete(username, note_id):
     """删除笔记：编辑页与列表页的删除按钮共用。空内容即删除，

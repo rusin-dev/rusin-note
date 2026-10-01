@@ -6,7 +6,7 @@
     .comment-avatar { width: 24px; height: 24px; margin-right: 6px; }
     .comment-time { color: var(--muted); font-size: 13px; font-weight: 400; margin-left: 8px; }
     .comment-anonymous { color: var(--muted); font-style: italic; }
-    .comment-body { font-size: 15px; word-break: break-word; max-height: {{ max_height_px }}px; overflow-y: auto; }
+    .comment-body { font-size: 15px; word-break: break-word; max-height: {{ max_height_px }}px; overflow-y: auto; overscroll-behavior: contain; }
     .comment-form { max-width: 720px; margin: 16px 0 24px; }
     .comment-form button[type="submit"] { margin-top: 8px; }
     .comment-more { text-align: center; margin-top: 16px; }

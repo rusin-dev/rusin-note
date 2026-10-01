@@ -3,13 +3,14 @@
 覆盖：分享浏览量批量落盘不丢增量、删笔记级联失效分享与评论板、评论目标必须
 真实存在、验证码登录同样受 TOTP 第二因素约束、/lang 不回跳站外、功能开关缺省
 值回退到 DEFAULT_CONFIG、组织邀请码越权与删组织残留、Markdown 代码块二次转义
-与表格对齐丢失。
+与表格对齐丢失、删除路由容忍尾斜杠、犇犇/评论 max-height 真实渲染。
 
 运行：``pytest tests/test_regression_fixes.py``
 """
 from __future__ import annotations
 
 import logging
+import re
 
 from support import csrf_from, create_note, expect, register
 
@@ -66,6 +67,17 @@ class TestShareCounters:
         expect(notes.note_exists(owner, note_id) is False, "笔记未被分享写回复活")
         expect(store.count_comments("note", f"{owner}/{note_id}") == 0,
                "评论板随笔记级联删除")
+
+    def test_delete_route_accepts_trailing_slash(self, ctx):
+        logger.info("=== 删除路由同时接受带/不带尾斜杠 ===")
+        owner = "reg_slash_del"
+        register(ctx.client, owner)
+        note_id = create_note(ctx.client, owner, "尾斜杠删除")
+        response = ctx.client.post(f"/user/{owner}/{note_id}/delete/", data={
+            "csrf_token": csrf_from(ctx.client, f"/user/{owner}/{note_id}"),
+        })
+        expect(response.status_code == 302, "带尾斜杠 POST 直接删除（无重定向链）")
+        expect(notes.note_exists(owner, note_id) is False, "笔记已被删除")
 
 
 class TestCommentTargets:
@@ -223,3 +235,26 @@ class TestMarkdownRendering:
         html = render_markdown_html('<img src=x onerror="alert(1)">\n\n[链接](javascript:alert(1))\n')
         expect("onerror" not in html, "事件属性被清洗")
         expect("javascript:" not in html, "危险协议被清洗")
+
+
+class TestContentMaxHeight:
+    """犇犇/评论内容最大高度真正渲染出数值（变量缺失会静默霸屏）"""
+
+    def test_benben_body_max_height_rendered(self, ctx):
+        logger.info("=== 犇犇内容 max-height 渲染 ===")
+        from app.core import config
+        html = ctx.anon.get("/benben").get_data(as_text=True)
+        m = re.search(r"\.benben-body \{[^}]*max-height: (\d+)px", html)
+        expect(bool(m), "犇犇内容渲染出具体 max-height（而非空值）")
+        expect(int(m.group(1)) == config.BENBEN_MAX_HEIGHT_PX, "max-height 与配置一致")
+
+    def test_comment_body_max_height_rendered(self, ctx):
+        logger.info("=== 评论内容 max-height 渲染 ===")
+        from app.core import config
+        owner = "reg_h_owner"
+        register(ctx.client, owner)
+        note_id = create_note(ctx.client, owner, "评论高度笔记")
+        html = ctx.client.get(f"/comments/note/{owner}/{note_id}").get_data(as_text=True)
+        m = re.search(r"\.comment-body \{[^}]*max-height: (\d+)px", html)
+        expect(bool(m), "评论内容渲染出具体 max-height（而非空值）")
+        expect(int(m.group(1)) == config.COMMENTS_MAX_HEIGHT_PX, "max-height 与配置一致")

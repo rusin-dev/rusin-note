@@ -42,7 +42,7 @@ def todo_toggle(username, todo_id):
     return redirect("/")
 
 
-@bp.route("/user/<username>/todos/<todo_id>/delete", methods=["POST"])
+@bp.route("/user/<username>/todos/<todo_id>/delete", methods=["POST"], strict_slashes=False)
 @limiter.limit(lambda: f"{config.RATE_MAX} per {config.RATE_WINDOW} second")
 def todo_delete(username, todo_id):
     _guard(username)

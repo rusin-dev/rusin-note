@@ -63,6 +63,7 @@ def benben_get():
         error="",
         prefill="",
         max_length=config.BENBEN_MAX_LENGTH,
+        max_height_px=config.BENBEN_MAX_HEIGHT_PX,
         page_size=config.BENBEN_PAGE_SIZE,
         current_user=get_current_user(),
         preview_l10n={
@@ -110,6 +111,7 @@ def benben_post():
             error=err_msg,
             prefill=content,
             max_length=config.BENBEN_MAX_LENGTH,
+            max_height_px=config.BENBEN_MAX_HEIGHT_PX,
             page_size=config.BENBEN_PAGE_SIZE,
             current_user=get_current_user(),
             preview_l10n={
