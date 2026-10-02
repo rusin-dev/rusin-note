@@ -39,6 +39,7 @@
             </a>
             {% endfor %}
         </div>
+        <p class="oauth-terms">{{ t('oauth_terms_hint') }} <a href="/disclaimer" target="_blank" rel="noopener noreferrer">{{ t('reg_agree_terms_doc') }}</a></p>
         {% endif %}
         {% if feature_enabled('email_verify') or feature_enabled('phone_verify') %}
         <p style="margin-top:12px;"><a href="/login/otp">{{ t('otp_login_link') }}</a></p>
@@ -56,6 +57,8 @@
     .oauth-btn { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 10px 14px; border: 1px solid var(--card-border); border-radius: 8px; background: var(--card-bg); color: var(--text); text-decoration: none; font-size: 14px; transition: border-color 0.18s ease, box-shadow 0.18s ease; }
     .oauth-btn:hover { border-color: var(--glow-ring); box-shadow: var(--glow-shadow); text-decoration: none; }
     .oauth-btn i { font-size: 16px; }
+    .oauth-terms { margin: 10px 0 0; color: var(--muted); font-size: 12px; line-height: 1.6; text-align: center; }
+    .oauth-terms a { text-decoration: underline; }
 </style>
 {% include "partials/_captcha_js.html" %}
 {% endblock %}

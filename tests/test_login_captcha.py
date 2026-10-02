@@ -116,6 +116,10 @@ class TestRegisterCaptcha:
                "注册页与登录页同构分栏渲染")
         expect("captchaBox" in html and "<svg" in html, "注册页验证码 SVG 内联渲染")
         expect("/login/captcha" in html, "注册页刷新脚本就位")
+        expect('name="agree_terms"' in html and "/disclaimer" in html,
+               "服务条款同意勾选框就位")
+        expect('name="agree_terms"' not in ctx.client.get("/login").get_data(as_text=True),
+               "登录页不出现条款勾选框")
 
     def test_missing_captcha_rejected(self, ctx):
         logger.info("=== [I] 缺失/错误验证码拒绝注册 ===")
@@ -124,15 +128,25 @@ class TestRegisterCaptcha:
         resp = ctx.client.post("/register", data={
             "username": self.NEW_USER, "password": DEFAULT_PASSWORD,
             "confirm": DEFAULT_PASSWORD, "csrf_token": csrf_of(html),
+            "agree_terms": "1",
         })
         expect(resp.status_code == 400, "缺失验证码返回 400")
         resp = ctx.client.post("/register", data={
             "username": self.NEW_USER, "password": DEFAULT_PASSWORD,
             "confirm": DEFAULT_PASSWORD, "csrf_token": csrf_of(html),
+            "agree_terms": "1",
             "captcha_token": token, "captcha": "0000",
         })
         expect(resp.status_code == 400, "错误验证码返回 400")
         expect(not (get_user(self.NEW_USER) or {}).get("salt"), "用户未被创建")
+
+    def test_terms_agreement_required(self, ctx):
+        logger.info("=== [K] 未勾选服务条款拒绝注册 ===")
+        resp = register(ctx.client, self.NEW_USER, agree=False)
+        expect(resp.status_code == 400, "未勾选条款返回 400")
+        expect("agree" in resp.get_data(as_text=True).lower(), "错误后仍回显条款勾选框")
+        expect(not (get_user(self.NEW_USER) or {}).get("salt"), "用户未被创建")
+        logger.info("勾选后注册成功由 [J] 覆盖")
 
     def test_correct_captcha_registers(self, ctx):
         logger.info("=== [J] 验证码答对注册成功 ===")

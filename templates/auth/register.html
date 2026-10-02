@@ -28,6 +28,10 @@
                     <input type="password" name="confirm" required>
                 </div>
                 {% include "partials/_captcha_row.html" %}
+                <div class="auth-agree">
+                    <input type="checkbox" id="agreeTerms" name="agree_terms" value="1" required>
+                    <label for="agreeTerms">{{ t('reg_agree_terms') }} <a href="/disclaimer" target="_blank" rel="noopener noreferrer">{{ t('reg_agree_terms_doc') }}</a></label>
+                </div>
                 <button type="submit">{{ t('reg_submit') }}</button>
             </form>
             <p style="margin-top:12px;"><a href="/login">{{ t('reg_have_account') }}</a></p>

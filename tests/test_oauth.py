@@ -91,6 +91,29 @@ class TestOAuth:
                "回调设置了登录 Cookie")
         ctx.oauth_username = account["username"]
 
+    def test_auto_register_terms_notice(self, ctx, monkeypatch):
+        logger.info("=== [B2] 自动注册的条款提示 ===")
+        _enable_all()
+        _configure(monkeypatch)
+        monkeypatch.setattr(service, "exchange_code", lambda *a, **k: {"access_token": "t"})
+        monkeypatch.setattr(service, "fetch_profile",
+                            lambda *a, **k: {"uid": "terms-uid", "display": "termsdisp",
+                                             "email": "", "avatar": ""})
+
+        login_page = ctx.anon.get("/login").get_data(as_text=True)
+        expect("oauth-terms" in login_page and "/disclaimer" in login_page,
+               "登录页第三方按钮下方提示注册即视为同意条款")
+
+        state = _state_of(ctx.anon.get("/oauth/github"))
+        expect(ctx.anon.get(f"/oauth/github/callback?code=abc&state={state}").status_code == 302,
+               "回调自动注册 -> 302")
+
+        first = ctx.anon.get("/").get_data(as_text=True)
+        expect("home-notice" in first and "自动注册" in first, "首页一次性展示条款提示")
+        expect("/disclaimer" in first, "提示内含条款链接")
+        second = ctx.anon.get("/").get_data(as_text=True)
+        expect("自动注册" not in second, "提示仅展示一次")
+
     def test_state_mismatch(self, ctx, monkeypatch):
         logger.info("=== [C] state 校验 ===")
         _enable_all()

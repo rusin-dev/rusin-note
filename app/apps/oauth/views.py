@@ -138,6 +138,8 @@ def callback(provider):
             return _login_error("err_oauth_failed")
         if not service.link_account(provider, uid, username, profile.get("display", "")):
             return _login_error("err_oauth_failed")
+        # 自动注册未走注册表单，无勾选环节：在首页一次性提示「注册即视为同意条款」
+        session["oauth_terms_notice"] = True
 
     # 与密码登录一致：已开启 TOTP 时转第二因素校验
     from app.apps.twofa import service as twofa_service
