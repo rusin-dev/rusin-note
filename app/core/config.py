@@ -236,6 +236,29 @@ DEFAULT_CONFIG = {
         "update_interval_hours": 6,
         "update_stale_days": 3
     },
+    "waf": {                                 # 反向代理 WAF（nginx + ModSecurity + OWASP CRS）自动供给
+        "enabled": False,                    # 总开关：默认关闭（仅 VPS 反代部署有意义，无服务器平台自带 WAF）
+        "auto_download": True,               # 启用后自动下载 CRS 规则集（纯文本规则，SHA256 锁定校验）
+        "crs_version": "4.29.0",             # 锁定的 OWASP CoreRuleSet 版本
+        "crs_url": "https://github.com/coreruleset/coreruleset/releases/download/v4.29.0/coreruleset-4.29.0-minimal.tar.gz",
+        # 上述官方 release 的 SHA256；换版本必须同步换校验和，否则下载会被拒绝
+        "crs_sha256": "1aa1c5c8fc29e532d35293bcea36bf72de61db8f6ed4716a0f91ab14552b7fed",
+        "verify_checksum": True,             # 置 false 会接受任意内容（仅内网镜像调试用，不要在生产关闭）
+        "mode": "on",                        # on = 命中即拦截(403)；detectiononly = 只写审计日志不拦截
+        "response_inspection": False,        # 出站响应体检测：渲染 Markdown/代码的站点误报多且耗 CPU，默认关
+        "listen": "80",                      # nginx 监听地址/端口（如 "80" 或 "127.0.0.1:8081"）
+        "server_name": "_",
+        "upstream": "127.0.0.1",             # 回源地址（应用监听处）
+        "upstream_port": 0,                  # 0 = 跟随 PORT 环境变量（默认 8080）
+        "paranoia_level": 1,                 # CRS 检测等级 1-4（越高越严，误报越多）
+        "inbound_anomaly_threshold": 5,      # 入站异常分阈值（CRS 默认 5）
+        "outbound_anomaly_threshold": 4,     # 出站异常分阈值（CRS 默认 4）
+        "body_limit_kb": 0,                  # 请求体上限；0 = 自动取笔记/附件/导入上限的较大值
+        "default_exclusions": True,          # 生成笔记正文类端点的 CRS 误报排除（代码片段会命中 SQLi/XSS 规则）
+        "update_stale_days": 7,              # 距上次下载超过该天数才重新拉取（避免每次启动都下载）
+        "validate_config": True,             # 生成后跑 nginx -t 校验（只读，不改系统状态）
+        "auto_reload": False,                # 校验通过后是否 nginx -s reload（需 root 权限，默认关闭）
+    },
     "debug": False,
 }
 
@@ -694,6 +717,42 @@ try:
     PLUGIN_UPDATE_CHECK_INTERVAL = int(PLUGINS_CFG.get("update_interval_hours", 6)) * 3600
 except (TypeError, ValueError):
     PLUGIN_UPDATE_CHECK_INTERVAL = 6 * 3600
+
+# ---------- 反向代理 WAF（nginx + ModSecurity + OWASP CRS）配置 ----------
+# 详见 app/core/waf.py：python -m app 启动时下载 CRS 规则集并生成反代配置。
+# 引擎本体（nginx + libmodsecurity 模块）属系统包，只探测与提示，绝不自动安装。
+WAF_CFG = config.get("waf", DEFAULT_CONFIG["waf"])
+# 环境变量 RUSIN_WAF=1 可临时开启（无服务器平台仍会被 SERVERLESS 判定禁用）
+_waf_env = os.environ.get("RUSIN_WAF", "").strip().lower()
+WAF_ENABLED = bool(WAF_CFG.get("enabled", False)) or _waf_env in ("1", "true", "yes")
+WAF_AUTO_DOWNLOAD = bool(WAF_CFG.get("auto_download", True))
+WAF_CRS_VERSION = str(WAF_CFG.get("crs_version", "") or "").strip()
+WAF_CRS_URL = str(WAF_CFG.get("crs_url", "") or "").strip()
+WAF_CRS_SHA256 = str(WAF_CFG.get("crs_sha256", "") or "").strip().lower()
+WAF_VERIFY_CHECKSUM = bool(WAF_CFG.get("verify_checksum", True))
+WAF_MODE = str(WAF_CFG.get("mode", "on") or "on").strip().lower()
+if WAF_MODE not in ("on", "detectiononly"):
+    WAF_MODE = "on"
+WAF_RESPONSE_INSPECTION = bool(WAF_CFG.get("response_inspection", False))
+WAF_LISTEN = str(WAF_CFG.get("listen", "80") or "80").strip()
+WAF_SERVER_NAME = str(WAF_CFG.get("server_name", "_") or "_").strip()
+WAF_UPSTREAM = str(WAF_CFG.get("upstream", "127.0.0.1") or "127.0.0.1").strip()
+WAF_UPSTREAM_PORT = int(WAF_CFG.get("upstream_port", 0) or 0) or _env_int("PORT", 8080)
+WAF_PARANOIA_LEVEL = min(4, max(1, _positive_int(WAF_CFG.get("paranoia_level", 1), 1)))
+WAF_INBOUND_THRESHOLD = max(1, _positive_int(WAF_CFG.get("inbound_anomaly_threshold", 5), 5))
+WAF_OUTBOUND_THRESHOLD = max(1, _positive_int(WAF_CFG.get("outbound_anomaly_threshold", 4), 4))
+# 请求体上限：必须 ≥ 应用自身接受的最大上传体积，否则 ModSecurity/nginx 会先于应用回 413
+WAF_BODY_LIMIT_BYTES = int(WAF_CFG.get("body_limit_kb", 0) or 0) * 1024
+if WAF_BODY_LIMIT_BYTES <= 0:
+    WAF_BODY_LIMIT_BYTES = max(MAX_CONTENT_BYTES, NOTE_TRANSFER_MAX_FILE_BYTES,
+                               MAX_ATTACHMENT_SIZE_BYTES, 1024 * 1024)
+WAF_DEFAULT_EXCLUSIONS = bool(WAF_CFG.get("default_exclusions", True))
+try:
+    WAF_UPDATE_STALE_SECONDS = int(WAF_CFG.get("update_stale_days", 7)) * 86400
+except (TypeError, ValueError):
+    WAF_UPDATE_STALE_SECONDS = 7 * 86400
+WAF_VALIDATE_CONFIG = bool(WAF_CFG.get("validate_config", True))
+WAF_AUTO_RELOAD = bool(WAF_CFG.get("auto_reload", False))
 
 DEBUG = config.get("debug", False)
 
