@@ -28,706 +28,109 @@
 
 ## 产品特性
 
-- **开箱即用的云端剪贴板**：基于 Flask 的轻量实现，可部署在 VPS 或 Vercel / AWS Lambda 等无服务器平台，用浏览器即可快速保存和访问文本内容。
-- **公开与私有笔记**：支持随机短路径公开笔记，登录用户也拥有自己的私有笔记列表，兼顾临时分享和个人留存。
-- **安全分享链接**：可为用户笔记生成带随机 token 的分享链接，并支持分享内容写回，便于跨设备协作。
-- **Markdown 与 LaTeX 渲染**：只读页面、评论和犇犇动态支持经过 Bleach 清洗的 Markdown、KaTeX 公式与代码高亮（服务端 Pygments 分词着色，客户端 highlight.js 处理未识别语言并生成行号，跟随站点亮/暗主题），适合保存代码片段、说明文档和数学内容。编辑页实时渲染可手动开关。
-- **大纲预览**：只读页自动提取 `h1`-`h6` 标题生成目录——宽屏显示右侧大纲栏、窄屏显示悬浮按钮 + 侧滑抽屉，点击平滑定位到对应章节，滚动时自动高亮当前所在章节；编辑页实时预览栏头部也有「大纲」下拉，随输入实时更新。纯客户端实现，无标题时自动隐藏。
-- **Markdown 标题锚点**：每个 Markdown 标题自动生成 slug id，支持页内 `#链接` 跳转、深链直接定位到指定章节，点击锚点图标可复制链接。
-- **Markdown 提示卡片（GitHub Alerts）**：在引用块首行写 `[!NOTE]`、`[!TIP]`、`[!IMPORTANT]`、`[!WARNING]`、`[!CAUTION]`（`[!INFO]` 为 `[!NOTE]` 别名）即可生成 GH 风格彩色卡片；卡片以 `<details>` 实现，点击标题可展开/收起，默认展开，标记后加 `-`（如 `> [!WARNING]-`）则默认折叠、加 `+` 则显式展开；卡片内 Markdown、代码块与嵌套卡片均正常渲染。
-- **笔记快捷引用（`#` 引用）**：参考 GitHub Issues——在自己的私有笔记编辑页输入 `#` 会弹出自动补全列表（按笔记 ID 与首行标题模糊匹配、最近编辑优先），选中即插入 `#笔记ID`；渲染后自动变成指向该笔记的链接（悬停可见标题预览）。公开笔记中的 `#ID` 同样会解析为公开笔记链接。代码块内的 `#include` 等内容不受影响。
-- **笔记标签**：在编辑页底部为笔记添加标签，标签栏自动补全（匹配已有标签）；用户笔记列表页支持按标签筛选。
-- **笔记文件夹**：支持将笔记归入文件夹（单归属），用户可在文件夹视图下管理自己的笔记，列表页支持按文件夹筛选。
-- **笔记置顶**：在笔记列表页可通过图钉图标将重要笔记置顶，置顶笔记始终显示在最前面。
-- **笔记图床**：编辑器支持粘贴/拖拽上传 PNG、JPEG、GIF 或 WebP 图片，按文件魔数校验格式并以 Markdown 语法引用；图片公开可读，默认单张 2MB、每用户 50MB 配额。
-- **笔记附件**：支持上传任意文件类型（可执行文件与压缩包等默认进黑名单），默认单文件 50KB、每笔记 500KB、每用户 10MB 配额（均可在 `config.json` 调整），附件管理页支持拖拽上传，笔记中以链接形式引用。附件**默认仅登录用户可下载**（`/attachment/<u>/<id>` 对匿名访客返回 401），并按「单用户同时在途队列数」设闸（[#191](https://github.com/rusin-dev/rusin-note/issues/191)：默认同时下载 1 个、同时上传 1 个），防止少量慢速连接（如 1KB/s）或用上百线程并发拉取长期占满 worker。
-- **评论系统**：笔记和分享页面支持评论功能，支持匿名评论，可配置最大评论数（默认 200 条）、冷却时间、分页加载，与犇犇动态类似的发布等待机制。
-- **犇犇动态**：内置持久化轻量动态流，登录用户可发布内容，未登录用户可浏览，支持实时预览、分页加载、发布冷却，以及点击动态右上角“回复”快速填充 `|| @用户名: 原内容`。
-- **功能开关（Feature Flags）**：管理员在 `/admin/features` 用滑块开关启用/停用站点功能（公开笔记、犇犇、分享链接、开放注册、快捷引用、笔记标签、笔记文件夹、笔记置顶、Markdown 标题锚点、Markdown 提示卡片、笔记图床、笔记附件、评论系统、LaTeX、代码高亮、头像、组织），保存后立即生效、无需重启；启用的功能会在 `/count` 数据汇总页呈现，停用的功能入口自动隐藏、路由直接 404。
-- **第三方登录与账号安全（可选）**：支持 GitHub / Google / Microsoft / 微信 / QQ 第三方登录（OAuth 2.0；`oauth.enabled` 总开关**默认关闭**，开启并在 `oauth.providers` 填入凭据、且打开对应功能开关后才可用，登录页仅展示可用平台，未绑定时可自动注册或先登录再绑定）；支持基于 TOTP 的两步验证（2FA，可用认证器 App 扫码/手动录入，并提供一次性恢复码）；支持绑定并验证邮箱 / 手机号，并可用验证码免密码登录。三类能力均为独立功能开关（`oauth_*` / `two_factor_auth` / `email_verify` / `phone_verify`），可在 `/admin/features` 单独启停。
-- **组织/团队协作**：创建组织并邀请成员加入，支持 Owner / Admin / Member 三级角色体系。组织笔记独立存储在 `_orgs/<org_name>/` 命名空间，与个人笔记完全隔离。三种加入方式：邀请制（生成邀请码分享）、公开加入（自由加入）、审批制（申请后由 Admin/Owner 审批）。Owner 可管理组织设置、添加/移除管理员、删除组织；Admin 可管理成员和邀请；Member 可创建和编辑组织笔记。
-- **首页公告横幅**：首页顶部展示仓库根目录 `NOTICE.txt` 的第一个非空行（跳过前导空行）作为站内公告；文件缺失或整体内容为空时自动隐藏，文本经 HTML 转义，无需额外配置。
-- **首页工作台**：登录后首页呈现 VSCode 欢迎页风格的工作台——最近编辑的笔记列表（条数由 `home_page.recent_notes_limit` 控制）与**待办清单**（新增 / 勾选 / 删除 / 清除已完成，条目数与单条长度受 `todos` 配置约束）；开启简洁模式后首页直接跳转到新建笔记。
-- **多语言界面**：内置简体中文与 English，可手动切换，也可按浏览器语言自动选择。
-- **用户设置**：每位登录用户在 `/user/<username>/settings` 管理账号——可切换**简洁模式**（隐藏标签、置顶、犇犇、组织菜单与分享入口等高级功能，编辑页还隐藏预览栏、附件与评论入口，只保留笔记读写，偏好随账号在所有设备一致生效，原导航栏切换按钮已并入此处）、修改密码（校验原密码与复杂度，并注销其它设备会话）修改登录用户名（笔记、图床、附件及标签/文件夹/置顶/待办/分享/犇犇/评论/组织/第三方绑定/2FA/联系方式等数据自动迁移到新用户名，当前登录会话同步改名、无需重新登录）；设置页的「账号安全」区可进入两步验证、第三方登录绑定与邮箱 / 手机号验证管理。
-- **部署友好**：配置集中在 `config.json`，支持笔记过期清理、会话超时、密码策略、页面缓存、反向代理真实 IP、HTTPS Cookie 等常见部署选项。业务数据可使用本地 SQLite（索引）+ JSON 文件、Upstash Redis、Neon/PostgreSQL 或内存后端。
-- **基础防护完善**：包含 CSRF 防护、请求限流、保存限流、注册限流、内容安全清洗和代理头信任开关，降低公开部署风险。
+- **云端剪贴板与笔记**：基于 Flask 的轻量实现，浏览器即可快速保存 / 访问文本；支持随机短链的公开笔记与登录用户的私有笔记；可为笔记生成带随机 token 的分享链接并支持内容写回，便于跨设备协作。
+- **Markdown 渲染**：经 Bleach 安全清洗的 Markdown，支持 KaTeX 公式、代码高亮（服务端 Pygments + 客户端 highlight.js 兜底，跟随亮/暗主题）、GitHub 风格提示卡片（`> [!NOTE]` 等，可折叠）、标题锚点深链与大纲目录（宽屏侧栏 / 窄屏抽屉），编辑页可开关实时预览。
+- **笔记组织**：标签（自动补全 + 列表筛选）、文件夹、置顶，以及批量导入 / 导出（ZIP 或单文件 Markdown，同名跳过不覆盖）；编辑页输入 `#` 可快捷引用自己的笔记。
+- **图床与附件**：粘贴 / 拖拽上传图片（PNG / JPEG / GIF / WebP，魔数校验，公开可读）与任意文件附件（扩展名黑名单 + 配额）；附件默认仅登录用户可下载，并有单用户并发闸门防止慢速长连接霸占 worker。
+- **评论与犇犇动态**：笔记 / 分享页评论（可匿名、冷却、分页）；内置持久化轻量动态流犇犇，登录可发布、未登录可浏览。
+- **首页工作台**：登录后展示最近编辑笔记与待办清单，顶部公告横幅读取仓库根目录 `NOTICE.txt` 首行。
+- **组织 / 团队协作**：Owner / Admin / Member 三级角色，邀请码 / 公开 / 审批三种加入方式；组织笔记独立存储，与个人笔记完全隔离。
+- **账号与登录安全（可选）**：GitHub / Google / Microsoft / 微信 / QQ 第三方登录（OAuth 2.0，总开关默认关闭）、基于 TOTP 的两步验证（含一次性恢复码）、邮箱 / 手机号验证与验证码免密登录；均可在 `/admin/features` 独立启停。
+- **多语言与个性化**：内置简体中文 / English（手动切换或按浏览器语言自动选择）；用户设置页支持简洁模式、修改密码、修改用户名（全部数据自动迁移）。
+- **功能开关（Feature Flags）**：管理员在 `/admin/features` 用滑块即时启停各功能，保存后立即生效、无需重启；停用功能入口自动隐藏、路由 404。
+- **插件系统**：投放 `*.plugin.zip` 到运行时目录即自动解压安装并加载其中的 Flask 蓝图，支持上游自动更新（无服务器只读环境不支持）。详见 [插件系统](docs/plugins.md)。
+- **部署友好 + 基础防护完善**：配置集中在 `config.json`，数据后端可插拔（sqlite / file / upstash / postgres / memory）；内置 CSRF 防护、多维 IP 限流、防 `X-Forwarded-For` 伪造、内容安全清洗，以及可选的 nginx + ModSecurity 反向代理 WAF。
+
+> 各能力的对应开关、配额与限制逐项说明见 [配置项详解](docs/configuration.md)。
 
 ## 快速开始
 
 ### 要求
 
-python 版本 $\geq$ 3.10。
+Python 版本 $\geq$ 3.10。
 
 ### 本地开发
 
-1. 克隆代码
-
-    ```bash
-    git clone https://github.com/rusin-dev/rusin-note.git
-    cd rusin-note
-    ```
-
-2. 安装依赖
-   
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-3. 启动服务
-
-    ```bash
-    python3 -m app      # Windows 下为 python -m app
-    ```
-
-    然后打开 <http://localhost:8080> 查看效果（端口由环境变量 `PORT` 控制，默认 `8080`）。
-
-4. 运行测试（可选）
-
-    ```bash
-    pip install -r requirements-dev.txt
-    pytest tests/               # 端到端测试（自动隔离到临时数据目录，不污染本地数据）
-    python tests/frontend_check.py   # 前端语法检查（Jinja2 + 内联 CSS/JSON；有 Node 时才校验内联 JS）
-    ```
-
-### 线上部署
-
-#### 获取 SECRET_KEY
-
-Windows：`win+x i` powershell 运行 `$bytes=New-Object byte[] 48;[System.Security.Cryptography.RNGCryptoServiceProvider]::Create().GetBytes($bytes);[Convert]::ToBase64String($bytes)`，复制生成的密钥。
-
-Linux / macOS：打开终端，运行 `openssl rand -base64 48`，复制生成的密钥。
-
-Python 通用：`python -c "import secrets; print(secrets.token_hex(32))"` 或 `python3 -c "import secrets; print(secrets.token_hex(32))"`
-
-#### 方式一：Vercel（无服务器推荐方式）
-
-[Vercel Demo](https://rusin-note.vercel.app)
-
-[![Deploy to Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Frusin-dev%2Frusin-note&&env=RUSIN_SECRET_KEY)
-
-1. 点击以上按钮，框架等不用更改，保持默认即可。然后给仓库起个名，点击 `Create`。
-2. 到 `Add Environment Variables` 这项时在 `Value` 一栏粘贴刚刚的 `SECRET_KEY`，然后点击下面的 `Deploy`，等待首次部署完成。
-3. 半分钟后 Vercel 显示 `Congratulations!` 时下滑，点击 `Continue to Dashboard`。
-4. 存储后端 **Neon（PostgreSQL）**：在 Vercel 项目面板左侧导航栏的 `Storage`，点右上角 `Create Database`，在 `Marketplace Database Providers` 下找到 `Neon` 并点击，然后点右下角 `Continue`，再下滑点击 `Continue`，然后点击 `Create`，接着点击 `Connect`；
-5. 点击 在 Vercel 项目面板左侧导航栏的 `Deployments`，切换到 Deployments 页面后点击右上角三个点，然后 `Create Deployment`，点击 `main` 分支的图标，最后点 `Deploy to Production` 即可。
-6. 部署完成后，你可以绑定自己的域名避免 Vercel 默认域名无法访问的问题。
-
-可选：设置 `REDIS_URL`（Redis 连接串，如 Upstash 或自建 Redis）后，页面缓存切换为共享 Redis、限流计数也在多实例间共享；不设置时页面缓存会先尝试 `cache.redis_url`（仓库默认 `redis://localhost:6379/0`，无服务器平台上通常不可达），不可达即回退进程内 SimpleCache，限流按实例内存计数（Zeabur 上的用法见下方章节）。
-
-> 提示：无服务器平台默认 `trust_proxy_headers: true`、`secure_cookies: true`（已写入 `config.json`）。本地开发如需关闭请自行修改。
-
-#### 方式二：AWS Lambda
-
-需要信用卡，不推荐。
-
-项目根目录提供 `lambda_handler.py`（基于 Mangum 适配 WSGI）：
-
-1. 打包仓库上传（包含 `templates/`、`config.json` 等）；
-2. 处理程序设为 `lambda_handler.handler`，配 API Gateway 代理集成；
-3. 环境变量与 Vercel 相同（`RUSIN_SECRET_KEY`，`DATABASE_URL`）；
-4. 内存建议 ≥ 512MB（Markdown 渲染需要）。
-
-#### 方式三：VPS / 传统服务器
-
-连接你的服务器，然后
-
-1. 克隆代码
-
-    ```bash
-    git clone https://github.com/rusin-dev/rusin-note.git
-    cd rusin-note
-    ```
-
-2. 安装依赖
-   
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-3. 启动服务
-
-    ```bash
-    python3 -m app
-
-    # 后台运行
-    nohup python3 -m app > app.log 2>&1 &
-
-    # 生产环境推荐（Linux，gunicorn；需另行安装：pip install gunicorn）
-    # 监听端口取环境变量 PORT，未设置时请自行写成 8080（须与下方 Nginx 反代目标一致）
-    gunicorn 'app.wsgi:app' -b 0.0.0.0:${PORT:-8080} --workers 2 --threads 4
-    ```
-
-4. 配置 Nginx（可选）
-
-    创建站点配置
-
-    ```bash
-    sudo nano /etc/nginx/sites-available/rusin-note
-    ```
-
-    复制以下内容：
-
-    ```nginx
-    server {
-        listen 80;
-        server_name _ your_domain.com;
-
-        location / {
-            proxy_pass http://127.0.0.1:8080;
-            proxy_set_header Host $host;
-            proxy_set_header X-Real-IP $remote_addr;
-            # 让 Nginx 补写 XFF（追加它看到的上游 IP），避免客户端自带的 XFF 被透传
-            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        }
-    }
-    ```
-
-    > 使用 Nginx/Cloudflare 反代后，请将 `config.json` 中的 `trust_proxy_headers` 设为 `true`，
-    > 并确认 `trusted_proxies` 包含反代来源网段（默认 `["loopback", "private"]` 覆盖同机 Nginx；
-    > 使用 Cloudflare 时追加 `"cloudflare"` 预设）。服务端会先用 `trusted_proxies` 校验直连对端，
-    > 再按「XFF 从右往左、跳过可信代理」的规则取真实客户端 IP，客户端伪造的 XFF 左侧项不会被采信；
-    > 对端不在可信列表时，所有代理头一律忽略（按直连 IP 限流）。详见「IP 限速与防 XFF 伪造」。
-
-    > 注意：仓库内 `config.json` 默认为无服务器平台开启 `trust_proxy_headers` 与
-    > `secure_cookies`。位于 Nginx/Cloudflare 之后时两者保持 `true` 并配好 `trusted_proxies`；
-    > 本地 / VPS 走 HTTP 且**无反向代理**时才把两者改回 `false`（HTTP 下 Secure Cookie
-    > 会被浏览器拒绝，直连时也没有代理头需要采信）。
-
-    ```bash
-    # 启用并重载
-    sudo ln -s /etc/nginx/sites-available/rusin-note /etc/nginx/sites-enabled
-    sudo nginx -t && sudo systemctl reload nginx
-    sudo ufw allow 'Nginx Full'
-    ```
-
-#### Zeabur VPS 自动部署
-
-使用 Zeabur 从 GitHub 自动部署时，应用目录会在每次部署时重新构建。为了避免剪贴板、用户、分享链接和犇犇动态被清空，请把运行数据写入持久化卷：
-
-1. 在 Zeabur 项目中打开当前服务。
-2. 进入 `Storage` / `Volumes`，新增一个 Volume。
-3. 将 Volume 挂载路径设置为 `/data`。
-4. 进入 `Environment Variables`，新增环境变量 `RUSIN_DATA_DIR=/data`。
-5. 重新部署服务。
-
-不要将 Volume 挂载到项目根目录，否则可能覆盖部署出来的应用代码。设置完成后，运行数据会保存在 `/data` 下：
-
-```plaintext
-/data/index.db          # SQLite 索引：笔记 / KV / 图床 / 附件元数据（快速查找）
-/data/notes/<用户>/<ID>.json   # 笔记内容（JSON）
-/data/images/
-/data/attachments/
-/data/users.json
-/data/sessions.json
-/data/shares.json
-/data/benben.json
-/data/comments.json
-/data/note_tags.json
-/data/note_folders.json
-/data/note_pins.json
-/data/todos.json
-/data/feature_flags.json
-/data/orgs.json
-/data/org_members.json
-/data/org_invites.json
-/data/org_join_requests.json
-/data/.secret_key      # 自动生成的 SECRET_KEY（未设置 RUSIN_SECRET_KEY 时）
-/data/plugins/         # 已安装的插件
-/data/log/
-```
-
-> 本地/VPS 默认使用 `sqlite` 后端：SQLite（`index.db`）只保存索引元数据用于快速
-> 列表 / 排序 / 检索 / 统计，笔记与各集合的**具体内容仍以 JSON 落盘**。首次启动时
-> 会自动完成两套迁移：旧版纯文本笔记（`notes/<用户>/<ID>.txt` → `.json`）与散落在
-> 项目根目录的旧运行数据（→ `data/`）。另：键 `note_titles.json` 虽在存储层登记，
-> 但当前代码不读写，新部署不会生成该文件。
-
-#### Zeabur 启用 Redis（页面缓存 + 共享限流）
-
-Zeabur 是 PaaS 平台，不需要也不建议在容器里 `apt install redis`（构建产物每次重新部署会重建，装了也存不住）；标准做法是添加一个托管 Redis 服务，Zeabur 会自动把连接信息注入到其他服务：
-
-1. 在 Zeabur 项目中打开 **Market** / **Marketplace**，搜索并添加 **Redis** 服务（内置 `redis/redis-stack-server` 镜像，Zeabur 会为它生成随机密码）。
-2. 添加完成后，Zeabur 会自动向项目内其他服务注入 `REDIS_CONNECTION_STRING`、`REDIS_HOST`、`REDIS_PORT`、`REDIS_PASSWORD` 等变量（也可在 Redis 服务的「操作指南/Instructions」里查看连接信息）。
-3. 回到本服务，进入 **Variables / 环境变量**，新增变量（跨服务引用，自动拼出带密码的连接串）：
-
-   ```plaintext
-   REDIS_URL = ${REDIS_CONNECTION_STRING}
-   ```
-
-   等价于 `redis://:密码@服务名:6379`。
-4. 重新部署服务。启动时应用会主动 `PING` Redis：连通则页面缓存（首页/笔记/犇犇等）切换为 Redis 共享后端、限流计数也存入 Redis（多实例共享）；未连通则日志输出 `Redis 缓存不可达（…），已降级到 SimpleCache` 并退回进程内缓存，不影响功能。
-
-> 说明：Redis 只负责缓存与限流；剪贴板、用户、分享、犇犇等业务数据仍由上面挂载的 `/data` 卷（`file` 后端）保存，两者互不影响。若追求数据多实例共享 / 不丢，可改用 `postgres` 或 `upstash` 后端（见下节）。
-
-### 存储后端说明（无服务器关键）
-
-存储层（`app/core/storage.py`）是项目的统一数据接口，提供五种后端，由 `RUSIN_STORAGE` 环境变量显式指定，未指定时自动识别：
-
-| 后端 | 启用方式 | 说明 |
-|---|---|---|
-| `sqlite` | 默认（本地/VPS） | SQLite（`<DATA_DIR>/index.db`）保存索引用于快速查找，笔记与集合内容以 JSON 落盘到 `<DATA_DIR>/`；旧版 file 布局自动迁移 |
-| `file` | `RUSIN_STORAGE=file` | 兼容旧部署的纯文件落盘：笔记为 `notes/<用户>/<ID>.txt` 纯文本（非 JSON），集合与图床/附件布局同 sqlite 行、但没有 `index.db`；数据写入 `RUSIN_DATA_DIR` |
-| `upstash` | 设置 `KV_REST_API_URL` + `KV_REST_API_TOKEN`（Upstash Redis 的 REST 接口） | 数据存于外部 KV，多实例共享、冷启动不丢；纯 HTTPS 请求，任意支持 Python 的无服务器平台可用 |
-| `postgres` | 设置 `DATABASE_URL`（Neon / 任意 PostgreSQL，Vercel 绑定 Neon 后自动注入） | 数据存于 `storage_kv`、`storage_notes`、`storage_images`、`storage_attachments` 表，多实例共享、冷启动不丢；跨实例互斥用 PG advisory lock |
-| `memory` | `RUSIN_STORAGE=memory`（无服务器平台未配置上述存储时自动启用） | 纯内存，重启/冷启动清空，适合体验或临时部署 |
-
-自动识别优先级：显式 `RUSIN_STORAGE` > `KV_REST_API_URL`+`KV_REST_API_TOKEN`（upstash）> `DATABASE_URL`（postgres）> 无服务器平台（memory）> 本地（sqlite）。
-
-- 犇犇动态已从纯内存改为持久化（外部存储可用时重启不丢，最多保留 `benben.max_posts` 条，默认 200）。
-- 无服务器环境（检测到 `VERCEL` / `NETLIFY` / `AWS_LAMBDA_FUNCTION_NAME` 环境变量）不启动后台守护线程，清理任务改为请求内机会式执行；日志回退到 stderr（进入平台日志流）。
-- 无服务器平台强烈建议设置 `RUSIN_SECRET_KEY`；未设置时若后端可持久化（file/upstash/postgres）会自动生成并存储，否则退回随机密钥（重启后登录态失效）。
-- `.env.example` 提供 `RUSIN_STORAGE`、`RUSIN_DATA_DIR`、`RUSIN_SECRET_KEY`、`RUSIN_ADMIN` 四个示例；缓存相关环境变量见上表和部署章节。
-
-## 插件系统
-
-插件以 zip 包形式分发：把 `*.plugin.zip` 投放到运行时目录（`RUSIN_DATA_DIR`）即可，服务启动时自动解压安装并加载其中的 Flask 蓝图，安装完成后插件包自动删除。**无服务器部署（只读文件系统）不支持插件系统。**
-
-### 插件包结构
-
-```plaintext
-+ desc.json          元信息
-+ icon.ico           图标（可选，文件名须与 desc.icon 一致）
-+ src/
-  + __init__.py      必须定义 APP_ROUTER / OVERRIDE / ENV_VARIBLES
-  + app.py           必须包含 Blueprint 实例（APP_ROUTER 可指向其它 .py 文件）
-  + templates/       模板（以蓝图名为命名空间，避免与主站/其它插件重名覆盖）
-  + static/          静态文件（访问路径 /<蓝图名>/static/<文件名>）
-```
-
-`desc.json` 示例：
-
-```json
-{
-  "name": "示范插件",
-  "version": "v0.1",
-  "upstream_repo": "https://github.com/rusin-dev/template-plug",
-  "icon": "icon.ico",
-  "namespace": "template_plug",
-  "auth_token": "sk-ccccddddddd"
-}
-```
-
-- `namespace`：命名空间（`^[a-zA-Z0-9_\-]+$`），也是安装目录 `plugins/<namespace>` 与冲突检查的依据；
-- `upstream_repo`：上游仓库，用于自动更新（可直接指向 zip 文件；GitHub 仓库地址会自动尝试 `main` / `master` 归档）；
-- `auth_token`：认证令牌。**缺失时插件会被拒绝安装**，如确认信任须以 `--skip-auth` 启动参数（或环境变量 `RUSIN_PLUGIN_SKIP_AUTH=1`）显式放行。
-
-`src/__init__.py` 模板：
-
-```python
-APP_ROUTER = "app.py"    # 承载 Blueprint 的文件（缺省 app.py）
-OVERRIDE = False         # 复写主站静态文件的声明，形如
-# OVERRIDE = {"source": {"static/dst.css": "static/src.css"}}
-ENV_VARIBLES = []        # 声明依赖的环境变量名（缺失时启动日志警告）
-```
-
-### 加载与更新流程
-
-- **Phase 1（安装）**：启动时扫描运行时目录的 `*.plugin.zip`，解压校验后安装到 `plugins/<namespace>/`，并把 `auth_token` 与 `last_update` 回写进 `desc.json`，随后删除插件包。校验项：zip 路径穿越与解压体积防护、根目录只允许 `desc.json` / 图标 / `src/`、auth_token 检查、命名空间冲突检查（不同来源的插件抢占同一命名空间必须声明 `OVERRIDE`，同源更新不受限制）、`src/app.py` 必须含 Blueprint（缺失记错误日志、插件不加载，不影响主站启动）。
-- **Phase 2（更新）**：后台线程（默认每 6 小时）逐个检查 `plugins/*/desc.json`，`last_update` 距今超过 3 天则请求 `upstream_repo`（3 秒超时）；拿到新包后落为 `<namespace>.plugin.zip` 并重跑 Phase 1——新插件热加载，已加载插件更新文件后提示重启生效。
-
-### 配置与安全
-
-- config.json `plugins` 段：`enabled`（总开关，默认 `true`）、`update_interval_hours`（更新检查周期，默认 6）、`update_stale_days`（触发上游检查的间隔天数，默认 3）。
-- 插件是在服务进程内执行的 Python 代码，**只安装可信来源的插件**：auth_token 机制即为服务端校验插件来源预留（缺失时须显式 `--skip-auth` 放行）。
-- 插件蓝图在短链 catch-all 之前注册，插件的单段路由不会被 `/<id>` 抢匹配；蓝图名与主程序或其它插件冲突时该蓝图拒绝加载并在日志报错。
-- 插件自己的 POST 表单需自行包含 `{{ csrf_token() }}`（全站启用 CSRF 防护）。
-
-## 项目结构
-
-```plaintext
-rusin-note:.
-│  config.json（配置项）
-│  LICENSE
-│  .gitignore
-│  NOTICE.txt（首页公告横幅内容，取第一个非空行）
-│  README.md
-│  README_en.md
-│  requirements.txt（Python 依赖）
-│  requirements-dev.txt（开发依赖：pytest）
-│  pytest.ini（pytest 配置）
-│  AGENTS.md（AI 协作指南）
-│  zbpack.json（打包配置）
-│  vercel.json（Vercel 无服务器部署配置）
-│  lambda_handler.py（AWS Lambda 入口）
-│  .env.example（环境变量示例）
-│
-├─api（无服务器入口）
-│      index.py（Vercel Python 入口）
-│
-├─app（应用）
-│  │  __init__.py（Flask app 工厂 create_app）
-│  │  __main__.py（入口：python3 -m app）
-│  │  wsgi.py（WSGI 入口）
-│  │
-│  ├─core（共享内核：基础设施 + 跨功能领域服务）
-│  │      auth.py（密码哈希与会话认证）
-│  │      background.py（后台清理任务）
-│  │      concurrency.py（进程内并发闸门：单用户同时在途请求上限）
-│  │      config.py（配置加载与全局常量）
-│  │      extensions.py（Flask 扩展实例）
-│  │      feature_flags.py（功能开关注册表与持久化状态）
-│  │      folders.py（笔记文件夹）
-│  │      i18n.py（多语言支持）
-│  │      ip_utils.py（客户端 IP 安全解析：可信代理校验 / XFF 右起解析 / IP 名单）
-│  │      logger.py（日志记录）
-│  │      middleware.py（请求钩子与限流辅助）
-│  │      notes.py（笔记底层读写与统计）
-│  │      pins.py（笔记置顶）
-│  │      plugins.py（插件系统：zip 安装 / 蓝图加载 / 上游更新）
-│  │      prefs.py（界面偏好：简洁模式）
-│  │      storage.py（存储层：sqlite / file / memory / upstash / postgres 后端）
-│  │      storage_sqlite.py（SQLite 索引后端实现）
-│  │      store.py（用户/会话/分享/犇犇/评论/组织数据存储）
-│  │      tags.py（笔记标签）
-│  │      theme.py（主题与静态资源辅助）
-│  │      utils.py（通用工具函数）
-│  │      waf.py（反向代理 WAF 供给：CRS 下载 / nginx+ModSecurity 配置生成）
-│  │
-│  ├─apps（功能 App；每个 App 自带 views，业务逻辑放 service）
-│  │  │  registry.py（按序注册全部 App 蓝图）
-│  │  ├─common/helpers.py（跨 App 视图辅助）
-│  │  ├─home/views.py（首页 / 统计 / 免责声明）
-│  │  ├─auth/views.py（登录与注册）
-│  │  ├─notes/views.py（私有笔记列表 / 编辑 / 删除 / 置顶 / Markdown 预览）
-│  │  ├─world/views.py + short.py（公开笔记 / 短链接）
-│  │  ├─share/views.py（分享查看与用户分享管理）
-│  │  ├─benben/views.py（犇犇动态）
-│  │  ├─comments/views.py + service.py（评论）
-│  │  ├─org/views.py（组织与团队协作）
-│  │  ├─todos/views.py + service.py（工作台待办）
-│  │  ├─images/views.py + service.py（图床管理 + /image 服务）
-│  │  ├─attachments/views.py + service.py（附件管理 + /attachment 服务）
-│  │  ├─user/views.py + service.py（简洁模式 / 改密码 / 改用户名与数据迁移）
-│  │  ├─admin/views.py（功能开关管理）
-│  │  └─static/views.py（favicon / 内置静态图片）
-│  │
-│  └─static（内置静态资源）
-│      │  favicon.ico
-│      └─image（图片资源）
-│              logo.png
-│              screenshots1.png
-│
-├─templates（Jinja2 模板）
-│  │  base.html（基础布局）
-│  │  count.html（统计页面）
-│  │  disclaimer.html（免责声明页面）
-│  │  home.html（首页 / 工作台）
-│  │
-│  ├─auth（认证页面）
-│  ├─admin（管理页面）
-│  ├─attachments（附件管理页面）
-│  ├─benben（犇犇页面）
-│  ├─comments（评论页面）
-│  ├─errors（错误页）
-│  ├─images（图片管理页面）
-│  ├─notes（笔记页面）
-│  ├─org（组织页面）
-│  ├─partials（公共片段）
-│  └─share（分享页面）
-│
-├─tests（pytest 端到端测试与前端语法检查）
-│       README.md（测试约定与文件说明）
-│       conftest.py（环境隔离与共享 fixtures）
-│       support.py（共享 HTTP 辅助与断言）
-│       frontend_check.py（前端语法检查 CLI）
-│       test_*.py（各功能端到端测试）
-│
-├─docs（文档）
-│      CONTRIBUTING.md（协作指南）
-│      Disclaimer-en.md（英文免责声明）
-│      Disclaimer.md（免责声明）
-│      todo.md（路线图 / 待办）
-│
-├─.github
-│  │  issue-labeler.yml（Issue 标签配置）
-│  │
-│  ├─ISSUE_TEMPLATE（Issue 模板）
-│  └─workflows（GitHub Actions）
-│          auto-merge.yml（自动合并）
-│          check.yml（检查）
-│          codeql.yml（CodeQL 分析）
-│          labeler.yml（自动打标签）
-│          release.yml（发布）
-│          trigger-fork-sync.yml（触发 Fork 同步）
-│          upstream-sync.yml（上游同步）
-```
-
-### IP 限速与防 XFF 伪造
-
-限流的键是「真实客户端 IP」，而 `X-Forwarded-For`（XFF）、`X-Real-IP`、`CF-Connecting-IP` 都是**客户端可随意伪造的请求头**。若无条件采信，攻击者每次请求换一个假 IP 就能让限流完全失效。为此本项目的解析规则如下（实现见 `app/core/ip_utils.py`）：
-
-1. **对端校验**：只有 TCP 直连对端（`remote_addr`）命中 `trusted_proxies` 列表时才采信代理头；直接从公网访问时，所有代理头一律忽略，按直连 IP 计数。
-2. **严格解析**：头部值必须是合法 IP（支持 `1.2.3.4:80`、`[2001:db8::1]:443`、`::ffff:1.2.3.4`），非法值直接丢弃——避免用任意字符串制造海量限流桶；单个头部超过 256 字节会被**整段丢弃**（不解析），XFF 超过 16 项只保留前 16 项。
-3. **从右往左取 XFF**：XFF 是「左旧右新」追加的列表，右侧条目由可信代理写入，左侧可能是伪造的历史值。多级代理下逐层跳过可信代理地址，取第一个不可信的合法 IP。
-4. **疑似伪造留痕**：携带了代理头但直连对端不可信时，日志会输出 `检测到疑似伪造的代理头已忽略`（同一 IP 每 5 分钟最多一条），便于发现扫描行为与配置错误。
-
-部署要点：
-
-```nginx
-# Nginx 必须「改写」XFF（追加自身看到的上游地址）或设置 X-Real-IP，
-# 否则客户端自带的 XFF 会被原样透传
-proxy_set_header X-Real-IP $remote_addr;
-proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-```
-
-- 同机 / 同私有网络的 Nginx、Caddy：`trusted_proxies` 用默认的 `["loopback", "private"]` 即可。
-- Cloudflare（或 Cloudflare → Nginx）：追加 `"cloudflare"` 预设，此时会额外采信由 Cloudflare 强制覆写的 `CF-Connecting-IP`。
-- 应用端口**直接暴露公网**（含 Docker 直接映射端口时对端可能显示为网关私网地址）时，请把 `trusted_proxies` 收窄为具体反向代理 IP（或只保留 `["loopback"]`）——`private` 预设意味着该网段内任意主机都可伪造代理头。
-- 内网负载均衡但地址是公网 IP、或使用了名为 `private` 预设之外的网段：把对应 IP/CIDR 显式加进 `trusted_proxies`，否则代理头会被忽略，导致所有用户共用同一个限流桶（表现为「正常访问被限流」）。
-- 启动时会输出当前策略（`IP 策略：…` / `全站 IP 限流：…` / 黑白名单条数）到应用日志（`data/log/*.log`，无服务器环境回退 stderr），可据此确认配置是否符合预期。
-
-> 本项目不使用 Werkzeug 的 `ProxyFix`：它会用可伪造的 XFF 直接改写 `request.remote_addr`，使「可信代理」校验失去意义。
-
-### 反向代理 WAF（ModSecurity + OWASP CRS）
-
-Flask 进程内没有可用的开源 WAF 引擎，业界轻量做法是把 **nginx + ModSecurity + OWASP CoreRuleSet（CRS）** 放在应用前面：SQL 注入、XSS、命令注入、扫描器探测等在进 Flask 之前就被拦掉，与应用内的 Flask-Limiter（速率限制）构成两层防御。
-
-其中可自动化的部分由启动脚本完成——把 `config.json` 的 `waf.enabled` 改成 `true`（或临时设环境变量 `RUSIN_WAF=1`），然后照常启动：
-
 ```bash
-python3 -m app                  # 自动下载 CRS 规则集 + 生成全部 WAF 配置
-python3 -m app --waf-refresh    # 强制重新下载并重新校验规则集
-python3 -m app.core.waf         # gunicorn / Lambda 等其它部署方式：手动供给一次
+git clone https://github.com/rusin-dev/rusin-note.git
+cd rusin-note
+pip install -r requirements.txt
+python3 -m app          # Windows 下为 python -m app；端口由环境变量 PORT 控制，默认 8080
 ```
 
-引擎本体是系统包，脚本**只探测并提示、绝不代为安装**（也不会擅自 reload nginx，除非显式设 `waf.auto_reload=true`）：
-
-```bash
-sudo apt-get install -y nginx libnginx-mod-http-modsecurity   # Debian / Ubuntu
-sudo dnf install -y nginx nginx-mod-modsecurity               # RHEL / Fedora
-sudo apk add nginx nginx-mod-http-modsecurity                 # Alpine
-```
-
-生成物都在 `<RUSIN_DATA_DIR>/waf/`（默认 `data/waf/`）：
-
-| 路径 | 说明 | 会被覆盖 |
-|---|---|---|
-| `crs/rules/*.conf` | OWASP CRS 规则集（下载，版本 + SHA256 双锁定） | 换版本时 |
-| `modsecurity.conf` | 引擎主配置：拦截模式、请求体上限、审计日志、Include 顺序 | 每次启动 |
-| `crs-setup.conf` | CRS 调优：检测等级、异常分阈值 | 每次启动 |
-| `exclusions.conf` | 内容型端点的误报排除（见下） | 每次启动 |
-| `custom.conf` | **你的自定义规则**（id 用 1100-9999） | 只生成一次 |
-| `nginx/nginx.conf` | 独立运行的完整配置，可 `nginx -c` 直接跑 | 每次启动 |
-| `nginx/rusin-note.conf` | server 块片段，可 include 进现有 nginx 的 `conf.d/` | 每次启动 |
-| `log/audit.log` | ModSecurity 审计日志（只记被拦截与 4xx/5xx） | nginx 写 |
-
-启用反代（二选一），启用前务必先校验：
-
-```bash
-sudo nginx -t -c /path/to/data/waf/nginx/nginx.conf          # 只校验
-sudo nginx -c /path/to/data/waf/nginx/nginx.conf             # 方式一：独立跑一个反代实例
-sudo ln -s /path/to/data/waf/nginx/rusin-note.conf /etc/nginx/conf.d/
-sudo systemctl reload nginx                                  # 方式二：并进现有 nginx
-```
-
-**上线顺序**：先用 `waf.mode="detectiononly"`（只记日志不拦截）跑几天，确认 `waf/log/audit.log` 里没有误报，再改成 `"on"`。
-
-关于误报：本站的核心用法就是把 SQL、JS、shell 片段当笔记存起来，直接开 CRS 会让「粘贴一段代码」被判成攻击而 403。因此 `exclusions.conf` 默认对**内容型端点**（笔记正文保存/导入、组织笔记、犇犇、评论、待办、图床与附件上传）按 tag 关闭注入类规则——这些正文渲染前都会经 bleach 清洗，不是可执行输入；协议强制（920）、方法强制（911）、扫描器识别（913）等仍全程生效。不需要这层排除时设 `waf.default_exclusions=false`。
-
-常用配置项（`config.json` 的 `waf` 段）：
-
-- `crs_version` / `crs_url` / `crs_sha256`：锁定的规则集版本与校验和。**升级 CRS 必须三个一起改**——校验和对不上会直接拒绝安装（这是防供应链投毒的边界，不要为了省事把 `verify_checksum` 关掉）。
-- `mode`：`on`（拦截）/ `detectiononly`（只记录）。
-- `paranoia_level`：CRS 检测等级 1-4，越高越严也越容易误报，默认 1。
-- `inbound_anomaly_threshold` / `outbound_anomaly_threshold`：异常分阈值，默认 5 / 4（单条 CRITICAL 记 5 分即触发）。
-- `listen` / `server_name` / `upstream` / `upstream_port`：反代监听与回源；`upstream_port=0` 表示跟随 `PORT` 环境变量。
-- `body_limit_kb`：请求体上限，`0` = 自动取笔记/导入/附件上限的较大值。**配小了会让上传先被 nginx 回 413**。
-- `response_inspection`：出站响应体检测，默认关闭（渲染用户 Markdown/代码的站点误报多且耗 CPU）。
-- `validate_config` / `auto_reload`：生成后是否跑 `nginx -t`（默认开，只读）、是否代为 reload nginx（默认关，需 root）。
-
-注意：
-
-- 反代生效后应用看到的直连对端就是 nginx，必须保证 `trust_proxy_headers=true` 且 `trusted_proxies` 覆盖回源地址（同机默认 `["loopback","private"]` 已覆盖），否则应用只看到反代 IP，全站每 IP 限流会把所有用户算成同一个人并集体 429。供给脚本检测到这种情况会主动告警。
-- 无服务器部署（Vercel / Lambda）自动跳过：只读文件系统，且平台本身自带 WAF。
-- 引擎缺失、下载失败、`nginx -t` 不通过都**不会导致应用启动失败**，只在启动输出里给出原因和下一步命令；规则集会保留上一个可用版本。
+打开 <http://localhost:8080> 查看效果。本地默认使用 `sqlite` 存储后端，数据落盘于 `RUSIN_DATA_DIR`（默认 `data/`）。
 
 ### 开发与测试
 
 ```bash
 pip install -r requirements-dev.txt     # 安装 pytest（已包含 requirements.txt）
-pytest tests/                           # 运行全部端到端测试
-pytest tests/test_org.py -q             # 运行单个模块 / 按关键字筛选：pytest tests/ -q -k images
-python tests/frontend_check.py          # 前端语法检查（Jinja2 + 内联 CSS/JSON；本机有 Node 时才额外校验内联 JS，否则自动跳过）
+pytest tests/                           # 全部端到端测试（自动隔离临时数据目录，不污染本地数据）
+pytest tests/test_org.py -q             # 单个模块；按关键字筛选：pytest tests/ -q -k images
+python tests/frontend_check.py          # 前端语法检查（Jinja2 + 内联 CSS/JSON；有 Node 时校验内联 JS）
 ```
 
-- 测试统一用 **pytest + logging** 组织：`tests/conftest.py` 会固定 `RUSIN_STORAGE=file`、切换到临时 `RUSIN_DATA_DIR` 并清空各模块内存缓存，测试不会污染本地数据；测试环境默认关闭限流（需要测限流本身时见 `tests/test_ip_limiter.py`），完整约定见 `tests/README.md`。
-- 前端资源全部内联在 Jinja2 模板中（无 `static/` 目录），改动模板后请运行 `python tests/frontend_check.py`。
-- CI（`.github/workflows/check.yml`）在 push / PR 到 `dev` 分支时按变更范围触发：`frontend` job 执行前端语法检查，`test` job 执行 pytest 并启动服务做 HTTP 健康检查。
+- 测试统一用 **pytest + logging** 组织：`tests/conftest.py` 固定 `RUSIN_STORAGE=file`、切到临时 `RUSIN_DATA_DIR` 并清空内存缓存，不会污染本地数据；完整约定见 `tests/README.md`。
+- 前端资源全部内联在 Jinja2 模板中（无独立 JS/CSS 文件），改动模板后请运行 `python tests/frontend_check.py`。
+- CI（`.github/workflows/check.yml`）在 push / PR 到 `dev` 分支时按变更范围触发 `frontend`（前端语法检查）与 `test`（pytest + HTTP 健康检查）两个 job。
 
-### 配置项解析
+## 部署
 
-- `max_note_size_kb`：笔记最大大小（单位：**KB**）默认 $512$（即 $0.5$ MB，为仓库 `config.json` 的值；配置缺失时代码回退 $5120$）。
-- `sitename`：网页名称。填你的站点名。
-- `rate_limit` 速率限制。
-   
-   - `window_seconds` ： 时间 $t$，默认 $60$；
-   - `max_requests` ：请求数 $s$，默认 $30$;
+各平台的完整步骤已拆分到 `docs/deployment/`。先阅读[部署总览](docs/deployment/index.md)（含 SECRET_KEY 获取方法、常用环境变量、代理与 Cookie 默认值），再选择对应方式：
 
-   $t$ 秒内最大请求 $s$ 次。
-- `get_rate_limit` GET 请求独立限流。
-   - `window_seconds` ：时间 $t$，默认 $60$；
-   - `max_requests` ：请求数 $s$，默认 $45$;
+| 方式 | 适用场景 | 指南 |
+|---|---|---|
+| **Vercel** | 无服务器推荐，绑定 Neon（PostgreSQL）即得持久化 | [docs/deployment/vercel.md](docs/deployment/vercel.md) |
+| **AWS Lambda** | 无服务器，需要信用卡，不推荐 | [docs/deployment/aws-lambda.md](docs/deployment/aws-lambda.md) |
+| **VPS / 传统服务器** | 自有服务器，gunicorn + Nginx 反代 | [docs/deployment/vps.md](docs/deployment/vps.md) |
+| **Zeabur** | GitHub 自动部署，需挂载持久化卷（可选 Redis） | [docs/deployment/zeabur.md](docs/deployment/zeabur.md) |
 
-   $t$ 秒内 GET 请求最大 $s$ 次（world / 笔记 / 用户列表等显式标注的路由；首页、`/count` 与静态资源未挂 GET 限流，只受下方 `ip_rate_limit` 约束）。
-- `save_rate_limit` 保存类 POST 独立限流（笔记保存/分享写回）。
-   - `window_seconds` ：时间 $t$，默认 $60$；
-   - `max_requests` ：请求数 $s$，默认 $120$;
+部署相关进阶主题：
 
-   $t$ 秒内保存笔记最多 $s$ 次；这是保存类路由专用的一档，与其它 POST 路由共用的 `rate_limit` 分开计数，避免频繁保存被误伤。
-- `register_rate_limit` 注册速率限制（单IP注册账号限制）。
-   - `window_seconds` ：时间 $t$，默认 $120$；
-   - `max_requests` ：请求数 $s$，默认 $1$;
+- 存储后端（sqlite / file / upstash / postgres / memory）的启用方式与自动识别 → [存储后端说明](docs/deployment/storage-backends.md)
+- 反向代理下取真实客户端 IP、防 XFF 伪造与 IP 黑白名单 → [真实客户端 IP 与防 XFF 伪造](docs/deployment/ip-and-proxy.md)
+- 在应用前置 nginx + ModSecurity + OWASP CRS 拦截攻击流量 → [反向代理 WAF](docs/deployment/waf.md)
 
-   $t$ 秒内单个IP最多注册 $s$ 个账号，防止恶意批量注册。
-- `ip_rate_limit` 全站每 IP 总请求上限（**应用级**限流，对所有路由累计生效，叠加在各路由独立限流之上）。
-   - `window_seconds` ：时间 $t$，默认 $60$；
-   - `max_requests` ：请求数 $s$，默认 $300$（置 `0` 关闭全站兜底限流）；
-   - `enabled` ：开关，默认 `true`，置 `false` 同样关闭兜底限流。
-- `trust_proxy_headers`：是否信任反向代理传递的客户端 IP 头，当前仓库配置为 `true`，适用于无服务器平台或可信反向代理。
-  
-  **安全说明**：应用内置默认值为关闭；仅当部署在可信反向代理（如 Nginx、Vercel）之后才置为 `true`，否则客户端可能伪造请求头绕过限流。
-- `trusted_proxies`：**可信代理网段**（防伪造 `X-Forwarded-For` 的关键）。仅当 TCP 直连对端命中该列表时才会采信代理头；公网直连时所有代理头一律忽略，按直连 IP 限流。
+## 文档索引
 
-  元素可为 IP/CIDR，也可用预设名 `loopback`（回环）、`private`（RFC1918 / CGNAT / 链路本地）、`cloudflare`（Cloudflare 官方回源段），或用 `"*"` 信任任意对端（**有伪造风险**，仅建议临时排障使用）。默认 `["loopback", "private"]`。
-- `proxy_hops`：兼容模式（`trusted_proxies` 设为 `"*"` / `"any"` / `"all"`）下 `X-Forwarded-For` 从右往左的代理跳数，默认 `1`；列表为空**不**等于兼容模式，而是「不采信任何代理头」。
-- `ip_allowlist`：免限流 IP/CIDR 白名单（如监控、内网探活），默认 `[]`。
-- `ip_blocklist`：直接拒绝（HTTP 403）的 IP/CIDR 黑名单，默认 `[]`。
+| 文档 | 内容 |
+|---|---|
+| [部署总览](docs/deployment/index.md) | 各平台部署入口、SECRET_KEY、环境变量、代理默认值 |
+| [存储后端说明](docs/deployment/storage-backends.md) | 五种后端启用方式与自动识别优先级 |
+| [配置项详解](docs/configuration.md) | `config.json` 全部配置项、默认值与安全说明、`RUSIN_*` 环境变量 |
+| [真实客户端 IP 与防 XFF 伪造](docs/deployment/ip-and-proxy.md) | 可信代理校验、XFF 右起解析、IP 名单 |
+| [反向代理 WAF](docs/deployment/waf.md) | OWASP CRS 供给、nginx + ModSecurity 配置、误报处理 |
+| [插件系统](docs/plugins.md) | 插件包结构、加载与更新流程、安全注意 |
+| [协作指南](docs/CONTRIBUTING.md) | 贡献流程 |
+| [免责声明](docs/Disclaimer.md) | 使用条款 |
 
-  以上 IP 相关配置也可用环境变量覆盖（无服务器平台配置文件只读时更方便）：`RUSIN_TRUSTED_PROXIES`、`RUSIN_PROXY_HOPS`、`RUSIN_IP_ALLOWLIST`、`RUSIN_IP_BLOCKLIST`（逗号分隔，名单类环境变量与配置文件取并集）。
-- `secure_cookies`：会话 Cookie 是否附加 `Secure` 标志，当前仓库配置为 `true`。
+## 项目结构
 
-  **安全说明**：仅当通过 HTTPS 访问时置为 `true`，否则浏览器会拒绝在 HTTP 下回传 Cookie。
-- `id_generation` 随机 url 配置（下列为仓库 `config.json` 的值，配置缺失时代码回退为长度 $6$、大小写与数字全开）。
-   - `length` ：长度，默认 $4$；
-   - `use_uppercase` ：是否使用大写字母，默认 `false`；
-   - `use_lowercase` ：是否使用小写字母，默认 `true`；
-   - `use_digits` ：是否使用数字，默认 `false`；
-- `share_token` 分享链接 token 配置。
-   - `length` ：长度，默认 $64$；
-   - `use_uppercase` ：是否使用大写字母，默认 `true`；
-   - `use_lowercase` ：是否使用小写字母，默认 `true`；
-   - `use_digits` ：是否使用数字，默认 `true`；
-- `session_timeout` 单次会话时间。
-   - `enabled` ：是否开启，默认 `false`；
-   - `minutes` ：设定时长，（单位：**分钟**）当前仓库默认 $1440$；
+```plaintext
+rusin-note/
+├─ config.json          配置项（详见 docs/configuration.md）
+├─ NOTICE.txt           首页公告横幅内容（取第一个非空行）
+├─ README.md / README_en.md
+├─ requirements.txt / requirements-dev.txt / pytest.ini
+├─ vercel.json          Vercel 无服务器部署配置
+├─ lambda_handler.py    AWS Lambda 入口（Mangum）
+├─ .env.example         环境变量示例
+│
+├─ api/                 无服务器入口（Vercel Python 入口）
+├─ app/                 应用
+│  ├─ __init__.py       Flask app 工厂 create_app
+│  ├─ __main__.py       开发入口：python3 -m app
+│  ├─ wsgi.py           WSGI 入口（gunicorn）
+│  ├─ core/             共享内核：storage / store / auth / middleware / ip_utils /
+│  │                    concurrency / captcha / feature_flags / plugins / waf /
+│  │                    totp / notes / tags / folders / pins / prefs / cleanup / i18n …
+│  ├─ apps/             功能 App（各带 views.py 蓝图，业务逻辑放 service.py）
+│  │  └─ registry.py    按序注册全部 App 蓝图（含插件与 catch-all world_short）
+│  └─ static/           内置静态资源（logo / 图片）
+│
+├─ templates/           Jinja2 模板（前端 CSS/JS 全部内联，中英双语）
+├─ tests/               pytest 端到端测试 + frontend_check.py 前端语法检查
+├─ docs/                文档（deployment/ 部署指南、配置详解、插件、协作、免责声明）
+└─ .github/             ISSUE_TEMPLATE 与 workflows（check / codeql / release / 同步…）
+```
 
-    当时间超过设定时，将登出访客账号。
-- `note_expiration` 笔记自动清除（剪贴板超过保存时间自动删除）。
-   - `enabled` ：是否开启，默认 `false`；
-   - `hours` ：保存时长（单位：**小时**）默认 $24$；
-
-    开启后，超过设定小时数未被修改的剪贴板（公开+私有）将被后台线程自动删除，每 30 分钟扫描一次。
-- `global_cdn` 全局前端静态资源 CDN 基础地址。
-   - 默认 `https://cdn.jsdmirror.cn`；
-
-   前端资源统一从该地址拼接加载：FontAwesome 图标、marked 编辑器脚本、DOMPurify 清洗库与 KaTeX 公式（路径均为 `npm/` 形式，因此也兼容 `https://cdn.jsdelivr.net` 等 npm CDN）。可按网络环境在 config.json 中整体替换，无需改代码。
-- `latex_render` LaTeX 公式渲染。
-   - `enabled` ：是否开启，默认 `true`；
-   - KaTeX 静态资源从 `global_cdn` 基础地址拼接（默认 jsdmirror，可换 jsdelivr 等）；
-
-    开启后，Markdown 只读页面支持 `$...$` 行内公式与 `$$...$$` 块级公式（KaTeX 洛谷同款，客户端渲染，无需服务端依赖）。
-- `code_highlight` 代码高亮（服务端 Pygments 着色 + 客户端 highlight.js 补充）。
-   - `enabled` ：是否开启，默认 `true`；
-
-    代码块在服务端始终由 Pygments 分词着色；该开关额外控制客户端 highlight.js：开启后，所有 Markdown 渲染处（笔记只读页、编辑页实时预览、犇犇动态、评论、免责声明）对 Pygments 未识别的语言兜底高亮、生成行号，并跟随站点浅色/暗色主题切换。关闭后行号与客户端高亮一并移除，服务端着色仍保留。
-- `cache` 页面缓存。
-   - `enabled`：是否启用缓存，默认 `true`；
-   - `backend`：缓存后端，当前配置为 `redis`；
-   - `default_timeout`：默认缓存时间（秒），当前为 `300`；
-   - `redis_url`：Redis 地址，可由环境变量 `REDIS_URL` 覆盖。Redis 不可达时自动降级到进程内 SimpleCache。
-
-     另外：限流计数存储也读取 `REDIS_URL`（设置后多实例共享限流计数，未设置用进程内 memory://）。
-- `note_editor` 编辑页行为。
-   - `live_preview_default`：实时预览的默认开关，默认 `false`；访客可手动开启，选择记在浏览器 localStorage；
-   - `markdown_manual_url`：编辑页「Markdown 语法说明」链接地址，默认 `https://markdown.com.cn`。
-- `home_page` 首页工作台。
-   - `recent_notes_limit`：首页展示的最近编辑笔记条数，默认 `5`；
-   - `recent_shares_limit`：预留的最近分享条数（当前首页未展示分享列表），默认 `5`。
-- `todos` 首页工作台待办清单。
-   - `max_items`：单个用户待办条数上限，默认 `100`；
-   - `max_length`：单条待办文本长度上限（字符），默认 `200`。
-- `note_refs` 笔记快捷引用（`#` 引用，见「产品特性」）。
-   - `enabled` ：是否开启，默认 `true`；置 `false` 后编辑器不弹引用补全框、渲染时不把 `#ID` 转为链接；
-   - `search_limit` ：补全接口单次最多返回条数，默认 `8`；
-   - `scan_limit` ：补全搜索最多扫描的笔记数（按修改时间倒序），默认 `100`。upstash / postgres 等远程存储后端每篇笔记需一次网络读取，笔记较多时可适当调低。
-- `max_note_tags`：每篇笔记最多标签数，默认 `10`；
-- `max_tag_length`：单个标签最大长度（单位：**字符**），默认 `24`；
-- `max_folder_name_length`：文件夹名最大长度（单位：**字符**），默认 `64`；
-- `max_folder_depth`：文件夹嵌套层级上限（以 `/` 分隔计数），默认 `8`；
-- `max_note_id_length`：笔记 ID 最大长度，默认 `250`（短链/长链接兼容性上限）；
-- `avatar` 用户头像（通过第三方服务生成，显示在导航栏当前用户、犇犇动态发布者与用户笔记列表标题处）。
-   - `enabled` ：是否开启，默认 `true`；置 `false` 后完全关闭头像显示；
-   - `url_template` ：头像 URL 模板，默认 `https://cn.cravatar.com/avatar/{hash}?d=identicon&f=y`。支持两个占位符：`{hash}`（`md5(用户名)` 小写十六进制）、`{username}`（URL 编码后的用户名）。由于本站用户没有邮箱，默认用 `md5(用户名)` 作为哈希，`d=identicon` 会让 Gravatar 系服务为每个哈希生成确定性的几何头像；也可换成其他按用户名生成头像的服务（如 DiceBear：`https://api.dicebear.com/9.x/identicon/svg?seed={username}`）；
-   - `size` ：模板中的默认尺寸（当前仅作为备用值，模板内按位置使用固定尺寸）。
-- `images` 笔记图床（编辑器粘贴/拖拽上传，`/image/<u>/<id>` 公开访问）。
-   - `enabled`：是否启用，默认 `true`；
-   - `max_size_kb`：单张图片上限，默认 `2048`（2MB）；
-   - `max_total_kb`：每用户图片总配额，默认 `51200`（50MB）；
-   - 支持 PNG、JPEG、GIF、WebP，并按文件魔数校验；SVG 不允许上传。
-- `attachments` 笔记附件（编辑器附件按钮上传，`/attachment/<u>/<id>` 默认**需登录**下载）。
-   - `enabled` ：是否开启，默认 `true`；置 `false` 后编辑器不显示附件按钮、附件管理页返回 404；
-   - `max_size_kb` ：单个附件上限（KB），默认 `50`；
-   - `max_per_note_kb` ：单个笔记引用附件总量上限（KB），默认 `500`；
-   - `max_total_kb` ：每用户附件总配额（KB），默认 `10240`（10MB）；
-   - `allow_anonymous_download` ：是否允许**匿名（未登录）**下载附件，默认 `false`：未登录访问 `/attachment/<u>/<id>` 返回 401（错误页提示先登录）；置 `true` 回到「知道链接即可下载」的旧行为；
-   - `max_concurrent_downloads` ：**单用户同时下载**上限（同一账号在途的下载请求数），默认 `1`（[#191](https://github.com/rusin-dev/rusin-note/issues/191)「限制 1 队列」），`0` 表示不限；
-   - `max_concurrent_uploads` ：**单用户同时上传**上限（同一账号在途的上传请求数），默认 `1`（同上），`0` 表示不限；
-   - `download_rate_limit` ：附件下载路由的独立每 IP 限流，`window_seconds`（默认 `60`）与 `max_requests`（默认 `120`）；
-   - 并发上限用于拦截「发起上千个慢速连接（每个 1KB/s）、或用上百线程同时下载上百个文件」这类**请求数不超限但长期占用 worker / 打满出站带宽**的行为：超出时下载返回 429（带 `Retry-After`），上传返回 429 JSON（编辑器可直接展示提示）；**超限直接拒绝、不排队**（排队同样占用 worker）。闸门计数在**进程内**（`app/core/concurrency.py`），gunicorn 起 N 个 worker 时实际上限约为 `N × 该值`；跨实例严格计数需要外部存储原子自增，本项目未采用；
-   - 附件在笔记中默认以链接形式引用；若一篇笔记内联了多个附件图片（同一账号并发请求 > 上限），可适当调高 `max_concurrent_downloads` 或置 `0`；
-   - `blocked_extensions` ：禁止上传的文件扩展名列表（黑名单模式），默认包含 `.exe`、`.bat`、`.sh`、`.zip` 等可执行文件与压缩包。**取值本身不带前导点**（`config.json` 里写 `exe`、`zip`，代码会自动补 `.`），自行添加时不要写成 `.exe`，否则永不命中。  
-- `comments` 评论系统（`/comments/<target_type>/<path:target_id>`，支持笔记和分享页面评论）。
-   - `enabled` ：是否开启，默认 `true`；置 `false` 后评论页面返回 404；
-   - `max_length` ：单条评论最大长度（字符），默认 `1024`（约 1KB）；
-   - `max_comments` ：每个目标（笔记/分享）最多评论数，默认 `200`；
-   - `cooldown_seconds` ：单个用户两次发布评论的最小间隔（秒），默认 `3`；
-   - `page_size` ：每页显示评论数，默认 `50`；
-   - `max_height_px` ：评论内容渲染后的最大显示高度（px），默认 `280`，超出部分在内容区内滚动。  
-- `password_policy`：密码策略，定义访客密码的复杂度要求。  
-   - `min_length`：密码最小长度，默认 `8`；  
-   - `max_length`：密码最大长度，默认 `128`（硬上限 `128`，防止超长密码进入 PBKDF2 慢哈希消耗 CPU）；  
-   - `require_uppercase`：是否必须包含大写字母，默认 `true`；  
-   - `require_lowercase`：是否必须包含小写字母，默认 `true`；  
-   - `require_digits`：是否必须包含数字，默认 `true`；  
-   - `require_special`：是否必须包含特殊符号（不含 `/ \ ( ) " '`），默认 `true`； 
-- `RUSIN_DATA_DIR`：可选环境变量，用于指定运行数据目录，默认 `data`（即项目下的 `data/`）。**内容数据**（笔记 / 图片 / 附件 / 各集合 JSON）仅本地 `sqlite` / `file` 后端写入该目录；日志 `log/` 与插件 `plugins/` 目录则始终建在该目录下、与后端无关（无服务器平台日志回退 stderr）。
-
-    笔记、图片、附件及各业务 JSON 数据会写入该目录；完整布局见上方 Zeabur 示例。在自动部署平台上建议挂载持久化卷到 `/data`，并设置 `RUSIN_DATA_DIR=/data`，避免重新部署时清空数据。
-- `RUSIN_STORAGE`：可选环境变量，显式指定存储后端：`sqlite`（本地/VPS，默认）、`file`（纯 JSON 文件）、`memory`（纯内存）、`upstash`（外部 KV）、`postgres`（Neon/PostgreSQL）。未指定时自动识别：设置了 `KV_REST_API_URL` / `KV_REST_API_TOKEN` 用 `upstash`，设置了 `DATABASE_URL` 用 `postgres`，检测到无服务器平台环境变量用 `memory`，否则 `sqlite`。详见上方「存储后端说明」。
-- **多语言**：界面支持简体中文与 English。导航栏右侧提供语言切换链接（`/lang/zh` / `/lang/en`），选择后通过 Cookie（`rusin-lang`）记住偏好；未设置时自动按浏览器 `Accept-Language` 判断，默认中文。切换后全站文本（导航、按钮、提示、错误信息、犇犇预览等）即时切换语言。 
-- `benben` 犇犇动态（`/benben`，登录可发布、未登录只读）。
-   - `max_length`：单条犇犇最大长度（单位：**字符**），默认 `1024`（约 1KB）；
-   - `page_size`：每批加载条数，默认 `50`；
-   - `cooldown_seconds`：单个用户两次发布犇犇的最小间隔（单位：**秒**），默认 `3`；
-   - `max_height_px`：犇犇内容渲染后的最大显示高度（单位：**px**），默认 `280`，超出部分在内容区内滚动（防止长帖霸屏）；
-   - `max_posts`：犇犇持久化条数上限，默认 `200`（外部存储单键体积控制，超出丢弃最旧）；
-
-   内容支持 Markdown 与 LaTeX 公式（`$...$` / `$$...$$`，依赖 `latex_render` 开关），发布表单带实时预览（客户端 marked.js 渲染，预览同样过滤危险标签与链接）；渲染时经 bleach 安全清洗防止 XSS；每页显示 `page_size` 条，通过「加载更多」分批加载，加载与发布均受请求速率限制（GET/POST 限流），发布还受单用户冷却限制（`cooldown_seconds`）。登录用户可点击动态右上角的「回复」，以 `|| @用户名: 原内容` 覆盖填入发布框。
-- `plugins` 插件系统（详见上方「插件系统」章节；`config.json` 中可省略该段，缺省时使用内置默认值）。
-   - `enabled`：是否启用，默认 `true`（无服务器环境自动禁用）；
-   - `update_interval_hours`：后台更新检查线程的轮询周期（单位：**小时**），默认 $6$；
-   - `update_stale_days`：距 `last_update` 超过该天数才请求 `upstream_repo`（单位：**天**），默认 $3$。
-- `oauth` 第三方登录（OAuth 2.0）。
-   - `enabled`：总开关，**默认 `false`（关闭全部 OAuth）**。即使功能开关被打开、凭据已配置，此开关为 `false` 时所有第三方登录仍不可用；适合在配置层硬关闭，不受运行时功能开关影响；
-   - `auto_register`：第三方账号未绑定时是否自动创建站内用户，默认 `true`（关闭后需先登录再在设置中绑定）；
-   - `timeout_seconds`：向各 Provider 发起 HTTP 请求的超时（秒），默认 `10`；
-   - `providers.<github|google|microsoft|wechat|qq>`：各平台凭据，分别填 `client_id`/`client_secret`（Microsoft 另可填 `tenant`，微信/QQ 为 `app_id`/`app_secret`）；留空即视为未配置，登录页不展示对应按钮。
-- `security` 2FA / 邮箱 / 手机验证。
-   - `code_length`（验证码长度，默认 `6`）、`code_ttl_seconds`（有效期秒，默认 `600`）、`code_resend_cooldown_seconds`（重发冷却秒，默认 `60`）、`code_max_attempts`（最大尝试次数，默认 `5`）、`challenge_ttl_seconds`（登录二次验证挑战有效期秒，默认 `600`）、`timeout_seconds`（投递超时秒，默认 `10`）；
-   - `email_login` / `phone_login`：是否允许邮箱 / 手机验证码免密登录，默认 `true`；
-   - `smtp`：邮箱验证码投递（`host`/`port`/`username`/`password`/`from_addr`/`use_tls`/`use_ssl`），留空则仅记录日志、不发送；
-   - `sms`：短信验证码投递（`webhook_url` + 可选 `token`），向该地址 POST JSON `{"phone","code","site","ttl"}`。
-- `features` / `admin_users` 功能开关（#90）。
-   - `features`：各功能的**默认开关**。当前 `config.json` 显式配置了 `world_notes`（公开笔记与短链）、`benben`（犇犇动态）、`share_links`（分享链接）、`open_register`（开放注册）、`note_tags`（笔记标签）、`note_folders`（笔记文件夹）、`note_pins`（笔记置顶）、`heading_anchors`（Markdown 标题锚点）、`markdown_alerts`（Markdown 提示卡片）、`note_images`（笔记图床）、`note_attachments`（笔记附件）、`comments`（评论系统）以及 `oauth_github`/`oauth_google`/`oauth_microsoft`/`oauth_wechat`/`oauth_qq`/`two_factor_auth`/`email_verify`/`phone_verify` 共 20 项（后 8 项默认 `false`）。
-
-     **优先级**：`note_refs`、`latex_render`、`code_highlight`、`avatar`、`note_images`、`note_attachments`、`comments` 这 7 个「历史功能」的默认值**始终取自各自配置段**（如 `images.enabled`、`attachments.enabled`、`comments.enabled`），本段中的同名项不生效；其余功能未在本段配置时默认启用（含 `orgs`）。第三方登录平台的展示还需 `oauth.enabled` 为 `true` 且在 `oauth.providers` 中填好凭据。
-   - `admin_users`：功能开关管理员用户名列表；也可用环境变量 `RUSIN_ADMIN` 指定（多个用户名逗号分隔，两者取并集）。
-
-   管理员登录后可在 `/admin/features` 用滑块开关切换各功能的启用状态，保存后立即生效（无需重启）：运行时状态持久化在存储后端（`sqlite`/`file` 后端即数据目录下的 `feature_flags.json`），多实例部署经约 5 秒的缓存 TTL 自动收敛；停用的功能路由直接 404、导航与首页入口自动隐藏。全部功能开关状态会呈现在 `/count` 数据汇总页的「功能状态」区（未设管理员时该区对所有人可见，但无人能修改开关）。注意：无服务器 `memory` 后端不持久，实例冷启动后回退到 `config.json` 默认值。
-- `logger` 日志。
-   - `max_size`：单个日志文件的字节上限（RotatingFileHandler `maxBytes`），默认 `4294967296`（4 GiB）；
-   - `path_pattern`：日志文件路径模板，默认 `log/{timestamp}.log`，相对数据目录解析（即 `<RUSIN_DATA_DIR>/log/`）；
-
-    日志文件不可创建时（如无服务器只读文件系统）自动回退到 stderr，进入平台日志流。
-- `debug`：日志详细程度开关，默认 `false`。**不会**开启 Flask 调试模式；取值与日志级别的对应关系是——`false` 记录 `INFO` 及以上（详细），`true` 只记录 `ERROR`（精简）。生产环境请保持 `false`。
+架构分层：共享内核 `app/core/`（基础设施 + 跨功能领域服务）与功能 App `app/apps/<feature>/`（自带 `views.py` 蓝图与可选 `service.py`）；所有业务模块只通过 `app/core/storage.py` 的统一 `storage` 接口访问数据，后端可插拔。详细的模块职责、路由表与配置项说明，请参考 Skill：`.opencode/skills/rusin-note-codebase/SKILL.md`。

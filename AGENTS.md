@@ -80,4 +80,4 @@
 
 ## 文档导航
 - 详细的模块职责、路由表、配置项说明，请参考 Skill：`.opencode/skills/rusin-note-codebase/SKILL.md`。
-- 完整用户文档见 `README.md`（含 Vercel / Lambda 部署步骤与存储后端说明）。
+- 完整用户文档见 `docs/`：各部署方式（Vercel / Lambda / VPS / Zeabur）与存储后端说明在 `docs/deployment/`，配置项详解在 `docs/configuration.md`，插件系统在 `docs/plugins.md`；`README.md` 仅保留概览与跳转链接。
