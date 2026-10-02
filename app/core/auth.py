@@ -39,7 +39,7 @@ def hash_password(password: str, salt: str) -> str:
 
 
 def verify_password(password: str, salt: str, hashed: str) -> bool:
-    """常量时间比较。兼容旧版单轮 SHA-256 哈希（64 位十六进制串）。"""
+    """常量时间比较。仅支持 PBKDF2-SHA256 格式哈希。"""
     try:
         if isinstance(hashed, str) and hashed.startswith(PBKDF2_PREFIX + "$"):
             try:
@@ -51,10 +51,6 @@ def verify_password(password: str, salt: str, hashed: str) -> bool:
                 return hmac.compare_digest(computed, digest)
             except (ValueError, TypeError):
                 return False
-        # 旧版格式（单轮 SHA-256）
-        if isinstance(hashed, str) and isinstance(salt, str):
-            legacy = hashlib.sha256((salt + password).encode("utf-8")).hexdigest()
-            return hmac.compare_digest(legacy, hashed)
     except Exception:
         return False
     return False
