@@ -1,0 +1,54 @@
+name: 提问 / 求助
+description: 用于使用疑问、部署问题等非 Bug 类提问
+title: "[Question] \"标题\""
+labels: ["question"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ↑ 请将上方的 Title 中的 “标题” 替换成您实际问题的简短介绍。
+  - type: checkboxes
+    id: checkagain
+    attributes:
+      label: 请确认以下事项
+      description: |
+        1. 我已查阅[协作指南](https://github.com/rusin-dev/rusin-note/blob/main/contribute.md)与 [README](https://github.com/rusin-dev/rusin-note/blob/main/README.md) 中的相关内容。
+        2. 已搜索过 open/closed 的 issue，没有同类问题。
+        3. 这不是 Bug（如果是 Bug 请右转反馈 Bug 表单）。
+      options:
+        - label: 我已确认以上事项
+          required: true
+  - type: dropdown
+    id: qtype
+    attributes:
+      label: 问题类型
+      description: |
+        请在此选择问题类型，非普通类型请选择“其它”。
+      options:
+        - 使用疑问
+        - 部署环境问题
+        - 功能用法咨询
+        - 其它
+    validations:
+      required: true
+  - type: input
+    id: othertype
+    attributes:
+      label: 更具体的问题类型
+      description: |
+        如果您的问题类型选择了「其它」，请在这里告诉我们具体的类型。
+  - type: textarea
+    id: question
+    attributes:
+      label: 问题描述
+      description: |
+        请详细描述您遇到的问题，可以贴上报错信息、复现步骤或截图说明。
+      placeholder: 我想……，但是……，期望是……
+    validations:
+      required: true
+  - type: input
+    id: env
+    attributes:
+      label: 相关版本 / 环境（可选）
+      description: 如 Python 版本、存储后端（sqlite/postgres/upstash）、部署方式（VPS/Vercel）等
+      placeholder: 例：Python 3.12 / sqlite / VPS
