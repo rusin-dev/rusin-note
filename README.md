@@ -346,7 +346,7 @@ rusin-note:.
 │  requirements.txt（Python 依赖）
 │  requirements-dev.txt（开发依赖：pytest）
 │  pytest.ini（pytest 配置）
-│  AGENTS.md / CLAUDE.md（AI 协作指南）
+│  AGENTS.md（AI 协作指南）
 │  zbpack.json（打包配置）
 │  vercel.json（Vercel 无服务器部署配置）
 │  lambda_handler.py（AWS Lambda 入口）

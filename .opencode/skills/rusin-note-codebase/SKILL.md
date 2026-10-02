@@ -66,7 +66,7 @@ upstash 后端所有键统一加 `rusin:` 前缀；memory 后端 get/set 带 dee
 | `lambda_handler.py` | AWS Lambda 入口（Mangum 适配） |
 | `.env.example` | 环境变量示例（RUSIN_STORAGE / RUSIN_DATA_DIR / RUSIN_SECRET_KEY / RUSIN_ADMIN） |
 | `README.md` / `README_en.md` | 中英文文档（含 Vercel / Lambda / VPS 部署步骤、配置项与存储后端说明） |
-| `AGENTS.md` / `CLAUDE.md` | AI 协作指南（命令、存储、安全约定、架构要点） |
+| `AGENTS.md` | AI 协作指南（命令、存储、安全约定、架构要点） |
 | `docs/CONTRIBUTING.md` | 协作指南 |
 | `docs/todo.md` | 路线图（已实现 / 会实现 / 待讨论，链接对应 GitHub Issue） |
 | `docs/Disclaimer.md` / `docs/Disclaimer-en.md` | 中英文免责声明（`/disclaimer` 页面读取，路径见 `config.DOCS_DIR`） |

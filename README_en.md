@@ -350,7 +350,7 @@ rusin-note:.
 │  requirements.txt (Python dependencies)
 │  requirements-dev.txt (dev dependencies: pytest)
 │  pytest.ini (pytest configuration)
-│  AGENTS.md / CLAUDE.md (AI collaboration guide)
+│  AGENTS.md (AI collaboration guide)
 │  zbpack.json (packaging configuration)
 │  vercel.json (Vercel serverless configuration)
 │  lambda_handler.py (AWS Lambda entry)
