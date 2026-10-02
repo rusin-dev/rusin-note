@@ -206,5 +206,27 @@
     "max_size": 4294967296,
     "path_pattern": "log/{timestamp}.log"
   },
+  "waf": {
+    "enabled": false,
+    "auto_download": true,
+    "crs_version": "4.29.0",
+    "crs_url": "https://github.com/coreruleset/coreruleset/releases/download/v4.29.0/coreruleset-4.29.0-minimal.tar.gz",
+    "crs_sha256": "1aa1c5c8fc29e532d35293bcea36bf72de61db8f6ed4716a0f91ab14552b7fed",
+    "verify_checksum": true,
+    "mode": "on",
+    "response_inspection": false,
+    "listen": "80",
+    "server_name": "_",
+    "upstream": "127.0.0.1",
+    "upstream_port": 0,
+    "paranoia_level": 1,
+    "inbound_anomaly_threshold": 5,
+    "outbound_anomaly_threshold": 4,
+    "body_limit_kb": 0,
+    "default_exclusions": true,
+    "update_stale_days": 7,
+    "validate_config": true,
+    "auto_reload": false
+  },
   "debug": false
 }

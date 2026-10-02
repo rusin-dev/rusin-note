@@ -59,7 +59,7 @@ def reset_runtime_state(data_dir) -> None:
     ``storage.get`` 返回 ``None``）。
     """
     from app.core import config as app_config
-    from app.core import store, tags, folders, pins, notes, feature_flags
+    from app.core import store, tags, folders, pins, notes, feature_flags, waf
     from app.apps.todos import service as todos
     from app.core import concurrency
     from app.core.extensions import cache, limiter
@@ -97,6 +97,7 @@ def reset_runtime_state(data_dir) -> None:
     feature_flags._state = {}
     feature_flags._state_loaded = False
     feature_flags._last_reload = 0.0
+    waf.reset_state()
 
     # ---- 扩展：关闭限流、清空缓存 ----
     limiter.enabled = False
