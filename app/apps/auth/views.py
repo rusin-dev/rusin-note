@@ -124,6 +124,10 @@ def register_post():
         return render_template("auth/register.html", error=error,
                                **_login_ctx(with_captcha=True)), 400
 
+    # 服务条款同意勾选放在验证码之前：未勾选时不白白消耗一次性验证码
+    if request.form.get("agree_terms") != "1":
+        return _fail(t(lang, "err_agree_terms"))
+
     # 图形验证码先行校验（与登录一致）：一次性 token，成败即销毁，失败重新签发
     if feature_enabled("login_captcha"):
         from app.core import captcha

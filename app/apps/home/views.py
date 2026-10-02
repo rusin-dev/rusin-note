@@ -2,7 +2,7 @@
 import time
 from datetime import date, timedelta
 
-from flask import Blueprint, g, redirect, render_template
+from flask import Blueprint, g, redirect, render_template, session
 
 from app.core import config
 from app.core.extensions import cache
@@ -80,6 +80,8 @@ def _build_heatmap(username: str, lang: str) -> dict:
               unless=lambda: bool(getattr(g, "simple_mode", False))
               or bool(getattr(g, "current_user", None)))
 def index():
+    # 第三方登录自动注册的一次性条款提示（无论是否落到首页都消费掉，避免数日后突兀出现）
+    oauth_terms_notice = bool(session.pop("oauth_terms_notice", None))
     # 简洁模式（账号级偏好）：跳过首页直接进入编辑/公开笔记，减少干扰
     if getattr(g, "simple_mode", False):
         current_user = getattr(g, "current_user", None)
@@ -125,6 +127,7 @@ def index():
                            quick_actions=quick_actions, note_count=note_count,
                            share_count=share_count, share_views=share_views,
                            greeting=greeting, heatmap=heatmap,
+                           oauth_terms_notice=oauth_terms_notice,
                            notice=read_notice_first_line())
 
 

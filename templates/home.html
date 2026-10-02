@@ -8,6 +8,12 @@
 {% endif %}
 {% if current_user %}
 {# ===== 登录后首页：产品风格互动落地页 ===== #}
+{% if oauth_terms_notice %}
+<div class="home-notice" role="status">
+    <i class="fa-solid fa-file-contract" aria-hidden="true"></i>
+    <span class="home-notice-text">{{ t('oauth_terms_notice') }} <a href="/disclaimer" target="_blank" rel="noopener noreferrer">{{ t('reg_agree_terms_doc') }}</a></span>
+</div>
+{% endif %}
 <header class="lp-hero">
     {% set av = get_avatar(current_user) %}
     {% if av %}<img class="avatar lp-avatar" src="{{ av|e }}" alt="" width="56" height="56" loading="lazy" referrerpolicy="no-referrer">{% endif %}

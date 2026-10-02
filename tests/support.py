@@ -50,18 +50,21 @@ def _captcha_data(html: str) -> dict:
     return {"captcha_token": token, "captcha": captcha.peek(token)}
 
 
-def register(client, username: str, password: str = DEFAULT_PASSWORD):
-    """注册新用户（自动获取并回填 CSRF token 与图形验证码）。"""
+def register(client, username: str, password: str = DEFAULT_PASSWORD, agree: bool = True):
+    """注册新用户（自动获取并回填 CSRF token 与图形验证码；agree=False 时不勾选服务条款）。"""
     page = client.get("/register")
     assert page.status_code == 200, f"注册页不可访问: {page.status_code}"
     html = page.get_data(as_text=True)
-    return client.post("/register", data={
+    data = {
         "username": username,
         "password": password,
         "confirm": password,
         "csrf_token": csrf_of(html),
         **_captcha_data(html),
-    })
+    }
+    if agree:
+        data["agree_terms"] = "1"
+    return client.post("/register", data=data)
 
 
 def login(client, username: str, password: str = DEFAULT_PASSWORD):
