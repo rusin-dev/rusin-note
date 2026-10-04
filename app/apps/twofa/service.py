@@ -1,21 +1,7 @@
-"""双因素认证（TOTP）业务逻辑
+"""双因素认证（TOTP）：状态存储、启用/停用流程与登录二次校验（算法见 core/totp.py）
 
-算法实现见共享内核 ``app/core/totp.py``（纯标准库 RFC 6238）；本模块负责
-状态存储、启用/停用流程与登录二次校验。
-
-数据存 KV 键 ``two_factor``（file 后端即 ``two_factor.json``）::
-
-    {username: {
-        "secret": <Base32>,
-        "enabled": bool,
-        "recovery": [<sha256(恢复码)>, ...],
-        "created_at": ts,
-        "confirmed_at": ts,
-        "last_step": int,           # 防重放：最近一次成功校验的时间步
-    }}
-
-写路径遵循项目约定：``threading.Lock``（进程内）→ ``storage.lock``（跨实例），
-锁内重读合并后整值写回，锁外不持久化（见 store.py / pins.py）。
+状态存 KV 键 two_factor（secret / enabled / 恢复码哈希 / last_step 防重放）。
+写路径遵循 threading.Lock → storage.lock 约定。
 """
 import threading
 import time
@@ -199,8 +185,7 @@ def _verify_totp(username: str, record: dict, code: str) -> bool:
         rec = data.get(username)
         if not isinstance(rec, dict):
             return False
-        # 防重放必须在读改写里判定：上面拿到的 record 可能是并发请求尚未落盘的
-        # 旧副本，两个携带同一个验证码的请求会双双通过外层检查
+        # 防重放须在读改写内判定：外层拿到的 record 可能是并发请求的旧副本
         if step <= (rec.get("last_step") or 0):
             return False
         rec["last_step"] = step

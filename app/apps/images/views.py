@@ -54,8 +54,7 @@ def image_user(username, image_id):
     return resp
 
 
-# ---------- 笔记图床管理：/user/<u>/images（管理页 + 编辑器上传 API） ----------
-# 必须注册在 /user/<username>/<note_id> 之前，否则 images 会被当作笔记 ID
+# ---------- 笔记图床管理 /user/<u>/images（须先于 /user/<u>/<note_id> 注册，防被当笔记 ID） ----------
 @bp.route("/user/<username>/images", methods=["GET"])
 @require_feature("note_images")
 @limiter.limit(lambda: f"{config.GET_RATE_MAX} per {config.GET_RATE_WINDOW} second")

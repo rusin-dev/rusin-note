@@ -1,13 +1,8 @@
-"""笔记批量导入 / 导出业务逻辑（存储后端无关，仅用标准库 zipfile/io/json）。
+"""笔记批量导入 / 导出（仅标准库 zipfile/io/json）
 
-导出：
-- ZIP：每篇笔记一个 ``notes/<id>.md``，附 ``manifest.json`` 记录标题/文件夹/标签，
-  导入时可还原归类信息（跨用户导入时 ID 冲突会自动改名，不覆盖既有笔记）。
-- 单文件 Markdown：所有笔记拼接为一个 ``.md``，每篇前用 ``<!-- rusin-note-id: <id> -->``
-  注释标记原 ID（人读友好，导入按该注释或文件名拆分）。
-
-导入：接受 ZIP（优先按 manifest，回退遍历 .md）或单个 .md/.txt 文件；受
-``note_transfer`` 配置的文件大小与数量上限约束。
+导出 ZIP（每篇 notes/<id>.md + manifest.json 记录归类）或单文件 Markdown
+（rusin-note-id 注释标记）。导入接受 .zip/.md/.txt，同名跳过不覆盖，
+受 note_transfer 大小/数量上限约束。
 """
 import io
 import json

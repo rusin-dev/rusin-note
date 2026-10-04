@@ -159,19 +159,6 @@ def rename_user_note_folders(old: str, new: str) -> bool:
         return False
 
 
-def list_user_folders(username: str, note_ids=None) -> list:
-    """统计该用户的文件夹列表 [(folder, count), ...]，按 count 降序、名称升序。
-    note_ids 给定时只统计仍存在的笔记（过滤已删除笔记的残留条目）。"""
-    counts: dict[str, int] = {}
-    for nid, folder in get_user_note_folders(username).items():
-        if not folder:
-            continue
-        if note_ids is not None and nid not in note_ids:
-            continue
-        counts[folder] = counts.get(folder, 0) + 1
-    return sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))
-
-
 def build_folder_tree(items) -> dict:
     """把已排序的笔记条目构建成文件夹树，供列表页渲染树状图。
 

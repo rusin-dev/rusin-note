@@ -51,8 +51,7 @@ def get_current_user() -> str | None:
     return get_session_user(token)
 
 
-# 无服务器环境没有后台守护线程：清理任务改为「请求内机会式执行」，
-# 以本实例为粒度节流（间隔与后台线程相同），保持过期清理/视图刷盘生效。
+# 无服务器环境无后台线程：清理任务改为请求内机会式执行，按本实例节流
 _last_opportunistic_cleanup = 0.0
 
 
@@ -91,8 +90,7 @@ def register_request_hooks(app: Flask) -> None:
         # IP 白名单：免限流（限流 key_func 依据该标志返回一次性键）
         g.rate_limit_exempt = bool(config.IP_ALLOWLIST) and ip_in_any(
             g.client_ip, config.IP_ALLOWLIST)
-        # 简洁模式是账号级界面偏好（存 users.json），登录用户在服务端直接渲染
-        # <html class="simple-mode">，避免客户端 cookie/localStorage 与多设备冲突
+        # 简洁模式为账号级偏好（users.json），服务端渲染 <html class="simple-mode">，免客户端多设备冲突
         from app.core.prefs import get_simple_mode
         g.simple_mode = get_simple_mode(g.current_user) if g.current_user else False
         if config.SERVERLESS:

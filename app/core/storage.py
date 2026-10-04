@@ -57,8 +57,7 @@ class StorageError(Exception):
     """后端读写失败（网络错误、超时、锁获取失败等）"""
 
 
-# ---------- 通用 KV 键（值统一为 JSON 可序列化对象） ----------
-# file 后端将它们映射为数据目录下的具体文件
+# ---------- 通用 KV 键（值统一为 JSON 可序列化对象；file 后端映射为同名文件） ----------
 KV_FILE_MAP = {
     "users.json": "users.json",
     "sessions.json": "sessions.json",
@@ -85,16 +84,13 @@ KV_FILE_MAP = {
     # 笔记标题
     "note_titles": "note_titles.json",
 }
-# .secret_key 以纯文本（非 JSON）存储，与旧版文件格式兼容
+# .secret_key 存纯文本（非 JSON），兼容旧版
 _RAW_TEXT_KEYS = {"secret_key"}
 
-# 笔记键前缀：note:<username>:<note_id>
+# 笔记键：note:<username>:<note_id>
 NOTE_KEY_PREFIX = "note:"
-# 图片键前缀（仅 KV 默认实现使用；file/postgres 后端有原生二进制通道）：
-# img:<username>:<image_id>
+# 图片/附件键前缀（仅 KV 默认实现用 base64 通道；file/postgres 走原生二进制）
 IMAGE_KEY_PREFIX = "img:"
-# 附件键前缀（仅 KV 默认实现使用；file/postgres 后端有原生二进制通道）：
-# att:<username>:<attachment_id>
 ATTACHMENT_KEY_PREFIX = "att:"
 
 
@@ -140,12 +136,10 @@ def title_from_content(content: str) -> str:
     return first[:80]
 
 
-# ======================================================================
-# 后端基类
-# ======================================================================
+# ==================== 后端基类 ====================
 class StorageBackend:
     kind = "abstract"
-    persistent = False  # 是否跨实例/重启持久
+    persistent = False  # 是否跨重启持久
 
     def get(self, key: str):
         raise NotImplementedError
@@ -180,9 +174,7 @@ class StorageBackend:
         """遍历全部笔记，产出 (username, note_id)"""
         raise NotImplementedError
 
-    # ---------- 笔记元数据 / 检索（统一数据接口） ----------
-    # 基类提供与后端无关的退化实现；SQLite 后端覆盖为索引查询，避免读取
-    # 内容文件即可完成列表、排序、标题检索与统计。
+    # ---------- 笔记元数据 / 检索（基类为退化实现，SQLite 覆盖为索引查询） ----------
     def note_title(self, username: str, note_id: str) -> str:
         """返回笔记首行标题（读取失败时为空串）"""
         return title_from_content(self.read_note(username, note_id) or "")
@@ -232,10 +224,7 @@ class StorageBackend:
                 private_size += size
         return public_count, public_size, private_count, private_size
 
-    # ---------- 图片专用（图床：二进制） ----------
-    # 基类默认实现：base64 进通用 KV（键 img:<username>:<image_id>，值
-    # {"d": base64, "t": mtime, "s": size}），memory / upstash 后端直接继承；
-    # file / postgres 后端覆盖为原生二进制（文件 / BYTEA 列）。
+    # ---------- 图片专用（基类默认 base64 进 KV；file/postgres 覆盖为原生二进制） ----------
     def _image_key(self, username: str, image_id: str) -> str:
         return f"{IMAGE_KEY_PREFIX}{username}:{image_id}"
 
@@ -287,10 +276,7 @@ class StorageBackend:
                 total += size
         return total
 
-    # ---------- 附件专用（附件：二进制） ----------
-    # 基类默认实现：base64 进通用 KV（键 att:<username>:<attachment_id>，值
-    # {"d": base64, "t": mtime, "s": size, "n": filename, "c": content_type}），
-    # memory / upstash 后端直接继承；file / postgres 后端覆盖为原生二进制。
+    # ---------- 附件专用（基类默认 base64 进 KV；file/postgres 覆盖为原生二进制） ----------
     def _attachment_key(self, username: str, attachment_id: str) -> str:
         return f"{ATTACHMENT_KEY_PREFIX}{username}:{attachment_id}"
 
@@ -363,10 +349,7 @@ class StorageBackend:
         raise NotImplementedError
 
 
-# ======================================================================
-# file 后端：保持原有磁盘布局（users.json / sessions.json / shares.json /
-# benben.json / notes/<user>/<id>.txt / .secret_key）
-# ======================================================================
+# ==================== file 后端（原有磁盘布局：users.json / notes/<user>/<id>.txt 等） ====================
 class FileBackend(StorageBackend):
     kind = "file"
     persistent = True
@@ -685,8 +668,7 @@ class FileBackend(StorageBackend):
             while True:
                 try:
                     if _HAS_FCNTL:
-                        # 非阻塞 + 有界轮询：flock(LOCK_EX) 会无限期阻塞，一个卡死的
-                        # 写入者能把整个 worker 拖住（其它后端超时后抛 StorageError）
+                        # 非阻塞 + 有界轮询：阻塞 flock 会让卡死的写入者拖住整个 worker
                         fcntl.flock(fh.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
                         acquired = True
                     elif msvcrt is not None:
@@ -695,12 +677,11 @@ class FileBackend(StorageBackend):
                             fh.write(b"\0")
                             fh.flush()
                         fh.seek(0)
-                        # LK_LOCK 内置约 10 次重试后抛 OSError（不是 StorageError），
-                        # 上层只捕获 StorageError，竞争时直接变成 500
+                        # LK_LOCK 重试后抛 OSError 而非 StorageError，上层只捕 StorageError
                         msvcrt.locking(fh.fileno(), msvcrt.LK_NBLCK, 1)
                         acquired = True
                     else:
-                        # 无跨进程锁能力的平台：与旧实现一致，退化为仅进程内互斥
+                        # 无跨进程锁能力的平台：退化为仅进程内互斥
                         pass
                 except OSError as e:
                     if time.monotonic() >= deadline:
@@ -722,9 +703,7 @@ class FileBackend(StorageBackend):
             fh.close()
 
 
-# ======================================================================
-# memory 后端：纯内存字典，任何平台可用（重启清空）
-# ======================================================================
+# ==================== memory 后端（纯内存，重启清空） ====================
 class MemoryBackend(StorageBackend):
     kind = "memory"
     persistent = False
@@ -735,8 +714,7 @@ class MemoryBackend(StorageBackend):
         self._locks: dict[str, threading.Lock] = {}
 
     def get(self, key: str):
-        # 深拷贝：调用方（如 store._read_merge 的 clear/update）可能原地修改返回值，
-        # 不能与内部存储共享同一对象引用
+        # 深拷贝：调用方可能原地修改返回值，不能共享引用
         with self._guard:
             value = self._data.get(key)
             return deepcopy(value) if value is not None else None
@@ -805,15 +783,12 @@ class MemoryBackend(StorageBackend):
             yield
 
 
-# ======================================================================
-# upstash 后端：Upstash Redis / Vercel KV REST API（纯 HTTPS + 标准库）
-# 所有键统一加 "rusin:" 前缀，避免与共享 KV 中的其它应用冲突
-# ======================================================================
+# ==================== upstash 后端（REST API，纯标准库；键加 "rusin:" 前缀防冲突） ====================
 class UpstashBackend(StorageBackend):
     kind = "upstash"
     persistent = True
     KEY_PREFIX = "rusin:"
-    _LOCK_TTL = 10          # 锁自动过期秒数（防止崩溃后死锁）
+    _LOCK_TTL = 10          # 锁自动过期秒数，防崩溃死锁
     _LOCK_WAIT = 15         # 获取锁最长等待秒数
 
     def __init__(self, base_url: str, token: str):
@@ -943,11 +918,7 @@ class UpstashBackend(StorageBackend):
                 pass
 
 
-# ======================================================================
-# postgres 后端：Neon / 任意 PostgreSQL（环境变量 DATABASE_URL）
-# 建两张表：storage_kv（通用 KV，value 存 JSON 串或纯文本）与
-# storage_notes（笔记，原生 mtime/大小/列举）；跨实例锁用 PG advisory lock
-# ======================================================================
+# ==================== postgres 后端（DATABASE_URL；storage_kv + storage_notes 等表，advisory lock 互斥） ====================
 _SCHEMA_KV = """
 CREATE TABLE IF NOT EXISTS storage_kv (
     key   TEXT PRIMARY KEY,
@@ -1251,9 +1222,7 @@ class PostgresBackend(StorageBackend):
             conn.close()
 
 
-# ======================================================================
-# 后端选择
-# ======================================================================
+# ==================== 后端选择 ====================
 def select_backend() -> StorageBackend:
     mode = os.environ.get("RUSIN_STORAGE", "").strip().lower()
     kv_url = os.environ.get("KV_REST_API_URL", "").strip()
@@ -1270,8 +1239,7 @@ def select_backend() -> StorageBackend:
         return FileBackend()
     if mode == "sqlite":
         return _sqlite_backend()
-    # 自动识别：配置了 KV 环境变量 → upstash；DATABASE_URL → postgres；
-    # 无服务器平台 → memory；否则本地默认 sqlite（SQLite 索引 + JSON 内容）
+    # 自动识别：KV 环境变量 → upstash；DATABASE_URL → postgres；无服务器 → memory；默认 sqlite
     if kv_url and kv_token:
         return UpstashBackend(kv_url, kv_token)
     if database_url:

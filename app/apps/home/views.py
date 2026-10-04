@@ -10,7 +10,7 @@ from app.core.feature_flags import feature_enabled, get_grouped_features, is_adm
 from app.core.i18n import t
 from app.core.notes import generate_random_id, get_stats, search_user_notes
 from app.core.storage import StorageError, storage
-from app.core.utils import format_size, format_note_time, read_disclaimer, read_notice_first_line
+from app.core.utils import format_size, read_disclaimer, read_notice_first_line
 from app.apps.common.helpers import page_cache_key
 
 bp = Blueprint("home", __name__)

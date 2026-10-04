@@ -1,9 +1,8 @@
 """注册、登录、登出、语言切换"""
-import os
 import urllib.parse
 from flask import (
     Blueprint, abort, g, jsonify, make_response, redirect, render_template,
-    request, session, url_for,
+    request, session,
 )
 
 from app.core import config

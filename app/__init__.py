@@ -1,11 +1,4 @@
-"""Flask app factory：组装所有扩展、蓝图、请求钩子
-
-用法：
-    from app import create_app
-    app = create_app()
-
-无服务器部署（Vercel 等）入口：api/index.py（见 vercel.json）。
-"""
+"""Flask app factory：组装所有扩展、蓝图、请求钩子（from app import create_app）"""
 import logging
 import os
 import secrets
@@ -122,13 +115,10 @@ def create_app() -> Flask:
 
     log_ip_policy()
 
-    # 说明：这里不使用 werkzeug 的 ProxyFix——它会用客户端可伪造的
-    # X-Forwarded-For 直接改写 request.remote_addr，使「可信代理」校验失去意义。
-    # 真实客户端 IP 统一由 middleware + ip_utils.analyze_client_ip 在可信代理
-    # 白名单（config.trusted_proxies）内安全解析，伪造头一律忽略。
+    # 不用 ProxyFix（伪造 XFF 可改写 remote_addr，架空可信代理校验）；
+    # 客户端 IP 统一由 middleware + ip_utils 在 trusted_proxies 内安全解析
     csrf.init_app(app)
-    # 请求钩子必须先于 limiter 注册：Flask-Limiter 的应用级限流（全站 IP 上限）
-    # 在 before_request 阶段执行，依赖 g.client_ip / g.rate_limit_exempt。
+    # 钩子须先于 limiter 注册：应用级限流在 before_request 读 g.client_ip/exempt
     register_request_hooks(app)
     limiter.init_app(app)
     _init_cache_backend(app)
@@ -146,7 +136,7 @@ def create_app() -> Flask:
 
 
 def register_error_handlers(app: Flask) -> None:
-    from flask import abort, g, jsonify, make_response, request
+    from flask import g, jsonify, make_response, request
 
     from flask_wtf.csrf import CSRFError
     from app.core.i18n import t

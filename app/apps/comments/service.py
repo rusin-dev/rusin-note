@@ -11,7 +11,6 @@ logger = create_logger("comments")
 
 # 评论目标类型
 TARGET_SHARE = "share"
-TARGET_NOTE = "note"
 
 # 正则校验：target_type 只能是 share 或 note
 _TARGET_TYPE_RE = re.compile(r'^(share|note)$')
@@ -26,8 +25,7 @@ def validate_target_id(target_id: str) -> bool:
     """校验评论目标 ID（分享 token 或笔记 ID）"""
     if not isinstance(target_id, str) or len(target_id) > config.MAX_NOTE_ID_LENGTH:
         return False
-    # 分享 token 只包含字母数字和下划线/连字符
-    # 笔记 ID 格式为 username/note_id，允许斜杠
+    # 分享 token 为字母数字/下划线/连字符；笔记 ID 为 username/note_id，允许斜杠
     return bool(re.match(r'^[a-zA-Z0-9_\-/]+$', target_id))
 
 

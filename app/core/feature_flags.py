@@ -29,8 +29,7 @@ logger = create_logger("feature_flags")
 FLAGS_KEY = "feature_flags"
 
 # ---------- 功能注册表 ----------
-# label 取 i18n 键 feature_<key>；icon 为 FontAwesome 类名；group 为分组 id
-# （展示顺序：FEATURE_GROUPS 的组顺序，组内按 FEATURES 顺序）
+# label 取 i18n 键 feature_<key>；展示顺序 = FEATURE_GROUPS 组顺序，组内按 FEATURES 顺序
 FEATURE_GROUPS = [
     {"id": "notes"},       # 笔记核心
     {"id": "rendering"},   # 渲染增强
@@ -57,8 +56,7 @@ FEATURES = [
     {"key": "open_register", "icon": "fa-user-plus", "group": "account"}, # 开放注册
     {"key": "avatar", "icon": "fa-user", "group": "account"},
     {"key": "orgs", "icon": "fa-users", "group": "account"},              # 组织/团队协作
-    # 第三方登录（各 Provider 需要先在 config.json 的 oauth.providers 填入凭据，
-    # 未配置时即使开关打开也不会在登录页展示）
+    # 第三方登录：需先在 oauth.providers 填凭据，未配置则开关打开也不展示
     {"key": "oauth_github", "icon": "fa-code-branch", "group": "security"},
     {"key": "oauth_google", "icon": "fa-g", "group": "security"},
     {"key": "oauth_microsoft", "icon": "fa-windows", "group": "security"},
@@ -84,8 +82,7 @@ _HERITAGE_DEFAULTS = {
     "comments": lambda: config.COMMENTS_ENABLED,
 }
 _FEATURES_CFG = config.config.get("features", {})
-# config.json 缺少的键回退到 DEFAULT_CONFIG 声明的默认值（OAuth/2FA/验证类为 False），
-# 只有两处都未登记的较新功能才默认开启。
+# 缺失键回退 DEFAULT_CONFIG 声明值（OAuth/2FA/验证类默认 False）
 _DEFAULT_FEATURES = config.DEFAULT_CONFIG.get("features", {})
 
 

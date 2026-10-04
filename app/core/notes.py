@@ -14,18 +14,12 @@ from app.core.tags import delete_note_tags
 
 logger = create_logger("notes")
 
-# 禁止的笔记ID（与路由冲突）
+# 禁止的笔记ID：与 /user/<u>/<name>、/admin/features 等固定路由冲突
 FORBIDDEN_NOTE_IDS = {"user", "world", "shares", "login", "register",
-                      "refs",  # refs：与 /user/<u>/refs 引用搜索路由冲突
-                      "images",  # images：与 /user/<u>/images 图床上传/管理路由冲突
-                      "attachments",  # attachments：与 /user/<u>/attachments 附件上传/管理路由冲突
-                      "settings",  # settings：与 /user/<u>/settings 用户设置路由冲突
-                      "export",  # export：与 /user/<u>/export 批量导出路由冲突
-                      "import",  # import：与 /user/<u>/import 批量导入路由冲突
-                      "admin"}  # admin：与 /admin/features 功能开关管理路由（#90）冲突
+                      "refs", "images", "attachments",
+                      "settings", "export", "import", "admin"}
 
-# 保留用户名（与固定路由或 notes/ 目录冲突，禁止注册）
-# 注意：public 与公开笔记存储命名空间冲突，必须保留
+# 保留用户名：与固定路由或 notes/ 目录冲突；public 亦是公开笔记命名空间
 RESERVED_USERNAMES = {"register", "login", "logout", "count", "disclaimer",
                       "favicon", "share", "shares", "world", "user", "new", "md",
                       "public", "benben", "admin"}
@@ -47,8 +41,7 @@ def validate_note_id(note_id: str) -> bool:
 
 
 # ---------- 笔记读写 ----------
-# "public" 是内部公开笔记存储命名空间，不是用户账号，需放行（validate_username 会拒绝它）
-# "_orgs/<org_name>" 是组织笔记命名空间，也需放行
+# public（公开笔记命名空间）与 _orgs/<org_name>（组织笔记）不是用户账号但需放行
 def _namespace_ok(username: str) -> bool:
     if username == "public":
         return True
@@ -113,8 +106,7 @@ def write_note(username: str, note_id: str, content: str, cascade: bool = True) 
         delete_note_folder(username, note_id)
         delete_note_pins(username, note_id)
         if cascade:
-            # 分享必须级联删除：可编辑分享链接会把匿名访客的内容写回本命名空间，
-            # 删掉的笔记会被自己的分享链接复活，并继续占用作者配额
+            # 分享必须级联删除：可编辑分享链接会把访客内容写回，复活已删笔记
             from app.core.store import delete_comments_for_note, delete_shares_for_note
             delete_shares_for_note(username, note_id)
             delete_comments_for_note(username, note_id)
@@ -127,16 +119,6 @@ def get_note_mtime(username: str, note_id: str):
         return None
     try:
         return storage.note_mtime(username, note_id)
-    except StorageError:
-        return None
-
-
-def get_note_size(username: str, note_id: str) -> int | None:
-    """返回笔记大小（字节），笔记不存在或读取失败时返回 None"""
-    if not _namespace_ok(username) or not validate_note_id(note_id):
-        return None
-    try:
-        return storage.note_size(username, note_id)
     except StorageError:
         return None
 
@@ -199,8 +181,8 @@ def search_user_notes(username: str, query: str) -> list[dict]:
         return []
 
 
-# ---------- 统计函数 ----------
-# BUG-16: 统计结果缓存（TTL 30 秒），避免每次 /count 请求全量遍历
+# ---------- 统计 ----------
+# 结果缓存 TTL 30 秒，避免每次 /count 全量遍历
 STATS_CACHE_TTL = 30
 _stats_cache = None
 _stats_cache_time = 0.0

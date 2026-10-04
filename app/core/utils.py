@@ -43,16 +43,9 @@ def get_avatar_url(username: str) -> str:
     return config.AVATAR_URL_TEMPLATE.format(hash=h, username=name)
 
 
-# ---------- 笔记快捷引用（#87：GitHub Issues 风格的 # 引用） ----------
-# 匹配 #<笔记ID> 形式的快捷引用。# 前面出现以下字符时不算引用：
-#   ASCII 字母数字下划线 —— abc#def 中间的井号（普通文本 / hashtag 的一部分）；
-#   注意用显式 [0-9A-Za-z_] 而非 \w：Python 的 \w 含中文，会把「参见#笔记」
-#   误判为排除（JS 端 \w 本就只匹配 ASCII，改后两端行为一致）
-#   #  —— ##Heading、##id（多级标题或转义后的井号）
-#   "' —— HTML 属性 href="#x"、'#x' 中的锚点
-#   ([ —— Markdown 链接 [text](#a) / 引用式链接 [text][#b] 的目标
-#   /  —— URL 路径片段 /path#frag
-#   \  —— 被反斜杠转义的 \#foo
+# ---------- 笔记快捷引用（GitHub Issues 风格 # 引用） ----------
+# # 前为 ASCII 字母数字下划线、#、引号、括号、斜杠、反斜杠时不算引用。
+# 显式 [0-9A-Za-z_] 而非 \w：Python \w 含中文会误排除，且要与 JS 端行为一致
 _NOTE_REF_RE = re.compile(r'(?<![0-9A-Za-z_#"\'\(\[/\\])#([A-Za-z0-9][A-Za-z0-9_\-]*)')
 # Markdown 链接定义行（[label]: url），井号是 URL 一部分，整行跳过
 _NOTE_REF_LINK_DEF_RE = re.compile(r'^\s{0,3}\[[^\]]*\]:')
@@ -88,8 +81,8 @@ def expand_note_refs(content: str, namespace: str, url_prefix: str,
         suffix = f' "{title}"' if title else ""
         return f"[{m.group(0)}]({url_prefix}/{note_id}{suffix})"
 
-    fence = ""          # 当前所处围栏代码块的围栏串（空 = 不在代码块内）
-    prev_blank = True   # 上一行是否为空行（判断缩进代码块起始）
+    fence = ""          # 当前围栏串（空 = 不在代码块内）
+    prev_blank = True   # 上一行是否空行（判断缩进代码块起始）
     out_lines: list[str] = []
     for line in content.split("\n"):
         m = _FENCE_RE.match(line)
@@ -142,15 +135,7 @@ def _note_ref_resolver(namespace: str):
     return resolve
 
 
-# ---------- GitHub 风格提示卡片（[!NOTE] / [!WARNING] ...，可折叠） ----------
-# 语法参考 GitHub Alerts（并兼容 Obsidian 的折叠记号）：
-#
-#     > [!WARNING]
-#     > 注意……
-#
-# 支持的卡片类型见 ALERT_TYPES；`[!INFO]` 是 `[!NOTE]` 的别名。默认展开，
-# 在标记后紧跟 `-`（如 `[!WARNING]-`）则默认折叠、`+` 则显式展开。
-# 渲染为 <details>/<summary> 结构，点击标题即可展开/收起。
+# ---------- GitHub 风格提示卡片（> [!WARNING] 等，渲染为 <details>，后缀 - 折叠 / + 展开） ----------
 ALERT_TYPES = {
     "note": "md_alert_note",
     "tip": "md_alert_tip",
@@ -289,8 +274,7 @@ def render_markdown_html(content: str, ref_namespace: str | None = None,
                 'img': ['src', 'alt', 'title', 'width', 'height'],
                 'details': ['open'],
                 'i': ['aria-hidden'],
-                # markdown 的 tables 扩展会同时写 align 与 style="text-align:…"，
-                # 只放行取值为固定关键字的 align（style 仍整体禁止），否则对齐静默丢失
+                # tables 扩展同时写 align 与 style，只放行固定关键字的 align，否则对齐静默丢失
                 'th': ['align'],
                 'td': ['align'],
             }
@@ -302,8 +286,7 @@ def render_markdown_html(content: str, ref_namespace: str | None = None,
     return f"<pre>{html.escape(content)}</pre>"
 
 
-# ---------- Pygments 代码块高亮 ----------
-# 匹配 markdown-extra 输出的 <pre><code class="language-xxx">...code...</code></pre>
+# ---------- Pygments 代码块高亮（匹配 <pre><code class="language-xxx">） ----------
 _code_block_re = re.compile(
     r'<pre><code\s+class="language-([^"]+)"[^>]*>(.*?)</code></pre>',
     re.DOTALL,
@@ -320,8 +303,7 @@ def _highlight_code_blocks(markup: str) -> str:
 
     def _replace(match: re.Match) -> str:
         lang = match.group(1).lower()
-        # markdown 输出的代码正文已是 HTML 实体，Pygments 需要原始字符，
-        # 否则 < > & " 会被二次转义，页面上显示成字面量
+        # 正文已是 HTML 实体，Pygments 需原始字符，否则二次转义显示成字面量
         code = html.unescape(match.group(2))
         try:
             lexer = get_lexer_by_name(lang)
@@ -335,16 +317,14 @@ def _highlight_code_blocks(markup: str) -> str:
             highlighted = buf.getvalue()
         except Exception:
             return match.group(0)
-        # 标记服务端已着色：客户端 highlight.js 再跑一遍会读 textContent 重建
-        # innerHTML，把 Pygments 的 token span 与标识符配色全部丢掉
+        # 标记服务端已着色：客户端 highlight.js 重跑会重建 innerHTML 丢掉 Pygments 配色
         return f'<pre><code class="language-{lang} pygments-highlighted">{highlighted}</code></pre>'
 
     return _code_block_re.sub(_replace, markup)
 
 
-# markdown 的 tables 扩展用 style="text-align: …" 表达列对齐，而 style 整体在
-# 白名单之外（放行等于开放 CSS 注入面）。值域只有三个固定关键字，因此把它改写
-# 成 align 属性承载：既保住对齐，也不得不放宽清洗规则。
+# tables 扩展用 style 表达列对齐，但 style 整体在白名单外（防 CSS 注入）。
+# 值域只有三个固定关键字，改写成 align 属性承载。
 _TABLE_ALIGN_RE = re.compile(
     r'<(th|td)\s+style="text-align:\s*(left|center|right);?"',
     re.IGNORECASE,
@@ -359,9 +339,7 @@ def _normalize_table_alignment(markup: str) -> str:
 _LIGHT_RULES = None
 _DARK_RULES = None
 
-# Pygments Name 子类型（类、函数、变量、装饰器、常量等）的标识符着色规则。
-# 亮/暗主题各有专属配色，通过 CSS 变量实现与站点主题联动。
-# 规则覆盖在 Pygments 默认样式之上（优先级更高）。
+# Pygments Name 子类型着色规则，覆盖默认样式；配色经 CSS 变量随主题联动
 _IDENT_RULES_LIGHT = """
 /* 标识符着色（亮色主题）：类、函数、变量、装饰器、常量各有专属色 */
 .codehilite .nc,

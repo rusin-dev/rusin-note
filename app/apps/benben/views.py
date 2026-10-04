@@ -2,7 +2,7 @@
 
 POST 受全局 POST 限流约束（限流在蓝图层显式标注）。
 """
-from flask import Blueprint, abort, g, redirect, render_template, request
+from flask import Blueprint, g, redirect, render_template, request
 
 from app.core import config
 from app.core.extensions import cache, limiter
@@ -135,8 +135,7 @@ def benben_post():
         # 写盘失败却标记冷却并按成功跳转：用户以为已发布，重试又被冷却拦住
         return _render_err("err_settings_save_failed")
     mark_benben_post(current_user)
-    # 新动态把旧内容顶到第 2 页：清掉匿名与发布者视角的第 1 页，
-    # 其余访问者的键靠 60s TTL 过期
+    # 新动态顶掉旧内容的第 1 页，其余访问者靠 60s TTL 过期
     delete_cache_keys([
         f"benben:page:1:{viewer}:{lang}:{simple}"
         for viewer in ("anon", current_user)

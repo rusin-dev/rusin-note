@@ -4,9 +4,9 @@ import re
 from flask import Blueprint, abort, g, redirect, render_template, request, url_for
 
 from app.core import config
-from app.core.extensions import cache, limiter
+from app.core.extensions import limiter
 from app.core.i18n import t
-from app.core.feature_flags import feature_enabled, require_feature
+from app.core.feature_flags import require_feature
 from app.core.middleware import get_current_user
 from app.core.notes import (
     generate_random_id,
@@ -378,8 +378,7 @@ def org_invites(org_name):
             abort(500)
         elif action == "delete_invite":
             code = request.form.get("code", "")
-            # 必须限定在本组织：邀请码是全表键，只校验当前组织的管理员身份
-            # 会让 A 组织管理员能销毁 B 组织待用的邀请码
+            # 邀请码是全表键，须限定本组织，防 A 组织管理员销毁 B 组织的码
             delete_org_invite(code, org_name)
             return redirect(url_for("org.org_invites", org_name=org_name))
 

@@ -20,7 +20,6 @@ from app.core.notes import (
     note_exists,
     read_note,
     search_user_notes,
-    validate_note_id,
     validate_username,
     write_note,
 )
@@ -78,8 +77,7 @@ def user_root(username):
     require_auth(username)
     detailed = list_user_notes_detailed(username)
     note_ids = {row["id"] for row in detailed}
-    # 笔记标签 / 文件夹 / 置顶（仅私有笔记）：标签云 + ?tag= 筛选；
-    # 文件夹以树状图呈现，?folder= 按子树筛选
+    # 标签 / 文件夹 / 置顶（仅私有笔记）：标签云 + ?tag=/?folder=（子树）筛选
     tags_enabled = feature_enabled("note_tags")
     folders_enabled = feature_enabled("note_folders")
     pins_enabled = feature_enabled("note_pins")
@@ -276,16 +274,13 @@ def user_note_post(username, note_id):
                                    total=config.MAX_ATTACHMENT_PER_NOTE_KB)}), 400
     if not write_note(username, note_id, content):
         abort(500)
-    # 标签与文件夹随内容一起保存；内容为空即删除笔记，两者已由 write_note
-    # 的删除钩子清理，这里只更新仍存在笔记的归属
+    # 标签/文件夹随内容保存；内容空即删笔记，钩子已清理，只更新仍存在笔记
     if content:
         if feature_enabled("note_tags"):
             set_note_tags(username, note_id, parse_tag_input(request.form.get("tags", "")))
         if feature_enabled("note_folders"):
             set_note_folder(username, note_id, parse_folder_input(request.form.get("folder", "")))
-    # 私有页缓存键按访问者隔离，且只有所有者能写入 200 缓存，清理即精确命中；
-    # /user/<username> 笔记列表也依赖笔记内容（mtime/size），一并刷新；
-    # 首页显示最近编辑的笔记，也需要刷新
+    # 清理所有者私有页、笔记列表页与首页缓存（列表/首页均依赖笔记内容）
     purge_page_cache(
         ["/", f"/user/{username}", f"/user/{username}/",
          f"/user/{username}/{note_id}", f"/user/{username}/{note_id}/",

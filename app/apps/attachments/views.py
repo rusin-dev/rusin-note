@@ -1,19 +1,9 @@
-"""笔记附件 App：管理页 /user/<u>/attachments、编辑器上传 API 与下载服务 /attachment/<u>/<id>
+"""笔记附件 App：管理页 /user/<u>/attachments、上传 API 与下载服务 /attachment/<u>/<id>
 
-附件业务逻辑（类型校验 / 配额 / 读写 / 并发闸门）见 app.apps.attachments.service。
-
-附件（``/attachment/<u>/<id>``）访问约定（#191）：
-- **默认禁止匿名下载**（config：``attachments.allow_anonymous_download=false``），
-  未登录访客返回 401；
-- **单用户同时下载限制 1 个队列**（config：``attachments.max_concurrent_downloads``，
-  默认 1），超出返回 429 + ``Retry-After``——这是针对「发起上千个慢速连接
-  （如 1KB/s）、或用 100 线程同时下载 100 个文件」的防护，IP 限流（单位时间
-  请求数）拦不住这种模式；超限直接拒绝而非排队（排队同样占用 worker）；
-- 下载按块产出，响应结束或客户端中断即释放并发名额（见 app/core/concurrency.py）；
-- 响应缓存为 ``private``，避免共享缓存把需登录的附件回放给未登录访客。
-
-当前下载权限策略为「登录用户凭链接即可下载」（只拦匿名），如需「仅本人可下载」
-须在 attachment_user 中补所有权校验。
+业务逻辑见 attachments.service。下载默认禁止匿名（401）；单用户在途下载/上传
+各限 1 队列，超限 429 + Retry-After（慢速长连接场景 IP 限流拦不住）；
+名额在响应结束/中断时释放（core/concurrency.py）；响应缓存 private 防共享回放。
+当前策略为「登录用户凭链接即可下载」，如需仅本人可下载须另加所有权校验。
 """
 import re
 

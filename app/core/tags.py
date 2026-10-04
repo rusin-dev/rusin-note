@@ -19,8 +19,7 @@ logger = create_logger("tags")
 # 键名（与存储后端的 KV 布局一一对应；file 后端映射 note_tags.json）
 K_TAGS = "note_tags"
 
-# 合法标签字符：字母 / 数字 / 下划线 / 连字符 / 中日韩文字（\w 在 Python3
-# 的 str 模式下默认按 Unicode 匹配，已覆盖中日韩）
+# 合法标签：字母/数字/下划线/连字符/中日韩（\w 在 Python3 str 模式已覆盖中日韩）
 _TAG_RE = re.compile(r'^[\w\-]+$')
 
 # ---------- 内存缓存 ----------

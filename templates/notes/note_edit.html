@@ -33,13 +33,15 @@
         .preview-body { flex: 1; overflow-y: auto; padding: 20px 24px; font-size: 16px; line-height: 1.7; word-break: break-word; }
         .preview-empty { color: var(--muted); font-style: italic; }
 
-        .save-btn { position: fixed; bottom: 24px; right: 24px; background: var(--btn-bg); border: 1px solid var(--navbar-border); padding: 8px 20px; border-radius: 20px; font-size: 14px; color: var(--text); cursor: pointer; backdrop-filter: blur(4px); transition: all 0.2s; z-index: 10; font-weight: 500; }
+        /* 右下角悬浮按钮列：保存 / 附件 / 评论 / 删除自下而上堆叠，条件渲染的按钮缺席时整列自动收紧 */
+        .floating-rail { position: fixed; bottom: 24px; right: 24px; z-index: 10; display: flex; flex-direction: column-reverse; align-items: flex-end; gap: 10px; }
+        .save-btn { background: var(--btn-bg); border: 1px solid var(--navbar-border); padding: 8px 20px; border-radius: 20px; font-size: 14px; color: var(--text); cursor: pointer; backdrop-filter: blur(4px); transition: all 0.2s; font-weight: 500; }
         .save-btn:hover { background: var(--btn-hover); box-shadow: var(--glow-shadow); border-color: var(--glow-ring); }
         .save-btn:active { background: var(--border); }
-        .note-delete-form { position: fixed; bottom: 116px; right: 24px; z-index: 10; margin: 0; }
+        .note-delete-form { margin: 0; }
         .note-delete-btn { width: 38px; height: 38px; padding: 0; display: inline-flex; align-items: center; justify-content: center; background: var(--btn-bg); border: 1px solid var(--navbar-border); border-radius: 50%; font-size: 15px; color: var(--error); cursor: pointer; backdrop-filter: blur(4px); transition: box-shadow 0.2s ease, border-color 0.2s ease, background 0.2s ease; }
         .note-delete-btn:hover { background: var(--btn-hover); border-color: var(--error); box-shadow: var(--glow-shadow); }
-        .attachment-btn { position: fixed; bottom: 70px; right: 24px; background: var(--btn-bg); border: 1px solid var(--navbar-border); padding: 8px 20px; border-radius: 20px; font-size: 14px; color: var(--text); cursor: pointer; backdrop-filter: blur(4px); transition: all 0.2s; z-index: 10; font-weight: 500; }
+        .attachment-btn { background: var(--btn-bg); border: 1px solid var(--navbar-border); padding: 8px 20px; border-radius: 20px; font-size: 14px; color: var(--text); cursor: pointer; backdrop-filter: blur(4px); transition: all 0.2s; font-weight: 500; }
         .attachment-btn:hover { background: var(--btn-hover); box-shadow: var(--glow-shadow); border-color: var(--glow-ring); }
         .attachment-btn:active { background: var(--border); }
         .pane-header.editor-header { justify-content: space-between; }
@@ -57,7 +59,8 @@
         .save-hint { position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%); background: rgba(0, 0, 0, 0.75); color: #fff; padding: 10px 24px; border-radius: 24px; font-size: 14px; letter-spacing: 0.5px; backdrop-filter: blur(8px); opacity: 0; transition: opacity 0.4s ease, transform 0.4s ease; pointer-events: none; z-index: 20; font-weight: 400; box-shadow: 0 4px 20px rgba(0,0,0,0.2); }
         .save-hint.show { opacity: 1; transform: translateX(-50%) translateY(0); }
         .save-hint kbd { background: rgba(255, 255, 255, 0.2); padding: 2px 12px; border-radius: 6px; margin: 0 4px; font-size: 13px; border: 1px solid rgba(255, 255, 255, 0.15); font-family: inherit; }
-        .save-status { position: fixed; bottom: 80px; right: 24px; font-size: 14px; color: #4CAF50; opacity: 0; transition: opacity 0.3s ease, transform 0.3s ease; pointer-events: none; z-index: 15; background: var(--status-bg); padding: 6px 18px; border-radius: 16px; border: 1px solid #4CAF50; box-shadow: 0 2px 12px rgba(0,0,0,0.08); transform: translateY(10px); }
+        /* 保存状态浮标：挂在悬浮按钮列上方，避免压住附件 / 评论按钮 */
+        .save-status { position: absolute; bottom: 100%; right: 0; margin-bottom: 6px; font-size: 14px; color: #4CAF50; opacity: 0; transition: opacity 0.3s ease, transform 0.3s ease; pointer-events: none; background: var(--status-bg); padding: 6px 18px; border-radius: 16px; border: 1px solid #4CAF50; box-shadow: 0 2px 12px rgba(0,0,0,0.08); transform: translateY(10px); }
         .save-status.show { opacity: 1; transform: translateY(0); }
         .save-status.saving { color: #ff9800; border-color: #ff9800; }
         .save-status.error { color: #f44336; border-color: #f44336; }
@@ -141,12 +144,12 @@
             .navbar { gap: 12px; padding: 10px 16px; }
             .navbar-brand-name { max-width: 45vw; }
             textarea { padding: 16px 18px; font-size: 15px; }
-            .save-btn { bottom: 16px; right: 16px; padding: 6px 16px; font-size: 13px; }
-            .note-delete-form { bottom: 104px; right: 16px; }
+            .floating-rail { bottom: 16px; right: 16px; gap: 8px; }
+            .save-btn { padding: 6px 16px; font-size: 13px; }
             .note-delete-btn { width: 34px; height: 34px; font-size: 14px; }
-            .attachment-btn { bottom: 60px; right: 16px; padding: 6px 16px; font-size: 13px; }
+            .attachment-btn { padding: 6px 16px; font-size: 13px; }
             .save-hint { bottom: 70px; padding: 8px 16px; font-size: 12px; white-space: nowrap; }
-            .save-status { bottom: 70px; right: 16px; font-size: 12px; padding: 4px 14px; }
+            .save-status { margin-bottom: 4px; font-size: 12px; padding: 4px 14px; }
             .note-mtime { bottom: 16px; font-size: 11px; }
             /* 元信息栏：收窄保存按钮预留空间，输入框允许收缩换行 */
             .tag-bar { padding: 8px 96px 8px 14px; gap: 6px; }
@@ -163,8 +166,6 @@
         .simple-mode .pane.editor-pane { border-right: none !important; }
         .simple-mode .editor-header { display: none !important; }
         .simple-mode .attachment-btn { display: none !important; }
-        /* 右侧悬浮按钮收窄为一列时，删除按钮紧跟保存按钮，避免留空档 */
-        .simple-mode .note-delete-form { bottom: 70px; }
         .simple-mode #commentBtn { display: none !important; }
         /* 简易模式：编辑器内隐藏品牌名；其余导航栏隐藏逻辑见 partials/_navbar_css.html */
         .simple-mode .navbar-brand { display: none !important; }
@@ -272,25 +273,32 @@
     </div>
     {% if note_attachments_api %}
     <input type="file" id="attachmentInput" style="display: none;" multiple>
-    <button type="button" class="attachment-btn" id="attachmentBtn">
-        <i class="fa-solid fa-paperclip" aria-hidden="true"></i> {{ t('note_attachment_btn') }}
-    </button>
     {% endif %}
-    {% if comment_url %}
-    <a href="{{ comment_url }}" class="attachment-btn" id="commentBtn">
-        <i class="fa-solid fa-comments" aria-hidden="true"></i> {{ t('comments_title') }}
-    </a>
-    {% endif %}
-    <button type="button" class="save-btn" id="saveBtn">{{ t('note_save_btn') }}</button>
-    {% if note_delete_url %}
-    <form method="POST" action="{{ note_delete_url|e }}" class="note-delete-form" id="noteDeleteForm"
-          data-confirm="{{ t('note_delete_confirm')|e }}">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <button type="submit" class="note-delete-btn" id="noteDeleteBtn"
-                title="{{ t('note_delete') }}" aria-label="{{ t('note_delete') }}">
-            <i class="fa-solid fa-trash-can" aria-hidden="true"></i>
+    <div class="floating-rail">
+        <div class="save-status" id="saveStatus"></div>
+        <button type="button" class="save-btn" id="saveBtn">{{ t('note_save_btn') }}</button>
+        {% if note_attachments_api %}
+        <button type="button" class="attachment-btn" id="attachmentBtn">
+            <i class="fa-solid fa-paperclip" aria-hidden="true"></i> {{ t('note_attachment_btn') }}
         </button>
-    </form>
+        {% endif %}
+        {% if comment_url %}
+        <a href="{{ comment_url }}" class="attachment-btn" id="commentBtn">
+            <i class="fa-solid fa-comments" aria-hidden="true"></i> {{ t('comments_title') }}
+        </a>
+        {% endif %}
+        {% if note_delete_url %}
+        <form method="POST" action="{{ note_delete_url|e }}" class="note-delete-form" id="noteDeleteForm"
+              data-confirm="{{ t('note_delete_confirm')|e }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="note-delete-btn" id="noteDeleteBtn"
+                    title="{{ t('note_delete') }}" aria-label="{{ t('note_delete') }}">
+                <i class="fa-solid fa-trash-can" aria-hidden="true"></i>
+            </button>
+        </form>
+        {% endif %}
+    </div>
+    {% if note_delete_url %}
     <script>
     (function () {
         var form = document.getElementById('noteDeleteForm');

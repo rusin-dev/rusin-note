@@ -1,13 +1,7 @@
-"""用户/会话/分享/犇犇存储：内存缓存 + 统一存储层（file / memory / upstash）
+"""用户/会话/分享/犇犇/评论/组织存储：内存缓存 + 统一存储层。
 
-存储后端由 app.storage 的 select_backend() 决定：
-- file 后端：保持原有「进程内字典缓存 + JSON 文件原子落盘」行为（本地/VPS）；
-- upstash 后端：跨实例共享同一份数据（无服务器部署），写操作通过
-  storage.lock 做跨实例互斥（SET NX EX），避免多实例并发读改写丢更新；
-- memory 后端：纯内存，重启清空。
-
-写路径约定：持 threading.Lock（进程内）+ storage.lock（跨进程/跨实例）
-的块内**只更新内存缓存**，持久化在锁外执行（避免与 reload 死锁）。
+写路径锁序：threading.Lock（进程内）→ storage.lock（跨实例），
+锁内重读合并后再写，持久化在锁外的 _persist 执行。
 """
 import secrets
 import threading
@@ -35,8 +29,8 @@ K_BENBEN = "benben:posts"
 
 # ---------- 内存缓存 ----------
 users = {}
-sessions = {}  # 格式: {sha256(token): {"username": str, "created_at": float}}
-shares = {}  # 格式: {token: {"owner": str, "note_id": str, "created_at": float, "editable": bool, "views": int}}
+sessions = {}  # {sha256(token): {"username", "created_at"}}
+shares = {}  # {token: {"owner", "note_id", "created_at", "editable", "views"}}
 users_lock = threading.Lock()
 sessions_lock = threading.Lock()
 shares_lock = threading.Lock()
@@ -83,7 +77,7 @@ def load_users():
 
 
 def reload_users() -> None:
-    """从存储后端重新加载用户表（多实例下同步其它实例的注册）。原地更新以保持引用有效。"""
+    """重新加载用户表（多实例同步注册）。原地更新以保持引用有效。"""
     with users_lock:
         _read_merge(K_USERS, users)
 
@@ -100,8 +94,7 @@ def get_user(username: str) -> dict | None:
 
 
 def register_user(username: str, data: dict) -> bool:
-    """跨实例安全注册：存储锁下重读最新用户表后检查并写入。
-    返回 True 表示注册成功，False 表示用户名已存在或写入失败。"""
+    """跨实例安全注册。False = 用户名已存在或写入失败。"""
     try:
         with users_lock:
             with storage.lock(K_USERS):
@@ -111,8 +104,7 @@ def register_user(username: str, data: dict) -> bool:
                 users[username] = data
                 if _persist(K_USERS, users):
                     return True
-                # 写盘失败必须回滚内存：否则残留的幻影记录会让重试误报「用户名已存在」，
-                # 且后续任意整表写会把这条只存在于本进程的账号固化到存储
+                # 写盘失败必须回滚内存，否则幻影记录固化后误报「用户名已存在」
                 users.pop(username, None)
                 return False
     except StorageError as e:
@@ -121,8 +113,7 @@ def register_user(username: str, data: dict) -> bool:
 
 
 def update_user(username: str, updates: dict) -> bool:
-    """跨实例安全更新用户记录的字段（读改写，未列出的字段保留）。
-    返回 True 表示记录存在且写入成功。"""
+    """跨实例安全读改更新用户记录，未列出字段保留。"""
     try:
         with users_lock:
             with storage.lock(K_USERS):
@@ -137,12 +128,7 @@ def update_user(username: str, updates: dict) -> bool:
         return False
 
 
-def save_users():
-    with users_lock:
-        _persist(K_USERS, users)
-
-
-# 用户总数统计：周期重载以同步多实例注册（避免每次 /count 都触发存储读取）
+# 用户总数：周期重载同步多实例，避免每次 /count 都读存储
 _last_users_reload = 0.0
 _USERS_RELOAD_INTERVAL = 5.0
 
@@ -168,13 +154,13 @@ def load_sessions():
 
 
 def reload_sessions() -> None:
-    """从存储后端重新加载会话（多实例下同步登录/登出）。原地更新以保持引用有效。"""
+    """重新加载会话（多实例同步登录/登出）。原地更新以保持引用有效。"""
     with sessions_lock:
         _read_merge(K_SESSIONS, sessions)
 
 
 def store_session(token_hash: str, data: dict) -> bool:
-    """跨实例安全写入会话：存储锁下重读最新数据，避免多实例并发登录丢失更新"""
+    """跨实例安全写入会话（锁内重读，防并发登录丢更新）"""
     try:
         with sessions_lock:
             with storage.lock(K_SESSIONS):
@@ -202,8 +188,7 @@ def remove_session(token_hash: str) -> bool:
 
 
 def delete_sessions_if(pred) -> int:
-    """跨实例安全删除满足 pred(token_hash, session) 的会话并落盘，返回删除数量。
-    pred 需容忍 session 非 dict 的脏数据。"""
+    """删除满足 pred(token_hash, session) 的会话并落盘；pred 需容忍脏数据。"""
     try:
         with sessions_lock:
             with storage.lock(K_SESSIONS):
@@ -219,11 +204,6 @@ def delete_sessions_if(pred) -> int:
         return 0
 
 
-def save_sessions():
-    with sessions_lock:
-        _persist(K_SESSIONS, sessions)
-
-
 # ---------- 分享存储 ----------
 def load_shares():
     with shares_lock:
@@ -233,8 +213,7 @@ def load_shares():
             shares.update(data)
 
 
-# 只读路径的周期重载（多实例）：否则其它实例删除/新建的分享在本实例内始终不可见。
-# 未落盘的浏览量增量记在 _views_deltas 中，重载不会丢失（见 flush_share_views）。
+# 只读路径周期重载（多实例）；浏览量增量存 _views_deltas，重载不丢（见 flush_share_views）
 _shares_last_resync = 0.0
 _SHARES_RESYNC_INTERVAL = 5.0
 
@@ -249,18 +228,12 @@ def _resync_shares_locked():
     _read_merge(K_SHARES, shares)
 
 
-def save_shares():
-    with shares_lock:
-        _persist(K_SHARES, shares)
-
-
 def generate_share_token() -> str:
     return ''.join(secrets.choice(SHARE_TOKEN_CHARSET) for _ in range(SHARE_TOKEN_LENGTH))
 
 
 def create_share(username: str, note_id: str, editable: bool) -> str:
-    """创建分享，返回分享 token；写入失败返回空串（调用方据此提示失败，
-    避免把从未出现的分享渲染进列表）。"""
+    """创建分享并返回 token；写入失败返回空串。"""
     token = generate_share_token()
     try:
         with shares_lock:
@@ -284,7 +257,7 @@ def create_share(username: str, note_id: str, editable: bool) -> str:
 
 
 def get_share(token: str) -> dict | None:
-    """返回分享条目；对损坏/旧版数据（缺 owner/note_id）返回 None，避免 KeyError（BUG-7）"""
+    """返回分享条目；损坏/旧版数据（缺 owner/note_id）返回 None"""
     with shares_lock:
         _resync_shares_locked()
         share = shares.get(token)
@@ -312,10 +285,9 @@ def delete_share(username: str, token: str) -> bool:
 
 
 def delete_shares_for_note(username: str, note_id: str) -> list:
-    """删除指向该笔记的全部分享，返回被删除的 token 列表（调用方据此清缓存）。
+    """级联删除指向该笔记的全部分享，返回被删 token 列表。
 
-    笔记删除/过期清理后必须级联：可编辑分享链接否则仍会把匿名访客的
-    POST 写回作者的命名空间，等于复活已删除的笔记并继续占用其配额。
+    不级联的话，可编辑分享链接会把匿名访客的 POST 写回已删笔记的命名空间。
     """
     removed = []
     try:
@@ -340,18 +312,17 @@ def delete_shares_for_note(username: str, note_id: str) -> list:
     return removed
 
 
-# 分享视图计数延迟批量持久化（BUG-06）：视图数非关键数据，允许延迟写盘。
-# 内存累计达到阈值或距上次写盘超时后，才全量写一次，避免高并发下每次都触发写盘。
+# 分享浏览量延迟批量写盘：非关键数据，达阈值或超时才整表写一次
 _VIEWS_DIRTY = False
 _VIEWS_PENDING = 0
 _last_views_flush = time.time()
-# 自上次写盘以来每个 token 累加的浏览次数。写盘前内存表会被存储中的最新数据替换
-# （多实例合并），增量必须独立保存，否则合并时会被丢弃、浏览量永远停在旧值。
+# 每 token 的待写增量须独立保存：写盘前内存表会被存储最新数据替换（多实例合并），
+# 否则增量在合并时被丢弃
 _views_deltas = {}
 
 
 def increment_share_views(token: str):
-    """每次访问分享链接时计数（内存累加，延迟批量持久化，BUG-06）"""
+    """访问分享链接时计数（内存累加，延迟批量持久化）"""
     global _VIEWS_DIRTY, _VIEWS_PENDING, _last_views_flush
     with shares_lock:
         share = shares.get(token)
@@ -367,12 +338,11 @@ def increment_share_views(token: str):
 
 
 def flush_share_views():
-    """将内存中的分享视图计数持久化（阈值/超时触发，后台线程定期调用）"""
+    """将浏览量计数持久化（阈值/超时触发，后台线程定期调用）"""
     global _VIEWS_DIRTY, _VIEWS_PENDING, _last_views_flush
     deltas = {}
     requeue = False
-    # 锁顺序与其它写路径一致（线程锁 → 存储锁），存储锁内重读最新数据
-    # 再合并计数，避免覆盖其它实例的新增分享
+    # 锁序与其它写路径一致（线程锁 → 存储锁），存储锁内先重读合并再写
     try:
         with shares_lock:
             with storage.lock(K_SHARES):
@@ -401,7 +371,7 @@ def flush_share_views():
 
 
 def _requeue_views(deltas: dict):
-    """把未能落盘的浏览增量并回待写集合（写盘失败/异常时下次触发重试）"""
+    """把未落盘的浏览增量并回待写集合，下次触发重试"""
     if not deltas:
         return
     with shares_lock:
@@ -418,8 +388,7 @@ def list_user_shares(username: str) -> list:
 
 
 # ---------- 犇犇（用户动态）存储 ----------
-# 内存缓存 + 持久化到存储后端（外部存储可用时重启不丢，最多保留 BENBEN_MAX_POSTS 条）
-benben_posts = []  # 格式: [{"username": str, "content": str, "time": float, "ip": str}]，旧→新
+benben_posts = []  # [{"username", "content", "time", "ip"}]，旧→新
 benben_lock = threading.Lock()
 _benben_last_resync = 0.0
 _BENBEN_RESYNC_INTERVAL = 2.0
@@ -464,8 +433,7 @@ def add_benben_post(username: str, content: str, ip: str = "") -> bool:
         return False
 
 
-# ---------- 犇犇发布冷却（单用户限流，内存态） ----------
-# 格式: {username: 上次发布时间戳}。冷却时间由 config.BENBEN_COOLDOWN_SECONDS 控制。
+# ---------- 犇犇发布冷却（内存态，秒数见 config.BENBEN_COOLDOWN_SECONDS） ----------
 benben_last_post = {}
 benben_cooldown_lock = threading.Lock()
 
@@ -508,10 +476,8 @@ def get_benben_posts(page: int, page_size: int):
     return posts, has_more
 
 
-# ---------- 评论系统存储 ----------
-# 所有评论存储在单个 KV 键 comments:all，格式：{target_key: [comment, ...]}
-# target_key 格式："share:<token>" 或 "note:<username>:<note_id>"
-# 每条评论格式: {"username": str, "content": str, "time": float, "ip": str, "is_anonymous": bool}
+# ---------- 评论存储 ----------
+# 单键 comments:all：{target_key: [comment, ...]}，target_key 为 "share:<token>" 或 "note:<用户>/<笔记>"
 K_COMMENTS = "comments:all"
 comments_data = {}  # {target_key: [comment, ...]}
 comments_lock = threading.Lock()
@@ -544,8 +510,7 @@ def add_comment(target_type: str, target_id: str, username: str, content: str,
     try:
         with comments_lock:
             with storage.lock(K_COMMENTS):
-                # 存储锁内必须无条件重读：TTL 节流的重载会让本次写回基于过期整表快照，
-                # 覆盖掉其它实例刚落盘的评论（add_benben_post 同理）
+                # 存储锁内必须无条件重读：TTL 节流重载会基于过期整表覆盖其它实例的评论
                 _read_merge(K_COMMENTS, comments_data)
                 if target_key not in comments_data:
                     comments_data[target_key] = []
@@ -611,8 +576,7 @@ def delete_comments_for_note(username: str, note_id: str) -> bool:
         return False
 
 
-# ---------- 评论发布冷却（单用户限流，内存态） ----------
-# 格式: {username: 上次发布时间戳}。冷却时间由 config.COMMENTS_COOLDOWN_SECONDS 控制。
+# ---------- 评论发布冷却（内存态，秒数见 config.COMMENTS_COOLDOWN_SECONDS） ----------
 comments_last_post = {}
 comments_cooldown_lock = threading.Lock()
 
@@ -632,14 +596,10 @@ def mark_comment_post(username: str):
 
 
 # ---------- 组织存储 ----------
-# orgs: {org_name: {"name": str, "description": str, "owner": str, "join_policy": str, "created_at": float}}
-orgs = {}
-# org_members: {org_name: {username: {"role": str, "joined_at": float}}}
-org_members = {}
-# org_invites: {invite_code: {"org_name": str, "created_by": str, "type": str, "created_at": float, "expires_at": float}}
-org_invites = {}
-# org_join_requests: {org_name: {username: {"message": str, "created_at": float, "status": str}}}
-org_join_requests = {}
+orgs = {}  # {org_name: {"name", "description", "owner", "join_policy", "created_at"}}
+org_members = {}  # {org_name: {username: {"role", "joined_at"}}}
+org_invites = {}  # {invite_code: {"org_name", "created_by", "type", "created_at", "expires_at"}}
+org_join_requests = {}  # {org_name: {username: {"message", "created_at", "status"}}}
 
 orgs_lock = threading.Lock()
 org_members_lock = threading.Lock()
@@ -687,26 +647,6 @@ def load_org_join_requests():
             org_join_requests.update(data)
 
 
-def save_orgs():
-    with orgs_lock:
-        _persist(K_ORGS, orgs)
-
-
-def save_org_members():
-    with org_members_lock:
-        _persist(K_ORG_MEMBERS, org_members)
-
-
-def save_org_invites():
-    with org_invites_lock:
-        _persist(K_ORG_INVITES, org_invites)
-
-
-def save_org_join_requests():
-    with org_join_requests_lock:
-        _persist(K_ORG_JOIN_REQUESTS, org_join_requests)
-
-
 def create_org(org_name: str, name: str, owner: str, description: str = "", join_policy: str = "invite") -> bool:
     """创建组织，创建者自动成为 owner"""
     try:
@@ -726,7 +666,6 @@ def create_org(org_name: str, name: str, owner: str, description: str = "", join
                         }
                         if not _persist(K_ORGS, orgs):
                             return False
-                        # 创建者自动成为 owner
                         _read_merge(K_ORG_MEMBERS, org_members)
                         if org_name not in org_members:
                             org_members[org_name] = {}
@@ -740,8 +679,7 @@ def create_org(org_name: str, name: str, owner: str, description: str = "", join
         return False
 
 
-# 只读路径的周期重载（多实例）：写路径都在存储锁内整表读写，但只读实例（如
-# 未处理过写请求的 worker）不重载就永远看不到其它实例移出成员/删除组织的结果。
+# 只读路径周期重载：只读实例否则永远看不到其它实例的成员/组织变更
 _orgs_last_resync = 0.0
 _org_members_last_resync = 0.0
 _ORG_RESYNC_INTERVAL = 5.0
@@ -777,8 +715,7 @@ _org_invites_last_resync = 0.0
 
 
 def _resync_org_invites_locked():
-    """周期重载邀请码表（多实例同步：否则已撤销/已用的邀请码在其它实例仍可用）。
-    须已持有 org_invites_lock。"""
+    """周期重载邀请码表（否则已撤销/已用码在其它实例仍可用）。须已持锁。"""
     global _org_invites_last_resync
     now = time.time()
     if now - _org_invites_last_resync < _ORG_RESYNC_INTERVAL:
@@ -803,7 +740,7 @@ def update_org(org_name: str, updates: dict) -> bool:
 
 
 def delete_org(org_name: str) -> bool:
-    """删除组织（仅 owner 可调用），并级联清理成员、邀请码、入群申请与组织笔记。"""
+    """删除组织（仅 owner），级联清理成员、邀请码、入群申请与组织笔记。"""
     try:
         with orgs_lock:
             with org_members_lock:
@@ -815,7 +752,6 @@ def delete_org(org_name: str) -> bool:
                         del orgs[org_name]
                         if not _persist(K_ORGS, orgs):
                             return False
-                        # 删除成员关系
                         _read_merge(K_ORG_MEMBERS, org_members)
                         org_members.pop(org_name, None)
                         if not _persist(K_ORG_MEMBERS, org_members):
@@ -824,8 +760,8 @@ def delete_org(org_name: str) -> bool:
         logger.error(f"[错误] 删除组织失败: {e}")
         return False
 
-    # 级联清理必须在 orgs/org_members 线程锁之外执行（笔记删除钩子会再取存储锁）。
-    # 否则后来同名重建的组织会直接继承旧组织的全部笔记与待用邀请码。
+    # 级联清理须在 orgs/org_members 线程锁之外（笔记删除钩子会再取存储锁），
+    # 否则同名重建的组织会继承旧笔记与邀请码
     from app.core.notes import write_note
     namespace = f"_orgs/{org_name}"
     try:
@@ -974,8 +910,7 @@ def validate_org_invite(invite_code: str) -> dict | None:
 
 
 def delete_org_invite(invite_code: str, org_name: str | None = None) -> bool:
-    """删除邀请码。给出 org_name 时只允许删除该组织自己的邀请码，
-    否则任意组织的管理员都能凭码销毁别的管理员待用的邀请。"""
+    """删除邀请码。给出 org_name 时只删该组织自己的码，防跨组织销毁。"""
     try:
         with org_invites_lock:
             with storage.lock(K_ORG_INVITES):
@@ -1073,7 +1008,6 @@ def approve_join_request(org_name: str, username: str) -> bool:
                         req["status"] = "approved"
                         if not _persist(K_ORG_JOIN_REQUESTS, org_join_requests):
                             return False
-                        # 自动添加为成员
                         _read_merge(K_ORG_MEMBERS, org_members)
                         if org_name not in org_members:
                             org_members[org_name] = {}
@@ -1121,14 +1055,12 @@ def org_invite_join(invite_code: str, username: str) -> bool:
         if not invite:
             return False
         org_name = invite.get("org_name")
-        # 公开加入或邀请加入
         org = get_org(org_name)
         if not org:
             return False
         policy = org.get("join_policy")
         if policy == "invite" and invite.get("type") != "invite":
             return False
-        # 检查是否已有成员资格
         with org_members_lock:
             if org_name in org_members and username in org_members[org_name]:
                 return False  # 已是成员
@@ -1147,16 +1079,13 @@ def org_public_join(org_name: str, username: str) -> bool:
 
 
 # ---------- 用户改名：身份标识迁移 ----------
-# 登录用户名同时是笔记/图床/附件的存储命名空间，改名需要把下列子系统里
-# 以用户名为键或字段的数据整体迁移。各子系统独立加锁（threading.Lock →
-# storage.lock，锁内重读合并内存缓存），与既有写路径保持一致，不嵌套多把
-# storage.lock。任一子系统写入失败即返回 False，调用方应提示重试；改名为
-# 低频操作，允许这种「尽力而为 + 可重试」语义。
+# 用户名同时是笔记/图床/附件的存储命名空间，改名需迁移下列各表中的用户标识。
+# 各子系统独立加锁（threading.Lock → storage.lock），任一失败返回 False 供重试。
 def rename_user_records(old: str, new: str) -> bool:
     """迁移 users / sessions / shares / benben / comments / orgs 中的用户标识。"""
     ok = True
 
-    # users.json：移动整条记录
+    # users：移动整条记录
     try:
         with users_lock:
             with storage.lock(K_USERS):
@@ -1220,16 +1149,14 @@ def rename_user_records(old: str, new: str) -> bool:
         logger.error(f"[错误] 迁移犇犇失败: {e}")
         return False
 
-    # comments:all：评论作者字段 + 私有笔记评论的目标键 note:<user>:<id>
+    # comments:all：评论作者字段 + 目标键 note:<user>:<id>
     try:
         with comments_lock:
             with storage.lock(K_COMMENTS):
                 data = _read(K_COMMENTS)
                 table = data if isinstance(data, dict) else dict(comments_data)
                 migrated = {}
-                # 评论目标键有两种写法：视图层用 note:<用户>/<笔记>，历史数据与
-                # 内部调用用 note:<用户>:<笔记>，两种都要迁移（保留原分隔符），
-                # 否则改名后评论区失联
+                # 目标键有 note:<用户>/<笔记> 与 note:<用户>:<笔记> 两种历史写法，都要迁移
                 for target_key, items in table.items():
                     new_key = target_key
                     if isinstance(target_key, str) and target_key.startswith("note:"):
@@ -1245,7 +1172,7 @@ def rename_user_records(old: str, new: str) -> bool:
                     if existing is None:
                         migrated[new_key] = items
                     elif isinstance(existing, list) and isinstance(items, list):
-                        # 目标键撞上改名后已存在的评论板时合并，整表赋值会丢掉其中一边
+                        # 键撞车时合并，整表赋值会丢掉一边
                         merged = existing + items
                         merged.sort(
                             key=lambda c: c.get("time", 0) if isinstance(c, dict) else 0)

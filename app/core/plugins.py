@@ -35,7 +35,6 @@ import os
 import re
 import shutil
 import sys
-import tempfile
 import threading
 import time
 import urllib.request
@@ -95,15 +94,6 @@ def plugins_available() -> bool:
 
 def plugins_root() -> str:
     return config.data_path(PLUGINS_DIR)
-
-
-def list_plugins() -> list:
-    """已加载插件清单（调试用）"""
-    return [
-        {"namespace": p.namespace, "name": p.name, "version": p.version,
-         "blueprints": [bp.name for bp in p.blueprints]}
-        for p in _loaded.values()
-    ]
 
 
 # ---------- 工具 ----------
@@ -283,8 +273,7 @@ def _install_from_zip(zip_path: str, known_namespaces: set) -> bool:
                               "如确认信任该插件，请以 --skip-auth 启动参数"
                               "（或环境变量 RUSIN_PLUGIN_SKIP_AUTH=1）放行")
 
-        # 命名空间冲突检查：已存在时，同源（upstream_repo 一致，即上游自我更新）
-        # 直接放行；不同来源的插件抢占同一命名空间则必须声明 OVERRIDE
+        # 命名空间冲突：同源（upstream_repo 一致）放行；不同源须声明 OVERRIDE
         target = os.path.join(plugins_root(), namespace)
         is_update = os.path.isdir(target)
         if is_update:
@@ -304,8 +293,7 @@ def _install_from_zip(zip_path: str, known_namespaces: set) -> bool:
             raise PluginError(f"命名空间 {namespace!r} 与本次待安装插件重复")
         known_namespaces.add(namespace)
 
-        # 落盘：staging 与 plugins 同目录（同文件系统），rename 原子生效；
-        # 覆盖更新先改名备份旧目录，失败可回滚，避免更新中途失败丢失插件
+        # 落盘：staging 与 plugins 同文件系统，rename 原子生效；更新先改名备份，失败可回滚
         if is_update:
             backup = os.path.join(plugins_root(), f".old-{uuid.uuid4().hex}")
             os.rename(target, backup)
@@ -465,8 +453,7 @@ def _register_on_app(app: Flask, plugin: LoadedPlugin) -> bool:
                          f"插件 {plugin.namespace} 的该蓝图未加载（请插件作者改名）")
             ok = False
             continue
-        # Flask 蓝图静态路由默认挂 /static/（各插件会互相覆盖、且与主站冲突），
-        # 强制改写为 /<蓝图名>/static/ 实现命名空间隔离
+        # 蓝图静态路由默认挂 /static/ 会互相覆盖，强制改写为 /<蓝图名>/static/ 隔离
         if bp.static_folder is not None:
             bp.static_url_path = f"/{bp.name}/static"
         try:

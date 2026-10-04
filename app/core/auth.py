@@ -4,7 +4,6 @@ import time
 import hashlib
 import hmac
 import secrets
-from threading import Thread
 
 from app.core import config
 from app.core.store import (
@@ -17,8 +16,7 @@ from app.core.store import (
 )
 from app.core.logger import create_logger
 
-# BUG-9: 使用 PBKDF2-HMAC-SHA256 慢哈希（≥10 万次迭代），并加大盐长度。
-# 旧版单轮 SHA-256 哈希通过 verify_password 的向后兼容逻辑继续可验证（登录成功后自然升级）。
+# PBKDF2-HMAC-SHA256 慢哈希（≥10 万迭代）；旧版单轮 SHA-256 登录后自动升级
 PBKDF2_ITERATIONS = 100000
 PBKDF2_PREFIX = "pbkdf2_sha256"
 
@@ -82,8 +80,7 @@ def delete_session(token: str):
 
 
 # ---------- 会话 Cookie ----------
-# 登录 Cookie 的写入/清除在多个 App（auth / twofa / oauth / email）都需复用，
-# 因此放在共享内核，避免各视图重复实现导致属性（HttpOnly/SameSite/Secure）不一致。
+# auth/twofa/oauth/email 共用，保证 HttpOnly/SameSite/Secure 属性一致
 def set_session_cookie(resp, token: str):
     """为响应写入登录会话 Cookie（HttpOnly + SameSite=Lax）。"""
     if config.SESSION_TIMEOUT_ENABLED:
@@ -102,8 +99,7 @@ def clear_session_cookie(resp):
     return resp
 
 
-# 多进程部署下，本进程内存中的 sessions 可能与磁盘（其它 worker 写入）不一致。
-# 读取前周期性重载：保证其它 worker 创建的会话可见、登出/过期立即生效。
+# 多进程部署下内存 sessions 可能与磁盘不一致，读取前周期性重载
 _SESSIONS_RESYNC_INTERVAL = 2.0
 _last_sessions_resync = 0.0
 

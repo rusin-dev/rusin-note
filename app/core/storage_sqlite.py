@@ -39,9 +39,7 @@ from app.core.storage import (
     title_from_content,
 )
 
-# 旧版（纯 JSON）数据根目录中的运行数据项：默认数据目录切到 data/ 时，
-# 若检测到这些旧路径且 data/ 中还没有，则一次性迁移过去（见
-# migrate_legacy_data_root）。
+# 旧版（纯 JSON）根目录数据项：切到 data/ 时一次性迁移（见 migrate_legacy_data_root）
 LEGACY_ROOT_ITEMS = (
     "notes", "images", "attachments", "plugins", "log",
     "users.json", "sessions.json", "shares.json", "benben.json",
@@ -242,8 +240,7 @@ class SqliteBackend(FileBackend):
                 except (OSError, UnicodeDecodeError):
                     continue
                 try:
-                    # 保留 .txt 的原始修改时间：否则所有笔记的 mtime 都变成迁移时刻，
-                    # 列表排序塌成目录顺序，过期清理也会把刚导入的旧笔记再留一个周期
+                    # 保留 .txt 原始 mtime：否则排序塌成目录顺序、过期清理误判
                     try:
                         file_mtime = os.path.getmtime(txt_path)
                     except OSError:

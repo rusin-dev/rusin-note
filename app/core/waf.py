@@ -73,10 +73,8 @@ GENERATED_HEADER = (
     "# 自定义规则请写入同目录 custom.conf（不会被覆盖），或改 config.json 的 waf 段。\n"
 )
 
-# 内容型端点的 CRS 误报排除：笔记正文 / 评论 / 待办里粘贴 SQL、JS、shell 代码
-# 是本站的核心用法，且这些内容渲染前都经 bleach 清洗（utils.render_markdown_html），
-# 不是可执行输入。这里只关掉「注入类」检测，协议强制(920)、方法强制(911)、
-# 扫描器识别(913) 等仍然全程生效。
+# 内容型端点只关掉「注入类」检测：正文粘贴 SQL/JS/shell 是本站核心用法，
+# 且渲染前都经 bleach 清洗；协议强制(920)/方法强制(911)/扫描器识别(913) 全程生效
 _EXCLUDED_TAGS = ("attack-sqli", "attack-xss", "attack-rce", "attack-php", "attack-lfi")
 _DEFAULT_EXCLUSIONS = (
     (1000, r"^/user/[^/]+/[^/]+/?$", "笔记正文保存 / 导入导出 / 图床 / 附件上传"),
@@ -484,9 +482,7 @@ def render_modsecurity_conf() -> str:
         f"SecRuleEngine {engine}",
         "SecRequestBodyAccess On",
         f"SecRequestBodyLimit {body_limit}",
-        # 笔记正文走 request.form（urlencoded），属 ModSecurity 的「无文件请求体」；
-        # 这里若沿用默认的 128KB，保存大笔记会在进 Flask 之前就被 413 拒掉，
-        # 因此必须与 SecRequestBodyLimit 同值。
+        # 笔记正文是 urlencoded「无文件请求体」，此值须与 SecRequestBodyLimit 同值，否则大笔记先进 Flask 就被 413
         f"SecRequestBodyNoFilesLimit {body_limit}",
         "SecRequestBodyLimitAction Reject",
         "SecArgumentSeparator &",
@@ -932,8 +928,7 @@ def reset_state() -> None:
 
 
 if __name__ == "__main__":
-    # 非 python -m app 的部署方式（gunicorn / Lambda）用这里手动供给：
-    #   python -m app.core.waf [--refresh]
+    # gunicorn / Lambda 部署手动供给：python -m app.core.waf [--refresh]
     import sys
 
     _force = any(a in sys.argv for a in ("--refresh", "--waf-refresh"))

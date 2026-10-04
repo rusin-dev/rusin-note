@@ -98,11 +98,6 @@ def verify_code(secret: str, code: str, at: float | None = None,
                       digits=digits, interval=interval) is not None
 
 
-def current_step(at: float | None = None, interval: int = DEFAULT_INTERVAL) -> int:
-    """当前时间步编号（用于防重放的 ``last_step`` 记录）"""
-    return int((time.time() if at is None else at) // interval)
-
-
 def provisioning_uri(secret: str, username: str,
                      issuer: str = "Rusin-Note",
                      digits: int = DEFAULT_DIGITS,

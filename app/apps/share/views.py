@@ -120,8 +120,7 @@ def share_md(token):
     )
 
 
-# ---------- 用户分享管理：/user/<u>/shares ----------
-# 必须注册在 /user/<username>/<note_id> 之前，否则 shares 会被当作笔记 ID。
+# ---------- 用户分享管理 /user/<u>/shares（须先于 /user/<u>/<note_id> 注册，防被当笔记 ID） ----------
 @bp.route("/user/<username>/shares", methods=["GET"])
 @bp.route("/user/<username>/shares/", methods=["GET"])
 @require_feature("share_links")

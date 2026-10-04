@@ -4,7 +4,6 @@
 - 未设置时根据 Accept-Language 判断，默认中文（zh）
 - 所有翻译 key 必须在 STRINGS["zh"] 与 STRINGS["en"] 中成对存在
 """
-import html
 
 from flask import Flask, g, request
 
@@ -1172,24 +1171,6 @@ STRINGS = {
 }
 
 
-def detect_lang(handler) -> str:
-    """兼容旧 BaseHTTPRequestHandler 接口（保留供其他模块调用）"""
-    cookie = handler.headers.get("Cookie", "")
-    for pair in cookie.split(";"):
-        pair = pair.strip()
-        if pair.startswith("rusin-lang="):
-            value = pair[len("rusin-lang="):].strip()
-            if value in LANGS:
-                return value
-    accept = handler.headers.get("Accept-Language", "")
-    first = accept.split(",")[0].strip().lower()
-    if first.startswith("zh"):
-        return "zh"
-    if first.startswith("en"):
-        return "en"
-    return DEFAULT_LANG
-
-
 def detect_lang_from_request() -> str:
     """Flask 请求上下文下的语言检测（Cookie > Accept-Language > 默认中文）"""
     cookie = request.headers.get("Cookie", "")
@@ -1222,8 +1203,7 @@ def register_i18n(app: Flask) -> None:
     def inject_globals():
         lang = getattr(g, "lang", DEFAULT_LANG)
         current_user = getattr(g, "current_user", None)
-        # 导航栏用户下拉框的「切换组织」列表：仅登录且启用组织功能时构建，
-        # 供各页面直接渲染（页面缓存按访问者隔离，键见 views/_helpers.page_cache_key）
+        # 导航栏「切换组织」列表：仅登录且启用组织时构建；页面缓存按访问者隔离
         user_orgs = []
         if current_user and feature_enabled("orgs"):
             from app.core.store import get_org, get_user_orgs
@@ -1259,18 +1239,3 @@ def t(lang: str, key: str, **fmt) -> str:
         except (KeyError, IndexError):
             return text
     return text
-
-
-def get_lang_switch(lang: str) -> str:
-    """导航栏语言切换链接（切换到另一种语言）"""
-    target = "en" if lang == "zh" else "zh"
-    return f'<a href="/lang/{target}"><i class="fa-solid fa-language" aria-hidden="true"></i>{html.escape(t(lang, "lang_switch"))}</a>'
-
-
-def get_theme_labels_js(lang: str) -> str:
-    """主题按钮文字映射（注入 THEME_SCRIPT 用）"""
-    import json
-    return json.dumps({
-        "dark": t(lang, "theme_dark"),
-        "light": t(lang, "theme_light"),
-    }, ensure_ascii=False)

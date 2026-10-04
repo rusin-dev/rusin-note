@@ -1,14 +1,7 @@
-"""笔记附件：文件类型校验（黑名单模式）、ID 生成与读写/配额（存储后端无关）
+"""笔记附件：类型黑名单校验、ID 生成与读写/配额（存储后端无关）
 
-附件与笔记一样按 (username, attachment_id) 二维寻址，attachment_id 形如
-``<随机串>.<扩展名>``，扩展名由上传文件的原始文件名决定。
-
-文件类型校验采用黑名单模式：默认禁止所有可执行文件扩展名，其余文件类型都允许上传。
-黑名单可通过 config.json 的 attachments.blocked_extensions 字段配置。
-
-读写直接走 storage 后端的附件专用 API（file: attachments/<user>/<id> 二进制文件 +
-<meta.json> 元数据；postgres: storage_attachments BYTEA 表；memory/upstash: 基类
-base64-KV 默认实现）。附件内容不可变（ID 随机），无跨实例读改写，无需存储锁。
+attachment_id 形如 <随机串>.<扩展名>；读写走 storage 附件专用 API。
+附件不可变、无跨实例读改写，无需存储锁。
 """
 import os
 import random
@@ -212,12 +205,9 @@ def note_attachment_quota_ok(username: str, content: str, extra_bytes: int = 0) 
     return note_attachment_usage(username, content) + extra_bytes <= config.MAX_ATTACHMENT_PER_NOTE_BYTES
 
 
-# ---------- 单用户并发闸门（防慢速连接占满 worker） ----------
-# 背景（#191）：附件下载 / 上传都是长连接。攻击者可以「发起上千个队列、每个以
-# 1KB/s 传输」，请求数远低于 IP 限流阈值，却长期占满 worker 线程（有人用 100 线程
-# 下载 100 个文件，出站带宽被打到 100Mbps）。因此对**同时在途**的附件请求按用户
-# （未登录按 IP）单独设闸，默认各 1 个队列，上限见 config：
-# MAX_CONCURRENT_ATTACHMENT_DOWNLOADS / MAX_CONCURRENT_ATTACHMENT_UPLOADS（0 = 不限）。
+# ---------- 单用户并发闸门 ----------
+# 长连接场景请求数限流拦不住（低速传输即可占满 worker），对在途请求按用户设闸，
+# 默认各 1（上限见 config MAX_CONCURRENT_ATTACHMENT_DOWNLOADS/UPLOADS，0=不限）
 download_guard = ConcurrencyLimiter("attachment_download")
 upload_guard = ConcurrencyLimiter("attachment_upload")
 

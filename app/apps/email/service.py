@@ -1,28 +1,7 @@
-"""邮箱 / 手机号验证业务逻辑
+"""邮箱 / 手机号验证：绑定验证（purpose=bind）与验证码免密登录（purpose=login）
 
-两类用途：
-1. **联系方式绑定**：把邮箱 / 手机号绑定到账号并验证归属（``purpose="bind"``）；
-2. **验证码登录**：使用已绑定的邮箱 / 手机号 + 一次性验证码免密码登录
-   （``purpose="login"``）。
-
-数据存两个 KV 键：
-
-- ``user_contacts``（file 后端 ``user_contacts.json``）::
-
-      {username: {
-          "email": {"value": str, "verified": bool, "verified_at": ts},
-          "phone": {"value": str, "verified": bool, "verified_at": ts},
-      }}
-
-- ``verification_codes``（file 后端 ``verification_codes.json``）::
-
-      {"<purpose>:<kind>:<username>": {
-          "hash": sha256(username|kind|purpose|code),
-          "target": str, "expires_at": ts, "attempts": int, "sent_at": ts,
-      }}
-
-验证码只存哈希；投递失败不落库。写路径遵循 ``threading.Lock`` → ``storage.lock``
-约定，网络投递（SMTP / Webhook）在存储锁之外执行。
+数据存 KV 键 user_contacts（联系方式+verified）与 verification_codes（只存哈希）。
+投递失败不落库；网络投递（SMTP / Webhook）在存储锁之外执行。
 """
 import hashlib
 import json

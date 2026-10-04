@@ -32,19 +32,10 @@ def check_note_id(note_id: str) -> None:
 
 
 def page_cache_key(*_args, **_kwargs) -> str:
-    """页面缓存键：请求路径 + 访问者 + 语言 + 简洁模式。
+    """页面缓存键 = 路径 + 访问者 + 语言 + 简洁模式（Flask-Caching 透传视图参数，签名须兼容）
 
-    Flask-Caching 调用 make_cache_key 时会透传视图参数，签名须兼容
-    （*_args/**_kwargs），否则键构造抛异常、缓存被静默禁用。
-
-    缓存页面的内容同时依赖四者：
-    - 语言（g.lang）：zh/en 两套文案不同，不区分会把首个访问者的语言
-      发给所有人（首页缓存长达 30 分钟）；
-    - 访问者（g.current_user）：导航栏按登录用户渲染，且私有笔记页的
-      登录校验在视图内部——Flask-Caching 命中缓存时不会执行视图，键不
-      按访问者隔离的话，命中即绕过校验把缓存里的私有内容发给任何人；
-    - 简洁模式（g.simple_mode）：账号级界面偏好，决定 <html> 是否带
-      simple-mode 类与导航栏入口，不区分会渲染出另一种模式的缓存页。
+    缓存命中不执行视图：键不含访问者会绕过私有笔记的登录校验；
+    不含语言/简洁模式会把错误文案/界面发给其它访问者。
     """
     user = getattr(g, "current_user", None) or "anon"
     lang = getattr(g, "lang", "zh")

@@ -1,11 +1,6 @@
-"""工作台待办（TODO LIST）存储：内存缓存 + 统一存储层（file / memory / upstash / postgres）
+"""工作台待办存储：KV 键 todos，{username: [{id, text, done, created_at}, ...]}
 
-待办与用户账号绑定，存通用 KV 键 todos（file 后端即 todos.json）：
-{username: [{"id": str, "text": str, "done": bool, "created_at": float}, ...]}
-列表按加入顺序排列（新增追加到末尾）。
-
-写路径约定与 store.py / tags.py / pins.py 一致：持 threading.Lock（进程内）
-+ storage.lock（跨进程/跨实例）的块内重读合并内存缓存，持久化在锁外执行。
+写路径约定与 store.py 一致：threading.Lock → storage.lock，锁内重读合并。
 """
 import secrets
 import threading
@@ -83,10 +78,6 @@ def get_user_todos(username: str) -> list:
     with todos_lock:
         items = user_todos.get(username)
         return [dict(it) for it in items] if isinstance(items, list) else []
-
-
-def count_user_todos(username: str) -> int:
-    return len(get_user_todos(username))
 
 
 def add_user_todo(username: str, text: str) -> tuple[bool, str]:

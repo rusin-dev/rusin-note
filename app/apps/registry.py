@@ -1,9 +1,6 @@
-"""功能 App 注册入口：共享内核 → 各功能 App → 插件蓝图 → 短链（必须最后）
+"""功能 App 注册入口：共享内核 → 各功能 App → 插件蓝图 → world_short（catch-all 必须最后）
 
-每个 App 在 app/apps/<feature>/ 下自带视图（部分含 service）。注册顺序约束：
-- 插件蓝图必须在 world_short 之前，否则插件的单段路由（如 /myplug）会被
-  /<id> 短链抢匹配；
-- world_short 含 /<id> 与 /<id>.md 的 catch-all，必须最后注册。
+插件蓝图须先于 world_short，否则插件单段路由（/myplug）会被 /<id> 短链抢匹配。
 """
 from flask import Flask
 

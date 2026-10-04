@@ -1,22 +1,9 @@
-"""第三方登录（OAuth 2.0）业务逻辑
+"""第三方登录（OAuth 2.0）：GitHub / Google / Microsoft / 微信 / QQ
 
-覆盖 GitHub / Google / Microsoft / 微信 / QQ 五家 Provider。为保持项目
-「最小依赖」约定，网络请求全部使用标准库 ``urllib``（与 Upstash 后端同思路），
-不使用 authlib / requests-oauthlib。
-
-设计要点
---------
-- **Provider 注册表**：端点、scope、是否支持 PKCE 等静态信息集中定义；
-  凭据（client_id/secret、微信/QQ 的 app_id/secret）从 ``config.json`` 的
-  ``oauth.providers`` 读取，留空即视为未配置。
-- **可用性 = 功能开关 ∧ 已配置凭据**：``feature_enabled("oauth_<key>")`` 为
-  运行时开关（管理员在 /admin/features 控制），凭据缺失时不展示按钮。
-- **状态存储**：账号绑定关系存 KV 键 ``oauth_accounts``::
-
-      {"<provider>:<uid>": {"provider", "uid", "username", "display", "linked_at"}}
-
-- **账号安全**：一个第三方 uid 只能绑定一个站内用户；自动注册生成带
-  Provider 前缀的随机用户名，避免冒用已有用户名。
+网络请求全部用标准库 urllib（最小依赖，不用 authlib/requests）。
+可用性 = oauth.enabled ∧ 功能开关("oauth_<key>") ∧ 凭据已配置，三者缺一不展示。
+账号绑定存 KV 键 oauth_accounts（provider:uid → username，一 uid 仅绑一人）；
+自动注册生成带 Provider 前缀的随机用户名。
 """
 import base64
 import hashlib
@@ -77,7 +64,6 @@ PROVIDERS = {
         "scope": "get_user_info", "pkce": False, "creds": ("app_id", "app_secret"),
     },
 }
-PROVIDER_KEYS = list(PROVIDERS.keys())
 # 社交登录功能开关 key：oauth_<provider>
 def feature_key(provider: str) -> str:
     return f"oauth_{provider}"

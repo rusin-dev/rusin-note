@@ -1,10 +1,6 @@
-"""第三方登录（OAuth 2.0）路由
+"""第三方登录路由：/oauth/<provider>（?link=1 为绑定）、/oauth/<provider>/callback、/user/<u>/oauth
 
-- ``GET /oauth/<provider>``：发起授权（登录；``?link=1`` 且已登录时为绑定）；
-- ``GET /oauth/<provider>/callback``：授权回调，创建/绑定账号并建立会话；
-- ``GET/POST /user/<u>/oauth``：第三方账号绑定管理。
-
-业务逻辑见 ``service.py``；模板见 ``templates/oauth/``。
+业务逻辑见 service.py。
 """
 import secrets
 import time

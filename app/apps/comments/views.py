@@ -1,11 +1,4 @@
-"""评论系统：/comments/<target_type>/<target_id>（GET 查看 / POST 发布）
-
-支持两种目标类型：
-- share: 分享笔记评论
-- note: 用户笔记评论
-
-POST 受全局 POST 限流约束（限流在蓝图层显式标注）。
-"""
+"""评论系统：/comments/<target_type>/<target_id>（GET 查看 / POST 发布，目标为 note / share）"""
 from flask import Blueprint, g, redirect, render_template, request
 
 from app.core import config
@@ -24,7 +17,6 @@ from app.apps.comments.service import (
     validate_target_id,
     validate_target_type,
     TARGET_SHARE,
-    TARGET_NOTE,
 )
 from app.core.utils import render_latex_head, render_markdown_html, format_note_time
 from app.core.notes import note_exists
@@ -67,8 +59,7 @@ def comments_get(target_type: str, target_id: str):
     else:
         # 笔记类型：目标 ID 格式为 username/note_id
         parts = target_id.split("/", 1)
-        # 笔记评论板必须挂在真实存在的笔记上：否则任何人能给不存在的笔记
-        # 建评论区（每个新目标都会往 comments:all 整表里加键），且删掉的笔记留下僵尸区
+        # 评论板必须挂在真实存在的笔记上，防僵尸区与 comments:all 键膨胀
         if len(parts) != 2 or not note_exists(parts[0], parts[1]):
             return render_template("errors/404.html"), 404
         target_title = f"笔记 {parts[1]}"
@@ -143,8 +134,7 @@ def comments_post(target_type: str, target_id: str):
     else:
         # 笔记类型：目标 ID 格式为 username/note_id
         parts = target_id.split("/", 1)
-        # 笔记评论板必须挂在真实存在的笔记上：否则任何人能给不存在的笔记
-        # 建评论区（每个新目标都会往 comments:all 整表里加键），且删掉的笔记留下僵尸区
+        # 评论板必须挂在真实存在的笔记上，防僵尸区与 comments:all 键膨胀
         if len(parts) != 2 or not note_exists(parts[0], parts[1]):
             return render_template("errors/404.html"), 404
         target_title = f"笔记 {parts[1]}"

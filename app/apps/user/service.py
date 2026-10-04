@@ -1,9 +1,7 @@
-"""用户设置：界面偏好（简洁模式）、密码修改、登录用户名变更（含数据迁移）
+"""用户设置：界面偏好（简洁模式）、密码修改、用户名变更（含数据迁移）
 
-登录用户名同时是笔记 / 图床 / 附件的存储命名空间（见 AGENTS.md「路径安全」），
-改名本质是一次数据迁移：先把旧命名空间下的二进制资源复制到新命名空间并校验，
-再删除旧数据；同时调用各存储模块的 rename_user_* 迁移以用户名为键的 KV 数据。
-资源复制失败时不删除旧数据，用户可重试（低频操作，允许「尽力而为 + 可重试」）。
+用户名即存储命名空间，改名 = 先复制资源校验、再删旧数据 + 迁移各 KV；
+复制失败不删旧数据，可重试。
 """
 from app.core.auth import (
     check_password_complexity,
@@ -50,8 +48,7 @@ def change_password(username: str, current: str, new: str, confirm: str,
     hashed = user.get("hash") if isinstance(user, dict) else None
     has_password = bool(isinstance(salt, str) and salt
                         and isinstance(hashed, str) and hashed)
-    # 纯第三方注册账号（oauth_only）没有密码：允许直接设置初始密码，
-    # 否则这些用户将永远无法修改密码。已设置密码的账号仍需校验原密码。
+    # oauth_only 账号无密码，允许直接设置初始密码；已有密码仍需校验原密码
     if has_password and not verify_password(current, salt, hashed):
         return ("err_settings_password_wrong", {})
     if new != confirm:
@@ -177,8 +174,7 @@ def rename_user(old: str, new: str, password: str):
         logger.error(f"[错误] 迁移附件失败: {old} -> {new}")
         return ("err_settings_rename_failed", {})
 
-    # 2) 以用户名为键/字段的 KV 数据。标签/文件夹/置顶须在删除旧笔记之前
-    #    迁移：write_note 的删除钩子会按旧用户名清理这些条目。
+    # 2) 用户名为键/字段的 KV；标签/文件夹/置顶须在删旧笔记前迁移（删除钩子按旧名清理）
     if not rename_user_note_tags(old, new):
         return ("err_settings_rename_failed", {})
     if not rename_user_note_folders(old, new):

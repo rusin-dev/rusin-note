@@ -21,8 +21,7 @@ from app.apps.common.helpers import purge_page_cache, require_auth
 bp = Blueprint("user", __name__)
 
 
-# ---------- 用户设置：/user/<u>/settings（界面偏好 / 密码 / 用户名） ----------
-# 必须注册在 /user/<username>/<note_id> 之前，否则 settings 会被当作笔记 ID。
+# ---------- 用户设置 /user/<u>/settings（须先于 /user/<u>/<note_id> 注册，防被当笔记 ID） ----------
 @bp.route("/user/<username>/settings", methods=["GET"])
 @limiter.limit(lambda: f"{config.GET_RATE_MAX} per {config.GET_RATE_WINDOW} second")
 def user_settings_get(username):

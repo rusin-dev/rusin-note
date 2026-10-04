@@ -1,13 +1,7 @@
-"""笔记图床：图片格式校验（魔数嗅探）、ID 生成与读写/配额（存储后端无关）
+"""笔记图床：格式校验（魔数嗅探）、ID 生成与读写/配额（存储后端无关）
 
-图片与笔记一样按 (username, image_id) 二维寻址，image_id 形如
-``<随机串>.<扩展名>``，扩展名由内容魔数嗅探决定（不信任上传方声明的
-文件名 / Content-Type）。明确不支持 SVG：SVG 可内嵌脚本，与静态目录
-（部署者自持的信任内容）不同，用户上传的 SVG 属不可信输入。
-
-读写直接走 storage 后端的图片专用 API（file: images/<user>/<id> 二进制
-文件；postgres: storage_images BYTEA 表；memory/upstash: 基类 base64-KV
-默认实现）。图片内容不可变（ID 随机），无跨实例读改写，无需存储锁。
+扩展名由内容魔数决定，不信任上传方声明；不支持可内嵌脚本的 SVG。
+图片不可变、无跨实例读改写，无需存储锁。
 """
 import random
 import re
@@ -17,9 +11,6 @@ from app.core.logger import create_logger
 from app.core.storage import StorageError, storage
 
 logger = create_logger("images")
-
-# 允许的图片格式（扩展名）；不含 svg / ico / bmp
-IMAGE_EXTENSIONS = {"png", "jpg", "jpeg", "gif", "webp"}
 
 _IMAGE_ID_RE = re.compile(r'^[a-zA-Z0-9_\-]+\.(png|jpg|jpeg|gif|webp)$')
 
