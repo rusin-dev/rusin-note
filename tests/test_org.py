@@ -8,6 +8,7 @@
 - 成员管理（提升/降级/移除）
 - 邀请码生成与过期
 - Owner 不能直接退出
+- 团队简介按 Markdown + LaTeX 渲染，且经 bleach 清洗
 
 运行：``pytest tests/test_org.py``
 """
@@ -228,3 +229,34 @@ class TestOrg:
         expect(response.status_code == 400, "Owner 退出应被拒绝 (400)")
         expect(get_org_member_role("test_team1", "test_alice") == "owner",
                "Alice 仍在 test_team1")
+
+    def test_description_markdown_render(self, ctx):
+        logger.info("=== 11. 团队简介 Markdown / LaTeX 渲染 ===")
+        alice = _login_as(ctx.app, "test_alice", "test_token_alice_xyz")
+        description = ("**核心组** 负责 `发布` 流程：\n\n"
+                       "- 行内公式 $a+b$\n\n"
+                       "$$a+b$$\n\n"
+                       "<script>alert(1)</script>")
+        response = alice.post("/org/test_team1/settings", data={
+            "action": "update_info",
+            "name": "Test Team 1",
+            "description": description,
+            "join_policy": "invite",
+        })
+        expect(response.status_code in (200, 302), "POST 更新团队简介成功")
+        expect(get_org("test_team1")["description"] == description,
+               "简介按原文落库（渲染只发生在展示层）")
+
+        page = alice.get("/org/test_team1").data
+        expect(b"<strong>" in page, "Markdown 粗体渲染为 HTML")
+        expect(b"<code>" in page, "Markdown 行内代码渲染为 HTML")
+        expect(b"<li>" in page, "Markdown 列表渲染为 HTML")
+        expect(b"$a+b$" in page and b"$$a+b$$" in page,
+               "LaTeX 定界符原样保留，由客户端 KaTeX 排版")
+        expect(b"<script>alert" not in page, "简介中的 <script> 被 bleach 剥离")
+        expect(b"katex.min.js" in page, "页面注入 KaTeX head（latex_render 默认启用）")
+
+        for path in ("/org/test_team1/settings", "/org/create"):
+            data = alice.get(path).data
+            expect(b"Markdown" in data and b"LaTeX" in data and b"$...$" in data,
+                   f"{path} 显示 Markdown/LaTeX 支持提示")

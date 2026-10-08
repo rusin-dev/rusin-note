@@ -1,8 +1,21 @@
 {% extends "base.html" %}
+{% block extra_head %}
+<style>
+    .org-description { flex: 1 1 100%; font-size: 15px; word-break: break-word; }
+    .org-description p { margin: 6px 0; }
+    .org-description > :first-child { margin-top: 0; }
+    .org-description > :last-child { margin-bottom: 0; }
+</style>
+{{ latex_head|safe }}
+{{ code_highlight_head|safe }}
+{{ markdown_alerts_head|safe }}
+{% endblock %}
 {% block content %}
 <div class="org-header">
     <h1>{{ org.name|e }} <small>({{ org_name|e }})</small></h1>
-    <p>{{ org.description|e }}</p>
+    {% if description_html %}
+    <div class="org-description markdown-body">{{ description_html|safe }}</div>
+    {% endif %}
     <div class="org-meta">
         <span><i class="fa-solid fa-user"></i> {{ t('org_owner') }}: {{ org.owner|e }}</span>
         <span><i class="fa-solid fa-door-open"></i> {{ t('org_join_policy_' ~ org.join_policy) }}</span>
