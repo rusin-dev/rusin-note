@@ -39,7 +39,7 @@ from app.core.store import (
     update_org_member_role,
     validate_org_invite,
 )
-from app.core.utils import format_note_time, format_size, render_markdown_html
+from app.core.utils import format_note_time, format_size, render_latex_head, render_markdown_html
 from app.apps.common.helpers import purge_page_cache
 
 bp = Blueprint("org", __name__)
@@ -111,10 +111,15 @@ def org_home(org_name):
     user = get_current_user()
     is_member = user and can_org_do(org_name, user, "member")
     members = get_org_members(org_name) if is_member else {}
+    description = org.get("description") or ""
     return render_template(
         "org/org.html",
         org_name=org_name,
         org=org,
+        # 简介走笔记/犇犇/评论同一套 bleach 清洗管线，因此支持 Markdown、LaTeX、
+        # 表格、代码块与提示卡片；模板侧的 |safe 仅可作用于本函数的输出
+        description_html=render_markdown_html(description) if description.strip() else "",
+        latex_head=render_latex_head(),
         is_member=is_member,
         members=members if is_member else None,
     )
