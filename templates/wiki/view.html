@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block extra_head %}
+<style>{% include "wiki/_wiki_css.html" %}</style>
+{{ latex_head|safe }}
+{% endblock %}
+{% block content %}
+<div class="wiki-layout">
+    <aside class="wiki-sidebar">
+        <div class="wiki-sidebar-title"><a href="/docs" style="color:inherit;text-decoration:none;"><i class="fa-solid fa-book" aria-hidden="true"></i> {{ t('wiki_site_title') }}</a></div>
+        {% set current_slug = slug %}
+        {% include "wiki/_tree.html" %}
+    </aside>
+    <main class="wiki-main">
+        <div class="wiki-page-head">
+            <h1>{{ page.title|e }}</h1>
+            {% if is_wiki_admin %}
+            <div class="wiki-actions">
+                <a class="wiki-btn" href="/admin/wiki/edit/{{ slug }}"><i class="fa-solid fa-pen" aria-hidden="true"></i>{{ t('wiki_edit_page') }}</a>
+                <a class="wiki-btn" href="/admin/wiki/history/{{ slug }}"><i class="fa-solid fa-clock-rotate-left" aria-hidden="true"></i>{{ t('wiki_history') }}</a>
+            </div>
+            {% endif %}
+        </div>
+        {% if updated_str %}
+        <div class="wiki-meta">{{ t('wiki_updated_meta', user=page.updated_by|e, time=updated_str) }}</div>
+        {% endif %}
+        <div class="markdown-body">{{ content_html|safe }}</div>
+    </main>
+</div>
+{% endblock %}

@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block extra_head %}
+<style>{% include "wiki/_wiki_css.html" %}</style>
+{% endblock %}
+{% block content %}
+<div class="wiki-page-head">
+    <h1>{{ t('wiki_admin_title') }}</h1>
+    <div class="wiki-actions">
+        <a class="wiki-btn wiki-btn-primary" href="/admin/wiki/edit"><i class="fa-solid fa-plus" aria-hidden="true"></i>{{ t('wiki_new_page') }}</a>
+        <a class="wiki-btn" href="/docs"><i class="fa-solid fa-book" aria-hidden="true"></i>{{ t('wiki_site_title') }}</a>
+    </div>
+</div>
+{% if msg %}<div class="wiki-msg">{{ msg|e }}</div>{% endif %}
+<div class="wiki-meta">{{ t('wiki_page_count', count=pages|length) }}</div>
+{% if pages %}
+<table class="wiki-table">
+    <thead>
+    <tr>
+        <th>{{ t('wiki_slug') }}</th>
+        <th>{{ t('wiki_page_title') }}</th>
+        <th>{{ t('wiki_move') }}</th>
+        <th>{{ t('wiki_delete') }}</th>
+    </tr>
+    </thead>
+    <tbody>
+    {% for p in pages %}
+    <tr>
+        <td class="slug">
+            <a href="/docs/{{ p.slug }}">/docs/{{ p.slug }}</a>
+            <div class="rev-meta">
+                <a href="/admin/wiki/edit/{{ p.slug }}">{{ t('wiki_edit_page') }}</a> ·
+                <a href="/admin/wiki/history/{{ p.slug }}">{{ t('wiki_history') }}</a>
+            </div>
+        </td>
+        <td>{{ p.title|e }}</td>
+        <td>
+            <form method="post" action="/admin/wiki/move/{{ p.slug }}" style="display:flex;gap:6px;">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="text" name="new_slug" value="{{ p.slug }}" required maxlength="200"
+                       style="width:160px;padding:5px 8px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);font-size:12px;">
+                <button type="submit" class="wiki-btn">{{ t('wiki_move') }}</button>
+            </form>
+        </td>
+        <td>
+            <form method="post" action="/admin/wiki/delete/{{ p.slug }}"
+                  onsubmit="return confirm('{{ t('wiki_delete_confirm') }}');">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="wiki-btn wiki-btn-danger"><i class="fa-solid fa-trash" aria-hidden="true"></i></button>
+            </form>
+        </td>
+    </tr>
+    {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<div class="wiki-empty">{{ t('wiki_empty') }}</div>
+{% endif %}
+{% endblock %}

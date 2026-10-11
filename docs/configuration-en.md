@@ -181,6 +181,17 @@ This document lists every `config.json` setting and environment variable, its me
 
    Content supports Markdown and LaTeX math (`$...$` / `$$...$$`, controlled by the `latex_render` switch); the form provides a sanitized marked.js live preview; server-rendered Markdown is sanitized with Bleach; loading and posting are rate-limited, and posting also has a per-user cooldown. Logged-in users can click Reply to replace the editor content with `|| @username: original content`.
 
+## Built-in Web wiki
+
+- `wiki` built-in documentation site (public browsing at `/docs`, management at `/admin/wiki`, gated by the `wiki` feature flag, disabled by default). Only feature-flag admins (`admin_users` / `RUSIN_ADMIN`) can create/edit/move/delete pages and roll back revisions; non-admins always get 404 on management routes. Page content is Markdown rendered through the same bleach sanitization pipeline as notes, with LaTeX support (requires the `latex_render` flag).
+   - `max_page_kb`: per-page Markdown source size limit (KB), default `512`;
+   - `max_pages`: site-wide page count limit, default `500`;
+   - `max_revisions`: revisions kept per page, default `20` (newest first, oldest dropped; rolling back also stores the current version into history);
+   - `max_slug_depth`: maximum slug hierarchy depth (`/`-separated, e.g. `deploy/vercel`), default `4`; each segment allows letters, digits, `-`, `_` and must start with a letter or digit;
+   - `home_slug`: page slug rendered at `/docs`, default `home`; when absent, `/docs` shows a directory tree of all pages.
+
+   Pages are stored in the storage backend KV key `wiki:pages`, revisions in `wiki:revisions` (file backend: `wiki_pages.json` / `wiki_revisions.json` in the data directory). Moving a page cascades to its sub-pages and revisions; a page with sub-pages cannot be deleted directly.
+
 ## Password policy
 
 - `password_policy`: password policy, defining the complexity requirements for guest passwords.  

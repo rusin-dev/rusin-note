@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block extra_head %}
+<style>{% include "wiki/_wiki_css.html" %}</style>
+{% endblock %}
+{% block content %}
+<div class="wiki-layout">
+    <aside class="wiki-sidebar">
+        <div class="wiki-sidebar-title"><i class="fa-solid fa-book" aria-hidden="true"></i> {{ t('wiki_site_title') }}</div>
+        {% set current_slug = "" %}
+        {% include "wiki/_tree.html" %}
+    </aside>
+    <main class="wiki-main">
+        <div class="wiki-page-head">
+            <h1>{{ t('wiki_site_title') }}</h1>
+            {% if is_wiki_admin %}
+            <div class="wiki-actions">
+                <a class="wiki-btn wiki-btn-primary" href="/admin/wiki/edit"><i class="fa-solid fa-plus" aria-hidden="true"></i>{{ t('wiki_new_page') }}</a>
+                <a class="wiki-btn" href="/admin/wiki"><i class="fa-solid fa-list-check" aria-hidden="true"></i>{{ t('wiki_admin') }}</a>
+            </div>
+            {% endif %}
+        </div>
+        <div class="wiki-meta">{{ t('wiki_page_count', count=page_count) }}</div>
+        {% if pages %}
+        <ul class="wiki-tree">
+            {% for p in pages %}
+            <li><a href="/docs/{{ p.slug }}">{{ p.title|e }} <span class="rev-meta">/docs/{{ p.slug }}</span></a></li>
+            {% endfor %}
+        </ul>
+        {% else %}
+        <div class="wiki-empty">{{ t('wiki_empty') }}</div>
+        {% endif %}
+    </main>
+</div>
+{% endblock %}

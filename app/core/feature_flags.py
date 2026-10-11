@@ -53,6 +53,7 @@ FEATURES = [
     {"key": "note_attachments", "icon": "fa-paperclip", "group": "media"}, # 笔记附件（编辑器上传 + /attachment/<u>/<id> 服务）
     {"key": "benben", "icon": "fa-sticky-note", "group": "media"},        # 犇犇动态
     {"key": "comments", "icon": "fa-comments", "group": "media"},         # 评论系统（笔记/分享页面评论功能）
+    {"key": "wiki", "icon": "fa-book", "group": "media"},                 # 内置 Web wiki（/docs 全站公开文档站，仅管理员编辑）
     {"key": "open_register", "icon": "fa-user-plus", "group": "account"}, # 开放注册
     {"key": "avatar", "icon": "fa-user", "group": "account"},
     {"key": "orgs", "icon": "fa-users", "group": "account"},              # 组织/团队协作

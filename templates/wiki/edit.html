@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block extra_head %}
+<style>{% include "wiki/_wiki_css.html" %}</style>
+{% endblock %}
+{% block content %}
+<div class="wiki-page-head">
+    <h1>{% if page %}{{ t('wiki_edit_page') }}{% else %}{{ t('wiki_new_page') }}{% endif %}</h1>
+    <div class="wiki-actions">
+        <a class="wiki-btn" href="{% if page %}/docs/{{ slug }}{% else %}/admin/wiki{% endif %}">{{ t('wiki_cancel') }}</a>
+    </div>
+</div>
+{% if error %}<div class="wiki-error">{{ error|e }}</div>{% endif %}
+<form class="wiki-form" method="post" action="{% if page %}/admin/wiki/edit/{{ slug }}{% else %}/admin/wiki/edit{% endif %}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    {% if not page %}
+    <label for="wiki-slug">{{ t('wiki_slug') }}</label>
+    <input type="text" id="wiki-slug" name="slug" value="{{ slug|e }}" required maxlength="200" autocomplete="off">
+    <div class="hint">{{ t('wiki_slug_hint') }}（{{ depth }} 级 / {{ max_kb }} KB）</div>
+    {% endif %}
+    <label for="wiki-title">{{ t('wiki_page_title') }}</label>
+    <input type="text" id="wiki-title" name="title" value="{{ (page.title if page else '')|e }}" required maxlength="200">
+    <div style="height:12px"></div>
+    <label for="wiki-content">{{ t('wiki_content') }}</label>
+    <textarea id="wiki-content" name="content">{{ (page.content if page else '')|e }}</textarea>
+    <div class="wiki-form-actions">
+        <button type="submit" class="wiki-btn wiki-btn-primary"><i class="fa-solid fa-floppy-disk" aria-hidden="true"></i>{{ t('wiki_save') }}</button>
+        {% if page %}
+        <a class="wiki-btn" href="/admin/wiki/history/{{ slug }}">{{ t('wiki_history') }}</a>
+        {% endif %}
+    </div>
+</form>
+{% endblock %}

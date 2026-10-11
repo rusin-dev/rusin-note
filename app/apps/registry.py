@@ -20,6 +20,7 @@ from app.apps.static.views import bp as static_bp
 from app.apps.todos.views import bp as todos_bp
 from app.apps.twofa.views import bp as twofa_bp
 from app.apps.user.views import bp as user_bp
+from app.apps.wiki.views import bp as wiki_bp
 from app.apps.world.views import bp as world_bp
 
 
@@ -42,6 +43,9 @@ def register_blueprints(app: Flask) -> None:
     app.register_blueprint(oauth_bp)
     app.register_blueprint(twofa_bp)
     app.register_blueprint(email_bp)
+    # 内置 Web wiki（/docs 公开 + /admin/wiki 管理）：须在插件与 world_short 之前，
+    # 单段 /docs 优先于插件命名空间匹配
+    app.register_blueprint(wiki_bp)
     # 插件蓝图（Phase 1 安装 + 注册）：必须在 world_short 之前，
     # 否则插件的单段路由（如 /myplug）会被 /<id> 短链抢匹配
     from app.core import plugins

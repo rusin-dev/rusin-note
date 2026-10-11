@@ -166,6 +166,13 @@ DEFAULT_CONFIG = {
         "page_size": 50,                     # 分页大小
         "max_height_px": 280,                # 内容最大高度（px），超出滚动
     },
+    "wiki": {                                # 内置 Web wiki（全站公开文档站，仅管理员编辑）
+        "max_page_kb": 512,                  # 单页 Markdown 原文大小上限（KB）
+        "max_pages": 500,                    # 全站页面数上限
+        "max_revisions": 20,                 # 每页保留的修订版本数
+        "max_slug_depth": 4,                 # slug 层级深度上限（/ 分隔）
+        "home_slug": "home",                 # /docs 首页对应的页面 slug
+    },
     "oauth": {                                # 第三方登录
         "enabled": False,                      # 总开关，默认全关
         "auto_register": True,                 # 未绑定时自动注册新用户
@@ -208,6 +215,7 @@ DEFAULT_CONFIG = {
         "note_images": True,
         "note_attachments": True,
         "comments": True,
+        "wiki": False,                       # 内置 Web wiki（默认关，管理员在 /admin/features 启用）
         # 第三方登录：需先在 oauth.providers 填凭据
         "oauth_github": False,
         "oauth_google": False,
@@ -621,6 +629,14 @@ try:
         COMMENTS_MAX_HEIGHT_PX = 280
 except (TypeError, ValueError):
     COMMENTS_MAX_HEIGHT_PX = 280
+
+# ---------- 内置 Web wiki ----------
+WIKI_CFG = config.get("wiki", DEFAULT_CONFIG["wiki"])
+WIKI_MAX_PAGE_KB = _positive_int(WIKI_CFG.get("max_page_kb", 512), 512) or 512
+WIKI_MAX_PAGES = _positive_int(WIKI_CFG.get("max_pages", 500), 500) or 500
+WIKI_MAX_REVISIONS = _positive_int(WIKI_CFG.get("max_revisions", 20), 20) or 20
+WIKI_MAX_SLUG_DEPTH = _positive_int(WIKI_CFG.get("max_slug_depth", 4), 4) or 4
+WIKI_HOME_SLUG = str(WIKI_CFG.get("home_slug", "home") or "home")
 
 # ---------- 第三方登录（OAuth） ----------
 # 端点硬编码在 oauth/service.py，这里只放凭据与开关；凭据留空即未配置
