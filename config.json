@@ -139,6 +139,13 @@
     "page_size": 50,
     "max_height_px": 280
   },
+  "wiki": {
+    "max_page_kb": 512,
+    "max_pages": 500,
+    "max_revisions": 20,
+    "max_slug_depth": 4,
+    "home_slug": "home"
+  },
   "oauth": {
     "enabled": false,
     "auto_register": true,
@@ -187,6 +194,7 @@
     "note_images": true,
     "note_attachments": true,
     "comments": true,
+    "wiki": false,
     "oauth_github": false,
     "oauth_google": false,
     "oauth_microsoft": false,

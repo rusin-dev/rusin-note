@@ -1,0 +1,12 @@
+{# 目录树递归渲染：调用前需 set current_slug #}
+{% macro wiki_tree(nodes) %}
+<ul class="wiki-tree">
+    {% for node in nodes %}
+    <li>
+        <a href="/docs/{{ node.slug }}"{% if node.slug == current_slug %} class="active" aria-current="page"{% endif %}>{{ node.title|e }}</a>
+        {% if node.children %}{{ wiki_tree(node.children) }}{% endif %}
+    </li>
+    {% endfor %}
+</ul>
+{% endmacro %}
+{% if tree %}{{ wiki_tree(tree) }}{% else %}<div class="empty">{{ t('wiki_empty') }}</div>{% endif %}

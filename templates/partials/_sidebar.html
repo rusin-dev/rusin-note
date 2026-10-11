@@ -17,6 +17,11 @@
             <i class="fa-solid fa-share-nodes" aria-hidden="true"></i><span class="side-text">{{ t('nav_share_mgmt') }}</span>
         </a>
         {% endif %}
+        {% if feature_enabled('wiki') and not simple_mode %}
+        <a {{ nav_attrs('/docs', 'side-link', false, ['/admin/wiki'])|safe }} href="/docs" title="{{ t('nav_wiki') }}">
+            <i class="fa-solid fa-book" aria-hidden="true"></i><span class="side-text">{{ t('nav_wiki') }}</span>
+        </a>
+        {% endif %}
         <a {{ nav_attrs('/user/' ~ current_user ~ '/settings', 'side-link')|safe }} href="/user/{{ current_user|e }}/settings" title="{{ t('nav_settings') }}">
             <i class="fa-solid fa-gear" aria-hidden="true"></i><span class="side-text">{{ t('nav_settings') }}</span>
         </a>

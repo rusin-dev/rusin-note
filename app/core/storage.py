@@ -64,6 +64,8 @@ KV_FILE_MAP = {
     "shares.json": "shares.json",
     "benben:posts": "benben.json",
     "comments:all": "comments.json",
+    "wiki:pages": "wiki_pages.json",
+    "wiki:revisions": "wiki_revisions.json",
     "note_tags": "note_tags.json",
     "note_folders": "note_folders.json",
     "note_pins": "note_pins.json",

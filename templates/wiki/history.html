@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block extra_head %}
+<style>{% include "wiki/_wiki_css.html" %}</style>
+{{ latex_head|safe }}
+{% endblock %}
+{% block content %}
+<div class="wiki-page-head">
+    <h1>{{ t('wiki_history') }} · {{ page.title|e }}</h1>
+    <div class="wiki-actions">
+        <a class="wiki-btn" href="/docs/{{ slug }}">{{ t('wiki_back_to_page') }}</a>
+        <a class="wiki-btn" href="/admin/wiki/edit/{{ slug }}">{{ t('wiki_edit_page') }}</a>
+    </div>
+</div>
+{% if msg %}<div class="wiki-msg">{{ msg|e }}</div>{% endif %}
+<div class="wiki-meta">/docs/{{ slug }}{% if updated_str %} · {{ t('wiki_updated_meta', user=page.updated_by|e, time=updated_str) }}{% endif %}</div>
+{% if revisions %}
+{% for rev in revisions %}
+<details class="wiki-rev">
+    <summary>
+        <strong>{{ rev.title|e or page.title|e }}</strong>
+        <span class="rev-meta">{{ rev.by|e }} · {{ rev.time_str }}</span>
+        <span class="wiki-rev-actions">
+            <button type="submit" form="rollback-{{ rev.id }}" class="wiki-btn"
+                    onclick="return confirm('{{ t('wiki_rollback_confirm') }}');">
+                <i class="fa-solid fa-clock-rotate-left" aria-hidden="true"></i>{{ t('wiki_rollback') }}
+            </button>
+        </span>
+    </summary>
+    <div class="wiki-rev-body markdown-body">{{ rev.content_html|safe }}</div>
+</details>
+<form id="rollback-{{ rev.id }}" method="post" action="/admin/wiki/rollback/{{ slug }}" hidden>
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="rev_id" value="{{ rev.id }}">
+</form>
+{% endfor %}
+{% else %}
+<div class="wiki-empty">{{ t('wiki_no_revisions') }}</div>
+{% endif %}
+{% endblock %}

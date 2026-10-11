@@ -174,6 +174,17 @@
 
    内容支持 Markdown 与 LaTeX 公式（`$...$` / `$$...$$`，依赖 `latex_render` 开关），发布表单带实时预览（客户端 marked.js 渲染，预览同样过滤危险标签与链接）；渲染时经 bleach 安全清洗防止 XSS；每页显示 `page_size` 条，通过「加载更多」分批加载，加载与发布均受请求速率限制（GET/POST 限流），发布还受单用户冷却限制（`cooldown_seconds`）。登录用户可点击动态右上角的「回复」，以 `|| @用户名: 原内容` 覆盖填入发布框。
 
+## 内置 Web wiki
+
+- `wiki` 内置文档站（`/docs` 公开浏览，`/admin/wiki` 管理维护，受 `wiki` 功能开关控制，默认关闭）。仅功能开关管理员（`admin_users` / `RUSIN_ADMIN`）可新建/编辑/移动/删除页面与回滚版本，非管理员访问管理路由一律 404；页面内容为 Markdown，渲染与笔记同一套 bleach 清洗管线，支持 LaTeX（依赖 `latex_render` 开关）。
+   - `max_page_kb`：单页 Markdown 原文大小上限（KB），默认 `512`；
+   - `max_pages`：全站页面数上限，默认 `500`；
+   - `max_revisions`：每页保留的修订版本数，默认 `20`（最新在前，超出丢弃最旧；回滚时当前版本也会存入历史）；
+   - `max_slug_depth`：slug 层级深度上限（以 `/` 分隔，如 `deploy/vercel`），默认 `4`；每段仅允许字母、数字、`-`、`_` 且以字母或数字开头；
+   - `home_slug`：`/docs` 首页对应的页面 slug，默认 `home`；该页面不存在时 `/docs` 展示全部页面的目录树。
+
+   页面存于存储后端 KV 键 `wiki:pages`，修订历史存 `wiki:revisions`（file 后端即数据目录下 `wiki_pages.json` / `wiki_revisions.json`）。移动页面会级联迁移其子页面与修订历史；存在子页面的页面不可直接删除。
+
 ## 密码策略
 
 - `password_policy`：密码策略，定义访客密码的复杂度要求。  
