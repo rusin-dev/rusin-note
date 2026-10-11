@@ -31,7 +31,7 @@ def world_new():
     return redirect(url_for("world.world_note_get", note_id=new_id))
 
 
-@bp.route("/world/<note_id>", methods=["GET"])
+@bp.route("/world/<note_id>", methods=["GET"], strict_slashes=False)
 @require_feature("world_notes")
 @limiter.limit(lambda: f"{config.GET_RATE_MAX} per {config.GET_RATE_WINDOW} second")
 def world_note_get(note_id):

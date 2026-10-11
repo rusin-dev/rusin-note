@@ -3,7 +3,8 @@
 覆盖：分享浏览量批量落盘不丢增量、删笔记级联失效分享与评论板、评论目标必须
 真实存在、验证码登录同样受 TOTP 第二因素约束、/lang 不回跳站外、功能开关缺省
 值回退到 DEFAULT_CONFIG、组织邀请码越权与删组织残留、Markdown 代码块二次转义
-与表格对齐丢失、删除路由容忍尾斜杠、犇犇/评论 max-height 真实渲染。
+与表格对齐丢失、删除路由容忍尾斜杠、公开笔记页 /world/<id>/ 容忍尾斜杠（#225）、
+犇犇/评论 max-height 真实渲染。
 
 运行：``pytest tests/test_regression_fixes.py``
 """
@@ -235,6 +236,18 @@ class TestMarkdownRendering:
         html = render_markdown_html('<img src=x onerror="alert(1)">\n\n[链接](javascript:alert(1))\n')
         expect("onerror" not in html, "事件属性被清洗")
         expect("javascript:" not in html, "危险协议被清洗")
+
+
+class TestWorldTrailingSlash:
+    """Issue #225：/world/<id> 带尾斜杠直接 404，加 strict_slashes=False 容忍"""
+
+    def test_world_note_accepts_trailing_slash(self, ctx):
+        logger.info("=== 公开笔记页同时接受带/不带尾斜杠 ===")
+        notes.write_note("public", "reg225slash", "尾斜杠公开笔记")
+        expect(ctx.anon.get("/world/reg225slash").status_code == 200,
+               "不带尾斜杠正常打开")
+        expect(ctx.anon.get("/world/reg225slash/").status_code == 200,
+               "带尾斜杠同样直接打开（Issue #225）")
 
 
 class TestContentMaxHeight:
