@@ -1,3 +1,4 @@
+rusin是牙膏
 > [!IMPORTANT]
 >
 > 注：如果您是 rusin-dev（本组织）的成员，想要贡献，请参见[协作指南](https://github.com/rusin-dev/rusin-note?tab=contributing-ov-file)并查看 [todo](https://github.com/rusin-dev/rusin-note/blob/main/docs/todo.md)，如果您不是本组织的，可以加入或开个 Issue。
