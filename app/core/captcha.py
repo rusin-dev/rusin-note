@@ -14,12 +14,53 @@ import time
 from app.core.storage import StorageError, storage
 
 K_CAPTCHAS = "login_captchas"
-CODE_LENGTH = 4
+CODE_LENGTH = 6
 TTL_SECONDS = 600
 _TOKEN_RE = re.compile(r"^[0-9a-f]{16,64}$")
 # 去混淆字符集（排除 O/0、I/1/l 等易混字符）
 _ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
 _COLORS = ("#0e8a6d", "#2fae8b", "#1a7f37", "#353740", "#546271")
+_GLYPHS = {
+    "A": (((0, 16), (5, 0), (10, 16)), ((2, 10), (8, 10))),
+    "B": (((0, 0), (0, 16)), ((0, 0), (6, 0), (10, 4), (6, 8), (0, 8)),
+          ((6, 8), (10, 12), (6, 16), (0, 16))),
+    "C": (((10, 2), (7, 0), (3, 0), (0, 4), (0, 12), (3, 16), (7, 16), (10, 14)),),
+    "D": (((0, 0), (0, 16)), ((0, 0), (5, 0), (10, 5), (10, 11), (5, 16), (0, 16))),
+    "E": (((10, 0), (0, 0), (0, 16), (10, 16)), ((0, 8), (8, 8))),
+    "F": (((0, 16), (0, 0), (10, 0)), ((0, 8), (8, 8))),
+    "G": (((10, 2), (7, 0), (3, 0), (0, 4), (0, 12), (3, 16), (7, 16),
+           (10, 12), (10, 9), (6, 9)),),
+    "H": (((0, 0), (0, 16)), ((10, 0), (10, 16)), ((0, 8), (10, 8))),
+    "J": (((10, 0), (10, 12), (7, 16), (3, 16), (0, 13)),),
+    "K": (((0, 0), (0, 16)), ((10, 0), (0, 9), (10, 16))),
+    "M": (((0, 16), (0, 0), (5, 8), (10, 0), (10, 16)),),
+    "N": (((0, 16), (0, 0), (10, 16), (10, 0)),),
+    "P": (((0, 16), (0, 0), (6, 0), (10, 4), (6, 8), (0, 8)),),
+    "Q": (((5, 0), (1, 3), (0, 8), (1, 13), (5, 16), (9, 13), (10, 8), (9, 3), (5, 0)),
+          ((6, 12), (11, 17))),
+    "R": (((0, 16), (0, 0), (6, 0), (10, 4), (6, 8), (0, 8)), ((5, 8), (10, 16))),
+    "S": (((10, 2), (7, 0), (3, 0), (0, 4), (1, 7), (8, 9), (10, 12),
+           (7, 16), (3, 16), (0, 14)),),
+    "T": (((0, 0), (10, 0)), ((5, 0), (5, 16))),
+    "U": (((0, 0), (0, 12), (3, 16), (7, 16), (10, 12), (10, 0)),),
+    "V": (((0, 0), (5, 16), (10, 0)),),
+    "W": (((0, 0), (2, 16), (5, 9), (8, 16), (10, 0)),),
+    "X": (((0, 0), (10, 16)), ((10, 0), (0, 16))),
+    "Y": (((0, 0), (5, 8), (10, 0)), ((5, 8), (5, 16))),
+    "Z": (((0, 0), (10, 0), (0, 16), (10, 16)),),
+    "2": (((0, 4), (3, 0), (7, 0), (10, 4), (9, 8), (0, 16), (10, 16)),),
+    "3": (((0, 2), (3, 0), (7, 0), (10, 4), (7, 8), (3, 8)),
+          ((7, 8), (10, 12), (7, 16), (3, 16), (0, 14))),
+    "4": (((8, 16), (8, 0), (0, 11), (10, 11)),),
+    "5": (((10, 0), (1, 0), (0, 8), (6, 7), (10, 10), (8, 15), (3, 16), (0, 14)),),
+    "6": (((9, 1), (5, 0), (1, 4), (0, 11), (3, 16), (7, 16),
+           (10, 12), (8, 8), (3, 8), (0, 11)),),
+    "7": (((0, 0), (10, 0), (3, 16)),),
+    "8": (((5, 0), (1, 2), (1, 6), (5, 8), (9, 6), (9, 2), (5, 0)),
+          ((5, 8), (0, 11), (1, 15), (5, 16), (9, 15), (10, 11), (5, 8))),
+    "9": (((10, 8), (7, 8), (2, 7), (0, 4), (3, 0), (7, 0),
+           (10, 4), (9, 12), (5, 16), (1, 15)),),
+}
 
 _lock = threading.Lock()
 
@@ -85,36 +126,63 @@ def peek(token: str) -> str:
     return ""
 
 
+def _jitter(amount: float) -> float:
+    return (secrets.randbelow(2001) - 1000) * amount / 1000
+
+
+def _stroke_path(points) -> str:
+    commands = [f"M{points[0][0]} {points[0][1]}"]
+    for start, end in zip(points, points[1:]):
+        cx = (start[0] + end[0]) / 2 + _jitter(1.2)
+        cy = (start[1] + end[1]) / 2 + _jitter(1.2)
+        commands.append(f"Q{cx:.2f} {cy:.2f} {end[0]} {end[1]}")
+    return " ".join(commands)
+
+
 def render_svg(code: str) -> str:
-    """把验证码字符渲染为带旋转/噪点/干扰线的 SVG 标记（可直接内联到页面）。"""
-    width, height = 132, 44
+    """把验证码字符渲染为随机变形的矢量路径，避免 SVG 文本节点泄露答案。"""
+    width, height = 168, 48
     parts = [
         f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" '
         f'viewBox="0 0 {width} {height}" role="img" aria-hidden="true">',
         f'<rect width="{width}" height="{height}" rx="8" fill="#eef2f0"/>',
     ]
-    for _ in range(3):
+    for _ in range(5):
         x1, y1 = secrets.randbelow(width), secrets.randbelow(height)
         x2, y2 = secrets.randbelow(width), secrets.randbelow(height)
         cx, cy = secrets.randbelow(width), secrets.randbelow(height)
-        stroke = secrets.choice(_COLORS)
         parts.append(
             f'<path d="M{x1} {y1} Q{cx} {cy} {x2} {y2}" fill="none" '
-            f'stroke="{stroke}" stroke-opacity="0.35" stroke-width="1.4"/>')
-    for _ in range(24):
+            f'stroke="{secrets.choice(_COLORS)}" stroke-opacity="0.28" stroke-width="1.2"/>')
+    for _ in range(42):
         cx, cy = secrets.randbelow(width), secrets.randbelow(height)
-        fill = secrets.choice(_COLORS)
-        parts.append(f'<circle cx="{cx}" cy="{cy}" r="1" fill="{fill}" fill-opacity="0.3"/>')
-    step = (width - 26) / max(len(code), 1)
-    for i, ch in enumerate(code):
-        x = 15 + i * step + secrets.randbelow(7) - 3
-        y = 29 + secrets.randbelow(9) - 4
-        rot = secrets.randbelow(50) - 25
-        size = 21 + secrets.randbelow(5)
-        fill = secrets.choice(_COLORS)
+        radius = 6 + secrets.randbelow(9)
         parts.append(
-            f'<text x="{x:.1f}" y="{y:.1f}" font-family="Verdana,Arial,sans-serif" '
-            f'font-size="{size}" font-weight="bold" fill="{fill}" '
-            f'transform="rotate({rot} {x:.1f} {y:.1f})">{ch}</text>')
+            f'<circle cx="{cx}" cy="{cy}" r="{radius / 10:.1f}" '
+            f'fill="{secrets.choice(_COLORS)}" fill-opacity="0.28"/>')
+    step = (width - 20) / max(len(code), 1)
+    for i, ch in enumerate(code):
+        x = 10 + (i + 0.5) * step + _jitter(1.5)
+        y = height / 2 + _jitter(2.5)
+        rotation = secrets.randbelow(45) - 22
+        skew = secrets.randbelow(29) - 14
+        scale_x = (95 + secrets.randbelow(31)) / 100
+        scale_y = (115 + secrets.randbelow(26)) / 100
+        stroke_width = (15 + secrets.randbelow(6)) / 10
+        parts.append(
+            f'<g transform="translate({x:.2f} {y:.2f}) rotate({rotation}) skewX({skew}) '
+            f'scale({scale_x:.2f} {scale_y:.2f}) translate(-5 -8)" fill="none" '
+            f'stroke="{secrets.choice(_COLORS)}" stroke-width="{stroke_width:.1f}" '
+            'stroke-linecap="round" stroke-linejoin="round">')
+        for stroke in _GLYPHS[ch]:
+            parts.append(f'<path d="{_stroke_path(stroke)}"/>')
+        parts.append("</g>")
+    for _ in range(2):
+        x1, y1 = secrets.randbelow(width), secrets.randbelow(height)
+        x2, y2 = secrets.randbelow(width), secrets.randbelow(height)
+        cx, cy = secrets.randbelow(width), secrets.randbelow(height)
+        parts.append(
+            f'<path d="M{x1} {y1} Q{cx} {cy} {x2} {y2}" fill="none" '
+            f'stroke="{secrets.choice(_COLORS)}" stroke-opacity="0.2" stroke-width="1"/>')
     parts.append("</svg>")
     return "".join(parts)

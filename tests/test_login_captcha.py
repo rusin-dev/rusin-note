@@ -26,6 +26,13 @@ _TOKEN_RE = re.compile(r'name="captcha_token"[^>]*value="([^"]+)"')
 USER = "capuser"
 
 
+def test_svg_does_not_expose_plaintext_answer():
+    svg = captcha_mod.render_svg("A2B3C4")
+    expect("<text" not in svg, "验证码字符不使用可读取的 SVG text 元素")
+    expect(all(f">{char}<" not in svg for char in "A2B3C4"),
+           "SVG 文本节点不泄露任何答案字符")
+
+
 def _login_with(client, username, password, code, token=None):
     html = client.get("/login").get_data(as_text=True)
     m = _TOKEN_RE.search(html)
@@ -62,7 +69,7 @@ class TestLoginCaptcha:
         html = ctx.client.get("/login").get_data(as_text=True)
         token = _TOKEN_RE.search(html).group(1)
         code = captcha_mod.peek(token).upper()
-        expect(len(code) == 4, "peek 取到 4 位答案")
+        expect(len(code) == 6, "peek 取到 6 位答案")
         resp = _login_with(ctx.client, USER, DEFAULT_PASSWORD, code, token=token)
         expect(resp.status_code in (200, 302), "大写提交登录成功")
         expect(ctx.client.get(f"/user/{USER}").status_code == 200, "会话已建立")
