@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+    .notif-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 18px; }
+    .notif-head h1 { margin: 0; border: 0; padding: 0; }
+    .notif-list { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+    .notif-item { display: flex; align-items: flex-start; gap: 14px; padding: 16px 18px; border: 1px solid var(--card-border); border-radius: 12px; background: var(--card-bg); }
+    .notif-item.unread { border-color: var(--link); box-shadow: inset 3px 0 0 var(--link); }
+    .notif-item-main { flex: 1; min-width: 0; }
+    .notif-item-title { display: inline-flex; align-items: center; gap: 8px; color: var(--text); font-weight: 600; text-decoration: none; }
+    .notif-item-title:hover { color: var(--link); }
+    .notif-item-body { margin-top: 5px; color: var(--muted); font-size: 14px; line-height: 1.55; word-break: break-word; }
+    .notif-item-time { flex-shrink: 0; color: var(--muted); font-size: 12px; }
+    .notif-read-form { flex-shrink: 0; }
+    .notif-read-btn { width: auto; padding: 5px 10px; font-size: 12px; border-radius: 7px; }
+    .notif-empty { color: var(--muted); padding: 28px 0; }
+    .notif-mark-all { width: auto; padding: 7px 14px; font-size: 13px; border-radius: 8px; }
+    @media (max-width: 640px) {
+        .notif-head { align-items: flex-start; }
+        .notif-item { flex-wrap: wrap; }
+        .notif-item-time { width: 100%; }
+    }
+</style>
+<div class="notif-head">
+    <h1>{{ t('notifications_title') }}</h1>
+    {% if unread %}
+    <form method="POST" action="/user/{{ username|e }}/notifications/read">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="all" value="1">
+        <button type="submit" class="notif-mark-all">{{ t('notifications_mark_all') }}</button>
+    </form>
+    {% endif %}
+</div>
+{% if items %}
+<ul class="notif-list">
+    {% for item in items %}
+    <li class="notif-item{{ '' if item.read else ' unread' }}">
+        <div class="notif-item-main">
+            {% if item.url %}
+            <a class="notif-item-title" href="{{ item.url|e }}">{{ item.title|e }}</a>
+            {% else %}
+            <span class="notif-item-title">{{ item.title|e }}</span>
+            {% endif %}
+            {% if item.body %}<div class="notif-item-body">{{ item.body|e }}</div>{% endif %}
+        </div>
+        <time class="notif-item-time">{{ item.created_at|format_note_time }}</time>
+        {% if not item.read %}
+        <form class="notif-read-form" method="POST" action="/user/{{ username|e }}/notifications/read">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="id" value="{{ item.id|e }}">
+            <button type="submit" class="notif-read-btn">{{ t('notifications_mark_read') }}</button>
+        </form>
+        {% endif %}
+    </li>
+    {% endfor %}
+</ul>
+{% else %}
+<div class="notif-empty">{{ t('notifications_empty') }}</div>
+{% endif %}
+{% endblock %}

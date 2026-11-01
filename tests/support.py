@@ -16,7 +16,7 @@ DEFAULT_PASSWORD = "TestPass1!"
 _CSRF_RE = re.compile(r'name="csrf_token"[^>]*value="([^"]+)"')
 # 列表页中笔记链接（排除 /new、/images、/attachments、/settings、/shares 等入口）
 _ENTRY_IDS = {"new", "images", "attachments", "settings", "shares", "todos",
-              "export", "import"}
+              "export", "import", "notifications", "gitee"}
 
 
 def expect(condition, message: str) -> None:

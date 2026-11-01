@@ -221,6 +221,26 @@
    - `timeout_seconds`：向各 Provider 发起 HTTP 请求的超时（秒），默认 `10`；
    - `providers.<github|google|microsoft|wechat|qq>`：各平台凭据，分别填 `client_id`/`client_secret`（Microsoft 另可填 `tenant`，微信/QQ 为 `app_id`/`app_secret`）；留空即视为未配置，登录页不展示对应按钮。
 
+## OAuth / OIDC 授权服务
+
+- `oauth_server` Rusin-Note 作为受限 OIDC Provider（管理员在 `/admin/oauth-clients` 审核注册客户端）。
+   - `issuer`：对外权威 issuer（如 `https://note.example.com`）。生产环境应显式配置，避免反向代理 Host 头影响 discovery/JWT；留空时使用请求站点。
+   - `authorization_code_ttl_seconds` / `access_token_ttl_seconds` / `id_token_ttl_seconds`：授权码、不透明 access token 与 ID Token 有效期，默认 300 / 3600 / 300 秒。
+   - 端点：`/.well-known/openid-configuration`、`/.well-known/jwks.json`、`/oauth/authorize`、`/oauth/token`、`/oauth/userinfo`、`/oauth/revoke`。
+   - 仅支持 Authorization Code + 强制 S256 PKCE；不签发 refresh token。Scope 仅有 `openid`、`profile`、`email`，不授予笔记读写。
+   - ID Token 使用持久化 RSA 密钥以 RS256 签名，JWKS 仅暴露公钥；access token 只存哈希且可撤销。Client Secret 仅创建/轮换时显示一次，服务端存哈希。
+   - 运行时还须开启功能开关 `oauth_server`；关闭后所有 OIDC 端点返回 404。
+
+## Gitee 仓库双向同步
+
+- `gitee_sync` 个人私有笔记与 Gitee 仓库的双向同步（运行时还须开启功能开关 `gitee_sync`）。
+   - `client_id` / `client_secret`：站点在 Gitee 创建的 OAuth 应用凭据；回调地址填写 `https://你的站点/gitee/callback`。未填写时管理页只显示“未配置”；
+   - `scope`：默认 `user_info projects pull_requests hook`，分别用于读取账号、读写仓库、创建冲突 PR 和自动注册 Webhook；
+   - `timeout_seconds`：Gitee API 请求超时，默认 `10` 秒；
+   - `poll_seconds`：Webhook 不可用时的轮询周期，默认 `300` 秒；
+   - `max_notes` / `max_file_kb`：单次同步笔记数与单个 Markdown 文件大小上限，默认 `1000` / `2048`。
+   - 同步只读取和修改用户所选目录内的 `notes/*.md`、`conflicts/*` 与 `rusin-note.json`；Token 仅存服务端。站内与仓库同时修改且无法自动合并时会创建 `rusin-sync/conflict/*` 分支和 PR，同时生成站内冲突副本并发送通知。
+
 ## 2FA / 邮箱 / 手机验证
 
 - `security` 2FA / 邮箱 / 手机验证。
@@ -232,7 +252,7 @@
 ## 功能开关
 
 - `features` / `admin_users` 功能开关（#90）。
-   - `features`：各功能的**默认开关**。当前 `config.json` 显式配置了 `world_notes`（公开笔记与短链）、`benben`（犇犇动态）、`share_links`（分享链接）、`open_register`（开放注册）、`note_tags`（笔记标签）、`note_folders`（笔记文件夹）、`note_pins`（笔记置顶）、`heading_anchors`（Markdown 标题锚点）、`markdown_alerts`（Markdown 提示卡片）、`note_images`（笔记图床）、`note_attachments`（笔记附件）、`comments`（评论系统）以及 `oauth_github`/`oauth_google`/`oauth_microsoft`/`oauth_wechat`/`oauth_qq`/`two_factor_auth`/`email_verify`/`phone_verify` 共 20 项（后 8 项默认 `false`）。
+   - `features`：各功能的**默认开关**。当前 `config.json` 显式配置了 `world_notes`（公开笔记与短链）、`benben`（犇犇动态）、`share_links`（分享链接）、`open_register`（开放注册）、`note_tags`（笔记标签）、`note_folders`（笔记文件夹）、`note_pins`（笔记置顶）、`heading_anchors`（Markdown 标题锚点）、`markdown_alerts`（Markdown 提示卡片）、`note_images`（笔记图床）、`note_attachments`（笔记附件）、`comments`（评论系统）以及 `oauth_github`/`oauth_google`/`oauth_microsoft`/`oauth_wechat`/`oauth_qq`/`gitee_sync`/`oauth_server`/`two_factor_auth`/`email_verify`/`phone_verify` 共 22 项（后 10 项默认 `false`）。`gitee_sync` 还需在 `gitee_sync` 配置段填写 OAuth 应用凭据。
 
      **优先级**：`note_refs`、`latex_render`、`code_highlight`、`avatar`、`note_images`、`note_attachments`、`comments` 这 7 个「历史功能」的默认值**始终取自各自配置段**（如 `images.enabled`、`attachments.enabled`、`comments.enabled`），本段中的同名项不生效；其余功能未在本段配置时默认启用（含 `orgs`）。第三方登录平台的展示还需 `oauth.enabled` 为 `true` 且在 `oauth.providers` 中填好凭据。
    - `admin_users`：功能开关管理员用户名列表；也可用环境变量 `RUSIN_ADMIN` 指定（多个用户名逗号分隔，两者取并集）。

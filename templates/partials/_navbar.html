@@ -42,6 +42,7 @@
         <span class="nav-links">
             <a {{ nav_attrs('/user/' ~ current_user ~ '/', 'nav-link', false, ['/user/' ~ current_user ~ '/settings', '/user/' ~ current_user ~ '/shares/']) |safe }} href="/user/{{ current_user|e }}/"><i class="fa-solid fa-file-lines" aria-hidden="true"></i>{{ t('nav_my_notes') }}</a>
             <a {{ nav_attrs('/user/' ~ current_user ~ '/new', 'nav-link nav-icon-btn')|safe }} href="/user/{{ current_user|e }}/new" title="{{ t('nav_new_note') }}" aria-label="{{ t('nav_new_note') }}"><i class="fa-solid fa-square-plus" aria-hidden="true"></i><span class="nav-icon-label">{{ t('nav_new_note') }}</span></a>
+            <a {{ nav_attrs('/user/' ~ current_user ~ '/notifications')|safe }} href="/user/{{ current_user|e }}/notifications"><i class="fa-solid fa-bell" aria-hidden="true"></i>{{ t('nav_notifications') }}<span class="notif-badge" id="navNotifBadge" aria-hidden="true" hidden></span></a>
             <a {{ nav_attrs('/user/' ~ current_user ~ '/settings')|safe }} href="/user/{{ current_user|e }}/settings"><i class="fa-solid fa-gear" aria-hidden="true"></i>{{ t('nav_settings') }}</a>
             {% if feature_enabled('wiki') %}<a {{ nav_attrs('/docs', 'nav-link', false, ['/admin/wiki'])|safe }} href="/docs"><i class="fa-solid fa-book" aria-hidden="true"></i>{{ t('nav_wiki') }}</a>{% endif %}
             <form action="/logout" method="POST" style="display:inline">
@@ -123,5 +124,21 @@
     });
     window.addEventListener('resize', function () { if (!menu.hidden) position(); });
     window.addEventListener('scroll', function () { if (!menu.hidden) position(); }, true);
+})();
+(function () {
+    var badge = document.getElementById('navNotifBadge');
+    if (!badge) return;
+    var username = {{ current_user|tojson }};
+    fetch('/user/' + encodeURIComponent(username) + '/notifications/unread', {
+        headers: { 'Accept': 'application/json' }
+    }).then(function (response) {
+        if (!response.ok) return null;
+        return response.json();
+    }).then(function (data) {
+        var count = data && Number(data.count);
+        if (!count) return;
+        badge.textContent = count > 99 ? '99+' : String(count);
+        badge.hidden = false;
+    }).catch(function () {});
 })();
 </script>

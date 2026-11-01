@@ -185,6 +185,21 @@ DEFAULT_CONFIG = {
             "qq": {"app_id": "", "app_secret": ""},
         },
     },
+    "gitee_sync": {                           # Gitee 仓库双向同步（OAuth 应用凭据）
+        "client_id": "",
+        "client_secret": "",
+        "scope": "user_info projects pull_requests hook",
+        "timeout_seconds": 10,
+        "poll_seconds": 300,
+        "max_notes": 1000,
+        "max_file_kb": 2048,
+    },
+    "oauth_server": {                         # Rusin-Note 作为 OIDC Provider
+        "issuer": "",                         # 留空时按请求站点生成
+        "authorization_code_ttl_seconds": 300,
+        "access_token_ttl_seconds": 3600,
+        "id_token_ttl_seconds": 300,
+    },
     "security": {                             # 2FA / 邮箱 / 手机号验证
         "code_length": 6,                      # 验证码长度
         "code_ttl_seconds": 600,               # 验证码有效期（秒）
@@ -222,6 +237,8 @@ DEFAULT_CONFIG = {
         "oauth_microsoft": False,
         "oauth_wechat": False,
         "oauth_qq": False,
+        "gitee_sync": False,
+        "oauth_server": False,
         "login_captcha": True,
         "two_factor_auth": False,
         "email_verify": False,
@@ -651,6 +668,42 @@ except (TypeError, ValueError):
 _OAUTH_PROVIDERS_CFG = OAUTH_CFG.get("providers", {}) or {}
 if not isinstance(_OAUTH_PROVIDERS_CFG, dict):
     _OAUTH_PROVIDERS_CFG = {}
+
+# ---------- Gitee 仓库双向同步 ----------
+GITEE_SYNC_CFG = config.get("gitee_sync", DEFAULT_CONFIG["gitee_sync"])
+GITEE_SYNC_CLIENT_ID = str(GITEE_SYNC_CFG.get("client_id", "") or "").strip()
+GITEE_SYNC_CLIENT_SECRET = str(GITEE_SYNC_CFG.get("client_secret", "") or "").strip()
+GITEE_SYNC_SCOPE = str(GITEE_SYNC_CFG.get(
+    "scope", "user_info projects pull_requests hook") or "").strip()
+
+
+def _sync_positive_int(key: str, default: int) -> int:
+    try:
+        return max(1, int(GITEE_SYNC_CFG.get(key, default)))
+    except (TypeError, ValueError):
+        return default
+
+
+GITEE_SYNC_TIMEOUT_SECONDS = _sync_positive_int("timeout_seconds", 10)
+GITEE_SYNC_POLL_SECONDS = _sync_positive_int("poll_seconds", 300)
+GITEE_SYNC_MAX_NOTES = _sync_positive_int("max_notes", 1000)
+GITEE_SYNC_MAX_FILE_KB = _sync_positive_int("max_file_kb", 2048)
+
+# ---------- OIDC Provider ----------
+OAUTH_SERVER_CFG = config.get("oauth_server", DEFAULT_CONFIG["oauth_server"])
+OAUTH_SERVER_ISSUER = str(OAUTH_SERVER_CFG.get("issuer", "") or "").strip().rstrip("/")
+
+
+def _oauth_server_ttl(key: str, default: int) -> int:
+    try:
+        return max(30, int(OAUTH_SERVER_CFG.get(key, default)))
+    except (TypeError, ValueError):
+        return default
+
+
+OAUTH_SERVER_CODE_TTL = _oauth_server_ttl("authorization_code_ttl_seconds", 300)
+OAUTH_SERVER_ACCESS_TOKEN_TTL = _oauth_server_ttl("access_token_ttl_seconds", 3600)
+OAUTH_SERVER_ID_TOKEN_TTL = _oauth_server_ttl("id_token_ttl_seconds", 300)
 
 # ---------- 2FA / 验证码 ----------
 SECURITY_CFG = config.get("security", DEFAULT_CONFIG["security"])

@@ -10,10 +10,13 @@ from app.apps.auth.views import bp as auth_bp
 from app.apps.benben.views import bp as benben_bp
 from app.apps.comments.views import bp as comments_bp
 from app.apps.email.views import bp as email_bp
+from app.apps.gitee_sync.views import bp as gitee_sync_bp
 from app.apps.home.views import bp as home_bp
 from app.apps.images.views import bp as images_bp
 from app.apps.notes.views import bp as notes_bp
+from app.apps.notifications.views import bp as notifications_bp
 from app.apps.oauth.views import bp as oauth_bp
+from app.apps.oauth_server.views import bp as oauth_server_bp
 from app.apps.org.views import bp as org_bp
 from app.apps.share.views import bp as share_bp
 from app.apps.static.views import bp as static_bp
@@ -29,6 +32,9 @@ def register_blueprints(app: Flask) -> None:
     app.register_blueprint(auth_bp)
     app.register_blueprint(benben_bp)
     app.register_blueprint(static_bp)
+    app.register_blueprint(notifications_bp)
+    app.register_blueprint(gitee_sync_bp)
+    app.register_blueprint(oauth_server_bp)
     app.register_blueprint(notes_bp)
     app.register_blueprint(images_bp)
     app.register_blueprint(attachments_bp)

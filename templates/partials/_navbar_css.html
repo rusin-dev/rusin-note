@@ -54,6 +54,13 @@
         .navbar .nav-links a.active::after { opacity: 1; transform: scaleX(1); }
         .navbar .nav-links .nav-icon-btn::after { left: 10px; right: 10px; }
         .navbar .nav-links i { font-size: 13px; }
+        .navbar .nav-links .notif-badge {
+            min-width: 17px; height: 17px; padding: 0 5px; margin-left: 5px;
+            display: inline-flex; align-items: center; justify-content: center;
+            border-radius: 999px; background: var(--error); color: #fff;
+            font-size: 10px; font-weight: 700; line-height: 1;
+        }
+        .navbar .nav-links .notif-badge[hidden] { display: none; }
         /* 图标入口（新建笔记 / 分享管理）：文字常显，无悬浮展开动效（悬浮只发光） */
         .navbar .nav-links .nav-icon-btn { gap: 6px; padding: 6px 12px; }
         .navbar .nav-links .nav-icon-btn .nav-icon-label {

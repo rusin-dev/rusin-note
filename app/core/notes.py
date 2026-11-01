@@ -86,11 +86,13 @@ def _get_note_lock(username: str, note_id: str) -> Lock:
         return lock
 
 
-def write_note(username: str, note_id: str, content: str, cascade: bool = True) -> bool:
+def write_note(username: str, note_id: str, content: str, cascade: bool = True,
+               origin: str = "user") -> bool:
     """写入笔记；content 为空串表示删除。
 
     cascade=False 跳过分享/评论级联：改名流程会按旧用户名删除笔记副本，而此时
     分享/评论尚未迁移，级联会把待迁移的数据一起删掉（见 user.service._delete_notes）。
+    origin="gitee" 标记同步回写，避免再次进入同步队列。
     """
     if not _namespace_ok(username) or not validate_note_id(note_id):
         return False
@@ -110,6 +112,9 @@ def write_note(username: str, note_id: str, content: str, cascade: bool = True) 
             from app.core.store import delete_comments_for_note, delete_shares_for_note
             delete_shares_for_note(username, note_id)
             delete_comments_for_note(username, note_id)
+    if ok:
+        from app.core.sync_hooks import emit
+        emit(username, note_id, not bool(content), origin)
     return ok
 
 

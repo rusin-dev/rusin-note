@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+    .oidc-consent { max-width: 560px; margin: 48px auto; border: 1px solid var(--card-border); border-radius: 14px; background: var(--card-bg); padding: 28px; }
+    .oidc-app-icon { width: 52px; height: 52px; display: flex; align-items: center; justify-content: center; border-radius: 13px; background: var(--card-icon-bg); color: var(--link); font-size: 22px; }
+    .oidc-consent h1 { border: 0; padding: 0; margin: 16px 0 6px; font-size: 23px; }
+    .oidc-muted { color: var(--muted); font-size: 14px; line-height: 1.6; }
+    .oidc-scopes { list-style: none; margin: 20px 0; padding: 14px 16px; border: 1px solid var(--card-border); border-radius: 10px; background: var(--bg); }
+    .oidc-scopes li { display: flex; gap: 9px; align-items: flex-start; padding: 7px 0; font-size: 14px; }
+    .oidc-scopes i { color: var(--link); margin-top: 3px; }
+    .oidc-actions { display: flex; gap: 10px; margin-top: 22px; }
+    .oidc-actions button { width: auto; padding: 9px 20px; border-radius: 9px; }
+    .oidc-actions .approve { background: var(--link); border-color: var(--link); color: #fff; }
+    .oidc-actions .deny { margin-left: auto; }
+    .oidc-signed-in { margin-top: 16px; font-size: 12px; color: var(--muted); }
+</style>
+<div class="oidc-consent">
+    <div class="oidc-app-icon"><i class="fa-solid fa-id-card" aria-hidden="true"></i></div>
+    <h1>{{ t('oidc_consent_title', app=client.name) }}</h1>
+    <div class="oidc-muted">{{ t('oidc_consent_desc') }}</div>
+    <ul class="oidc-scopes">
+        {% for scope in scopes %}
+        <li>
+            <i class="fa-solid fa-circle-check" aria-hidden="true"></i>
+            <span>
+                {% if scope == 'openid' %}{{ t('oidc_scope_openid') }}
+                {% elif scope == 'profile' %}{{ t('oidc_scope_profile') }}
+                {% else %}{{ t('oidc_scope_email') }}{% endif %}
+            </span>
+        </li>
+        {% endfor %}
+    </ul>
+    <form method="POST" action="/oauth/authorize">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="request_id" value="{{ request_id|e }}">
+        <div class="oidc-actions">
+            <button class="approve" name="decision" value="approve" type="submit">{{ t('oidc_approve') }}</button>
+            <button class="deny" name="decision" value="deny" type="submit">{{ t('oidc_deny') }}</button>
+        </div>
+    </form>
+    <div class="oidc-signed-in">{{ t('oidc_signed_in_as', username=signed_in_as) }}</div>
+</div>
+{% endblock %}
