@@ -30,6 +30,9 @@ from app.core.prefs import get_simple_mode, set_simple_mode  # noqa: F401  向�
 from app.apps.todos.service import rename_user_todos
 from app.apps.twofa.service import rename_user_two_factor
 from app.apps.email.service import rename_user_contacts
+from app.apps.gitee_sync.store import rename_user_gitee
+from app.apps.notifications.service import rename_user_notifications
+from app.apps.oauth_server.service import rename_user_oauth_server
 from app.apps.oauth.service import rename_user_oauth
 
 logger = create_logger("user_settings")
@@ -189,6 +192,12 @@ def rename_user(old: str, new: str, password: str):
     if not rename_user_contacts(old, new):
         return ("err_settings_rename_failed", {})
     if not rename_user_oauth(old, new):
+        return ("err_settings_rename_failed", {})
+    if not rename_user_gitee(old, new):
+        return ("err_settings_rename_failed", {})
+    if not rename_user_notifications(old, new):
+        return ("err_settings_rename_failed", {})
+    if not rename_user_oauth_server(old, new):
         return ("err_settings_rename_failed", {})
 
     # 3) 清理旧命名空间笔记（此时删除钩子已无旧标签/文件夹/置顶可清）

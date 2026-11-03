@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+    .oidc-admin-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+    .oidc-admin-head h1 { margin: 0; border: 0; padding: 0; }
+    .oidc-panel { margin-top: 18px; padding: 20px; border: 1px solid var(--card-border); border-radius: 12px; background: var(--card-bg); }
+    .oidc-panel h2 { margin: 0 0 12px; border: 0; padding: 0; font-size: 17px; }
+    .oidc-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    .oidc-form-grid textarea { min-height: 90px; font-family: Consolas, Monaco, monospace; font-size: 13px; }
+    .oidc-scope-row { display: flex; gap: 18px; flex-wrap: wrap; margin: 10px 0 16px; }
+    .oidc-scope-row label { display: inline-flex; align-items: center; gap: 7px; }
+    .oidc-btn { display: inline-flex; width: auto; padding: 7px 14px; border-radius: 8px; align-items: center; justify-content: center; text-decoration: none; }
+    .oidc-btn.primary { background: var(--link); border-color: var(--link); color: #fff; }
+    .oidc-btn.danger { color: var(--error); border-color: var(--error); }
+    .oidc-client { padding: 15px 16px; border: 1px solid var(--card-border); border-radius: 10px; margin-top: 10px; background: var(--bg); }
+    .oidc-client-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    .oidc-client-name { font-weight: 600; }
+    .oidc-client-meta { margin-top: 6px; color: var(--muted); font-size: 12px; line-height: 1.7; word-break: break-all; }
+    .oidc-client-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+    .oidc-secret { margin-top: 16px; padding: 14px 16px; border: 1px solid #d29922; border-radius: 10px; background: #fff8e6; color: #5d4300; word-break: break-all; }
+    .oidc-alert { margin-top: 14px; padding: 11px 14px; border: 1px solid var(--error); border-radius: 9px; color: var(--error); }
+    @media (max-width: 720px) { .oidc-form-grid { grid-template-columns: 1fr; } .oidc-admin-head { flex-direction: column; } }
+</style>
+<div class="oidc-admin-head">
+    <div>
+        <h1>{{ t('oidc_admin_title') }}</h1>
+        <div class="oidc-muted">{{ t('oidc_admin_desc') }}</div>
+    </div>
+</div>
+{% if error %}<div class="oidc-alert">{{ t(error) }}</div>{% endif %}
+{% if secret_once %}
+<div class="oidc-secret">
+    <strong>{{ t('oidc_secret_once') }}</strong><br>
+    <span>{{ secret_once.client_id|e }}</span><br>
+    <code>{{ secret_once.secret|e }}</code><br>
+    <small>{{ t('oidc_secret_once_hint') }}</small>
+</div>
+{% endif %}
+
+<div class="oidc-panel">
+    <h2>{{ t('oidc_new_client') }}</h2>
+    <form method="POST" action="/admin/oauth-clients">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="action" value="create">
+        <div class="oidc-form-grid">
+            <label>{{ t('oidc_client_name') }}<input name="name" required maxlength="100" autocomplete="off"></label>
+            <label>{{ t('oidc_client_type') }}
+                <select name="client_type">
+                    <option value="confidential">{{ t('oidc_confidential') }}</option>
+                    <option value="public">{{ t('oidc_public') }}</option>
+                </select>
+            </label>
+        </div>
+        <label style="margin-top:14px;">{{ t('oidc_redirect_uris') }}<textarea name="redirect_uris" required placeholder="https://app.example/callback"></textarea></label>
+        <div class="oidc-scope-row">
+            <span class="oidc-muted">{{ t('oidc_scopes') }}:</span>
+            <label><input type="checkbox" checked disabled>openid</label>
+            <label><input type="checkbox" name="scope_profile" value="1" checked>profile</label>
+            <label><input type="checkbox" name="scope_email" value="1">email</label>
+        </div>
+        <button class="oidc-btn primary" type="submit">{{ t('oidc_create_client') }}</button>
+    </form>
+</div>
+
+<div class="oidc-panel">
+    <h2>{{ t('oidc_clients') }} ({{ clients|length }})</h2>
+    {% for client in clients %}
+    <div class="oidc-client">
+        <div class="oidc-client-head">
+            <span class="oidc-client-name">{{ client.name|e }}</span>
+            <span class="oidc-muted">{% if client.enabled %}{{ t('oidc_enabled') }}{% else %}{{ t('oidc_disabled') }}{% endif %}</span>
+        </div>
+        <div class="oidc-client-meta">
+            client_id: <code>{{ client.client_id|e }}</code><br>
+            {{ t('oidc_client_type') }}: {{ client.client_type|e }} · {{ t('oidc_scopes') }}: {{ client.allowed_scopes|join(' ') }}<br>
+            {{ t('oidc_redirect_uris') }}: {{ client.redirect_uris|join(', ') }}<br>
+            {% if client.last_used_at %}{{ t('oidc_last_used') }}: {{ client.last_used_at|format_note_time }}{% endif %}
+        </div>
+        <div class="oidc-client-actions">
+            <form method="POST" action="/admin/oauth-clients">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="client_id" value="{{ client.client_id|e }}">
+                <input type="hidden" name="action" value="{{ 'disable' if client.enabled else 'enable' }}">
+                <button class="oidc-btn" type="submit">{{ t('oidc_disable') if client.enabled else t('oidc_enable') }}</button>
+            </form>
+            {% if client.client_type == 'confidential' %}
+            <form method="POST" action="/admin/oauth-clients">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="client_id" value="{{ client.client_id|e }}">
+                <input type="hidden" name="action" value="rotate">
+                <button class="oidc-btn" type="submit">{{ t('oidc_rotate_secret') }}</button>
+            </form>
+            {% endif %}
+            <form method="POST" action="/admin/oauth-clients">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="client_id" value="{{ client.client_id|e }}">
+                <input type="hidden" name="action" value="delete">
+                <button class="oidc-btn danger" type="submit">{{ t('oidc_delete_client') }}</button>
+            </form>
+        </div>
+    </div>
+    {% else %}
+    <p class="oidc-muted">{{ t('oidc_no_clients') }}</p>
+    {% endfor %}
+</div>
+{% endblock %}
