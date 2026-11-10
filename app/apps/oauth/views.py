@@ -143,8 +143,9 @@ def callback(provider):
         session["pending_2fa"] = {"u": username, "t": time.time()}
         return redirect("/login/2fa")
 
+    from app.core import login_next
     token_value = create_session(username)
-    resp = redirect("/")
+    resp = redirect(login_next.consume())
     set_session_cookie(resp, token_value)
     return resp
 

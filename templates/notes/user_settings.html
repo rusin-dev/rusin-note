@@ -84,6 +84,27 @@
 </div>
 {% endif %}
 
+{% if gitee_sync_feature %}
+<div class="settings-section">
+    <h2>{{ t('settings_gitee_sync') }}</h2>
+    <p class="desc">{{ t('settings_gitee_sync_desc') }}</p>
+    <div class="security-links">
+        <a href="{{ url_for('gitee_sync.manage', username=username) }}">
+            <i class="fa-brands fa-git-alt" aria-hidden="true"></i>
+            {% if gitee_connection and gitee_connection.repo.name %}
+            {{ gitee_connection.repo.owner }}/{{ gitee_connection.repo.name }}
+            {% else %}
+            {{ t('gitee_sync_connect') }}
+            {% endif %}
+        </a>
+        <a href="{{ url_for('notifications.notifications_get', username=username) }}">
+            <i class="fa-solid fa-bell" aria-hidden="true"></i>
+            {{ t('notifications_title') }}
+        </a>
+    </div>
+</div>
+{% endif %}
+
 <div class="settings-section">
     <h2>{{ t('settings_password') }}</h2>
     <p class="desc">{{ t('settings_password_desc') if has_password else t('settings_password_set_desc') }}</p>

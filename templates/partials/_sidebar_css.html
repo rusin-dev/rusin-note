@@ -47,6 +47,13 @@
         }
         .side-link i { width: 18px; flex-shrink: 0; text-align: center; font-size: 13px; }
         .side-link .side-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .side-link .notif-badge {
+            min-width: 17px; height: 17px; padding: 0 5px; margin-left: auto;
+            display: inline-flex; align-items: center; justify-content: center;
+            border-radius: 999px; background: var(--error); color: #fff;
+            font-size: 10px; font-weight: 700; line-height: 1; flex-shrink: 0;
+        }
+        .side-link .notif-badge[hidden] { display: none; }
         .side-link:hover { background: var(--card-bg); color: var(--text); text-decoration: none; box-shadow: var(--glow-shadow); }
         .side-link:active { background: var(--card-bg); }
         .side-link::after {

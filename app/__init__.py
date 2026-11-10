@@ -88,7 +88,8 @@ def create_app() -> Flask:
     app = Flask(
         __name__,
         template_folder=os.path.join(os.path.dirname(os.path.dirname(__file__)), "templates"),
-        static_folder=None,
+        static_folder="static",
+        static_url_path="/static",
     )
 
     # 注册 Jinja filter：format_note_time（将 Unix 时间戳格式化为可读时间）

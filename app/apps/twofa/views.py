@@ -14,6 +14,7 @@ from app.core.auth import create_session, set_session_cookie
 from app.core.extensions import limiter
 from app.core.feature_flags import require_feature
 from app.core.i18n import t
+from app.core import login_next
 from app.core.notes import validate_username
 from app.apps.common.helpers import require_auth
 from app.apps.twofa import service
@@ -68,7 +69,7 @@ def challenge_post():
                                error=t(lang, "err_2fa_invalid")), 401
     _clear_pending()
     token = create_session(username)
-    resp = redirect("/")
+    resp = redirect(login_next.consume())
     set_session_cookie(resp, token)
     return resp
 

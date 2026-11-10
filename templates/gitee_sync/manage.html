@@ -1,0 +1,150 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+    .gitee-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 18px; }
+    .gitee-head h1 { margin: 0; border: 0; padding: 0; }
+    .gitee-card { padding: 20px; margin-bottom: 16px; border: 1px solid var(--card-border); border-radius: 12px; background: var(--card-bg); }
+    .gitee-card h2 { margin: 0 0 12px; border: 0; padding: 0; font-size: 17px; }
+    .gitee-muted { color: var(--muted); font-size: 14px; line-height: 1.6; }
+    .gitee-alert { padding: 12px 16px; margin-bottom: 16px; border-radius: 9px; border: 1px solid var(--card-border); background: var(--bg); }
+    .gitee-alert.error { border-color: var(--error); color: var(--error); }
+    .gitee-alert.success { border-color: var(--link); color: var(--link); }
+    .gitee-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 15px; }
+    .gitee-grid input { margin-top: 5px; }
+    .gitee-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px; }
+    .gitee-actions form { width: auto; }
+    .gitee-btn { display: inline-flex; align-items: center; justify-content: center; width: auto; padding: 9px 16px; border-radius: 9px; text-decoration: none; }
+    .gitee-btn.primary { background: var(--link); border-color: var(--link); color: #fff; }
+    .gitee-btn.danger { color: var(--error); border-color: var(--error); }
+    .gitee-meta { display: flex; flex-wrap: wrap; gap: 8px 20px; color: var(--muted); font-size: 14px; }
+    .gitee-repos { list-style: none; margin-top: 14px; display: grid; gap: 8px; }
+    .gitee-repos li { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; border: 1px solid var(--card-border); border-radius: 8px; }
+    .gitee-conflict { padding: 14px 16px; border: 1px solid var(--error); border-radius: 9px; margin-top: 10px; background: var(--bg); }
+    .gitee-conflict code { font-size: 13px; }
+    .gitee-conflict-links { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 10px; }
+    .gitee-conflict-links a { color: var(--link); }
+    @media (max-width: 640px) {
+        .gitee-head { align-items: flex-start; flex-direction: column; }
+        .gitee-grid { grid-template-columns: 1fr; }
+    }
+</style>
+<div class="gitee-head">
+    <div>
+        <h1>{{ t('gitee_sync_title') }}</h1>
+        <div class="gitee-muted">{{ t('gitee_sync_desc') }}</div>
+    </div>
+</div>
+
+{% if saved %}<div class="gitee-alert success">{{ t('gitee_sync_saved_' ~ saved) }}</div>{% endif %}
+{% if error %}<div class="gitee-alert error">{% if error.startswith('Gitee:') %}{{ error|e }}{% else %}{{ t(error) }}{% endif %}</div>{% endif %}
+
+{% if not configured %}
+<div class="gitee-card">
+    <h2>{{ t('gitee_sync_not_configured') }}</h2>
+    <div class="gitee-muted">{{ t('gitee_sync_not_configured_hint') }}</div>
+</div>
+{% elif not connection %}
+<div class="gitee-card">
+    <h2>{{ t('gitee_sync_connect_title') }}</h2>
+    <div class="gitee-muted">{{ t('gitee_sync_connect_hint') }}</div>
+    <div class="gitee-actions">
+        <a class="gitee-btn primary" href="/user/{{ username|e }}/gitee/connect">{{ t('gitee_sync_connect') }}</a>
+    </div>
+</div>
+{% elif not connection.repo.name %}
+<div class="gitee-card">
+    <h2>{{ t('gitee_sync_choose_repo') }}</h2>
+    <div class="gitee-muted">{{ t('gitee_sync_connected_as', name=connection.profile.display or connection.profile.login or '') }}</div>
+    <form method="POST" action="/user/{{ username|e }}/gitee/setup">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="gitee-grid">
+            <label>{{ t('gitee_sync_owner') }}<input name="owner" required maxlength="100" autocomplete="off" placeholder="octocat"></label>
+            <label>{{ t('gitee_sync_repo') }}<input name="repo" required maxlength="100" autocomplete="off" placeholder="notes"></label>
+            <label>{{ t('gitee_sync_branch') }}<input name="branch" required maxlength="100" value="master" autocomplete="off"></label>
+            <label>{{ t('gitee_sync_directory') }}<input name="directory" required maxlength="260" value="rusin-note" autocomplete="off"></label>
+        </div>
+        <div class="gitee-actions">
+            <button class="gitee-btn primary" type="submit">{{ t('gitee_sync_save_repo') }}</button>
+            <a class="gitee-btn" href="?repos=1">{{ t('gitee_sync_fetch_repos') }}</a>
+        </div>
+    </form>
+    {% if repo_error %}<div class="gitee-alert error">{% if repo_error.startswith('Gitee') or repo_error.startswith('Gitee:') %}{{ repo_error|e }}{% else %}{{ t(repo_error) }}{% endif %}</div>{% endif %}
+    {% if repos %}
+    <ul class="gitee-repos">
+        {% for repo in repos %}
+        <li>
+            <span><strong>{{ repo.full_name|e }}</strong>{% if repo.private %} · {{ t('gitee_sync_private') }}{% endif %}</span>
+            <form method="POST" action="/user/{{ username|e }}/gitee/setup">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="owner" value="{{ repo.owner|e }}">
+                <input type="hidden" name="repo" value="{{ repo.name|e }}">
+                <input type="hidden" name="branch" value="{{ repo.default_branch|e }}">
+                <input type="hidden" name="directory" value="rusin-note">
+                <button class="gitee-btn" type="submit">{{ t('gitee_sync_select_repo') }}</button>
+            </form>
+        </li>
+        {% endfor %}
+    </ul>
+    {% elif request.args.get('repos') == '1' and not repo_error %}
+    <div class="gitee-muted">{{ t('gitee_sync_no_repos') }}</div>
+    {% endif %}
+</div>
+{% else %}
+<div class="gitee-card">
+    <h2>{{ t('gitee_sync_connected_repo') }}</h2>
+    <div class="gitee-meta">
+        <span><strong>{{ connection.repo.owner|e }}/{{ connection.repo.name|e }}</strong></span>
+        <span>{{ t('gitee_sync_branch') }}: {{ connection.repo.branch|e }}</span>
+        <span>{{ t('gitee_sync_directory') }}: {{ connection.repo.directory|e }}</span>
+        <span>{{ t('gitee_sync_webhook') }}:
+            {% if connection.webhook_state == 'active' %}{{ t('gitee_sync_webhook_active') }}
+            {% elif connection.webhook_state == 'failed' %}{{ t('gitee_sync_webhook_failed') }}
+            {% else %}{{ t('gitee_sync_webhook_none') }}{% endif %}
+        </span>
+        <span>{{ t('gitee_sync_last_sync') }}:
+            {% if connection.last_sync %}{{ connection.last_sync|format_note_time }}{% else %}{{ t('gitee_sync_never') }}{% endif %}
+        </span>
+    </div>
+    {% if connection.last_error %}<div class="gitee-alert error">{{ connection.last_error|e }}</div>{% endif %}
+    <div class="gitee-actions">
+        <form method="POST" action="/user/{{ username|e }}/gitee/sync">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button class="gitee-btn primary" type="submit">{{ t('gitee_sync_sync_now') }}</button>
+        </form>
+        <form method="POST" action="/user/{{ username|e }}/gitee/disconnect" data-confirm="{{ t('gitee_sync_disconnect_confirm')|e }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button class="gitee-btn danger" type="submit">{{ t('gitee_sync_disconnect') }}</button>
+        </form>
+    </div>
+</div>
+{% if conflicts %}
+<div class="gitee-card">
+    <h2>{{ t('gitee_sync_conflicts') }}</h2>
+    <div class="gitee-muted">{{ t('gitee_sync_conflicts_hint') }}</div>
+    {% for conflict in conflicts %}
+    <div class="gitee-conflict">
+        <div>{{ t('gitee_sync_conflict_note') }}: <code>{{ conflict.note_id|e }}</code></div>
+        {% if conflict.copy_id %}<div class="gitee-muted">{{ t('gitee_sync_conflict_copy') }}: <a href="/user/{{ username|e }}/{{ conflict.copy_id|e }}">{{ conflict.copy_id|e }}</a></div>{% endif %}
+        {% if conflict.error %}<div class="gitee-alert error">{{ conflict.error|e }}</div>{% endif %}
+        <div class="gitee-conflict-links">
+            {% if conflict.pr_url %}<a href="{{ conflict.pr_url|e }}" target="_blank" rel="noopener noreferrer">{{ t('gitee_sync_open_pr') }}</a>{% endif %}
+            <form method="POST" action="/user/{{ username|e }}/gitee/conflict/{{ conflict.note_id|e }}/retry">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button class="gitee-btn" type="submit">{{ t('gitee_sync_retry') }}</button>
+            </form>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+{% endif %}
+<script>
+(function () {
+    var form = document.querySelector('form[data-confirm]');
+    if (!form) return;
+    form.addEventListener('submit', function (event) {
+        if (!window.confirm(form.getAttribute('data-confirm') || '')) event.preventDefault();
+    });
+})();
+</script>
+{% endblock %}

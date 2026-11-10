@@ -220,6 +220,26 @@ This document lists every `config.json` setting and environment variable, its me
     - `update_interval_hours`: update-check interval, default `6`;
     - `update_stale_days`: minimum age of `last_update` before fetching upstream, default `3`.
 
+## OAuth / OIDC provider
+
+- `oauth_server`: exposes Rusin-Note as a restricted OIDC provider. Administrators register reviewed clients at `/admin/oauth-clients`.
+   - `issuer`: canonical public issuer such as `https://note.example.com`. Set it explicitly in production so proxy Host headers cannot alter discovery or token issuer; when empty, the request origin is used.
+   - `authorization_code_ttl_seconds` / `access_token_ttl_seconds` / `id_token_ttl_seconds`: authorization-code, opaque access-token and ID-token lifetimes; defaults `300` / `3600` / `300`.
+   - Endpoints: `/.well-known/openid-configuration`, `/.well-known/jwks.json`, `/oauth/authorize`, `/oauth/token`, `/oauth/userinfo`, `/oauth/revoke`.
+   - Authorization Code with mandatory S256 PKCE only; no refresh tokens. Supported scopes are `openid`, `profile`, `email`; notes APIs are not exposed.
+   - ID tokens are RS256-signed by a persisted RSA key; JWKS exposes only public parameters. Access tokens are stored as hashes and can be revoked. Client secrets are shown once and stored as hashes.
+   - The `oauth_server` feature flag must also be enabled; when disabled all OIDC endpoints return 404.
+
+## Gitee repository sync
+
+- `gitee_sync`: two-way sync for private notes with a Gitee repository (also enable the `gitee_sync` feature flag at runtime).
+   - `client_id` / `client_secret`: Gitee OAuth application credentials. Set the callback URL to `https://your-site/gitee/callback`; leaving these empty shows an unconfigured state.
+   - `scope`: defaults to `user_info projects pull_requests hook` for account lookup, repository writes, conflict PRs and automatic webhook registration.
+   - `timeout_seconds`: Gitee API timeout, default `10`.
+   - `poll_seconds`: polling fallback interval when Webhook delivery is unavailable, default `300`.
+   - `max_notes` / `max_file_kb`: per-sync note count and per-file Markdown size limits, defaults `1000` / `2048`.
+   - Only `notes/*.md`, `conflicts/*` and `rusin-note.json` inside the selected directory are managed. Tokens stay server-side. If both sides changed and cannot be merged, a `rusin-sync/conflict/*` branch and PR are created together with a local conflict copy and notification.
+
 ## Feature flags
 
 - `features` / `admin_users` feature flags (#90).

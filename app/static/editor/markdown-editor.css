@@ -1,0 +1,222 @@
+#richTextEditor {
+    display: none;
+    flex: 1 1 auto;
+    min-height: 0;
+    background: var(--bg);
+}
+
+#noteContent {
+    flex: 1 1 auto;
+    width: 100%;
+    min-height: 0;
+    border: 0;
+    padding: 20px 24px;
+    resize: none;
+    outline: none;
+    background: var(--bg);
+    color: var(--text);
+    font: 16px/1.7 Consolas, Monaco, "Courier New", monospace;
+}
+
+#noteForm.editor-enhanced #richTextEditor {
+    display: flex;
+    flex-direction: column;
+}
+
+#noteForm.editor-enhanced #noteContent {
+    display: none;
+}
+
+#noteForm.editor-enhanced.source-mode #richTextEditor {
+    display: none;
+}
+
+#noteForm.editor-enhanced.source-mode #noteContent {
+    display: block;
+}
+
+.editor-header-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 12px;
+    min-width: 0;
+}
+
+.editor-mode-btn {
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 3px 10px;
+    background: var(--btn-bg);
+    color: var(--text);
+    font: 12px/1.4 inherit;
+    cursor: pointer;
+    text-transform: none;
+    letter-spacing: 0;
+}
+
+.editor-mode-btn:hover,
+.editor-mode-btn:focus-visible {
+    border-color: var(--link);
+    color: var(--link);
+    outline: none;
+}
+
+#richTextEditor.vditor,
+#richTextEditor .vditor {
+    height: 100% !important;
+    min-height: 0;
+    border: 0;
+    border-radius: 0;
+    background: var(--bg);
+    color: var(--text);
+}
+
+#richTextEditor .vditor-toolbar {
+    flex: 0 0 auto;
+    min-height: 38px;
+    padding: 4px 12px;
+    border-bottom: 1px solid var(--navbar-border);
+    background: var(--navbar-bg);
+    overflow-x: auto;
+    scrollbar-width: thin;
+}
+
+#richTextEditor .vditor-toolbar__item {
+    padding: 0 2px;
+}
+
+#richTextEditor .vditor-toolbar__item button {
+    color: var(--muted);
+}
+
+#richTextEditor .vditor-toolbar__item button:hover,
+#richTextEditor .vditor-toolbar__item button:focus-visible {
+    color: var(--link);
+    background: var(--btn-hover);
+}
+
+#richTextEditor .vditor-content {
+    flex: 1 1 auto;
+    min-height: 0;
+    background: var(--bg);
+}
+
+#richTextEditor .vditor-reset {
+    min-height: 100%;
+    padding: 20px 24px !important;
+    color: var(--text);
+    font: 16px/1.7 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    caret-color: var(--link);
+}
+
+#richTextEditor .vditor-reset:focus {
+    outline: none;
+}
+
+#richTextEditor .vditor-reset h1,
+#richTextEditor .vditor-reset h2,
+#richTextEditor .vditor-reset h3 {
+    border-bottom: 1px solid var(--heading-border);
+    padding-bottom: 6px;
+}
+
+#richTextEditor .vditor-reset a {
+    color: var(--link);
+}
+
+#richTextEditor .vditor-reset blockquote {
+    border-left-color: var(--quote-border);
+    color: var(--quote-text);
+}
+
+#richTextEditor .vditor-reset pre,
+#richTextEditor .vditor-reset code {
+    background-color: var(--code-bg);
+}
+
+#richTextEditor .vditor-reset pre code {
+    background: transparent;
+}
+
+#richTextEditor .vditor-reset img {
+    max-width: 100%;
+}
+
+#richTextEditor .vditor-outline {
+    border-left: 1px solid var(--navbar-border);
+    background: var(--card-bg);
+    color: var(--text);
+}
+
+#richTextEditor .vditor-tip,
+#richTextEditor .vditor-hint,
+#richTextEditor .vditor-panel {
+    color: var(--text);
+}
+
+#richTextEditor .vditor-hint {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--card-bg);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, .12);
+}
+
+.editor-ref-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    max-width: min(420px, 80vw);
+}
+
+.editor-ref-id {
+    color: var(--link);
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.editor-ref-title {
+    overflow: hidden;
+    color: var(--text);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.simple-mode #richTextEditor .vditor-toolbar {
+    display: none;
+}
+
+@media (max-width: 768px) {
+    #richTextEditor .vditor-toolbar {
+        padding-inline: 8px;
+    }
+
+    #richTextEditor .vditor-toolbar__item button {
+        min-width: 36px;
+        min-height: 36px;
+    }
+
+    #richTextEditor .vditor-reset,
+    #noteContent {
+        padding: 16px 18px !important;
+        font-size: 15px;
+    }
+
+    #richTextEditor .vditor-outline {
+        display: none;
+    }
+}
+
+@media (max-width: 640px) {
+    .editor-header-actions {
+        gap: 8px;
+    }
+
+    .editor-header-actions .md-manual {
+        display: none;
+    }
+
+    .editor-mode-btn {
+        min-height: 30px;
+        padding-inline: 12px;
+    }
+}

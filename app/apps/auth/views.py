@@ -19,6 +19,7 @@ from app.core.auth import (
 from app.core.extensions import limiter
 from app.core.feature_flags import feature_enabled, require_feature
 from app.core.i18n import LANG_COOKIE, t
+from app.core import login_next
 from app.core.notes import RESERVED_USERNAMES, validate_username
 from app.core.store import get_user, register_user
 from app.core.middleware import get_session_token
@@ -88,6 +89,7 @@ def logout():
     token = get_session_token()
     if token:
         delete_session(token)
+    login_next.clear()
     resp = make_response(redirect("/"))
     clear_session_cookie(resp)
     return resp
@@ -157,8 +159,8 @@ def register_post():
         return _fail(t(lang, "err_username_taken"))
 
     token = create_session(username)
-    # 注册后直接进入工作台首页（而不是编辑器）
-    resp = make_response(redirect("/"))
+    # 注册后回跳到发起登录的站内页面，默认进入工作台首页
+    resp = make_response(redirect(login_next.consume()))
     set_session_cookie(resp, token)
     return resp
 
@@ -200,7 +202,7 @@ def login_post():
         return redirect("/login/2fa")
 
     token = create_session(username)
-    # 登录后跳转到工作台样式的首页
-    resp = make_response(redirect("/"))
+    # 登录后回跳到发起登录的站内页面，默认进入工作台首页
+    resp = make_response(redirect(login_next.consume()))
     set_session_cookie(resp, token)
     return resp

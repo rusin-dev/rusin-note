@@ -57,12 +57,14 @@ FEATURES = [
     {"key": "open_register", "icon": "fa-user-plus", "group": "account"}, # 开放注册
     {"key": "avatar", "icon": "fa-user", "group": "account"},
     {"key": "orgs", "icon": "fa-users", "group": "account"},              # 组织/团队协作
+    {"key": "gitee_sync", "icon": "fa-cloud-arrow-up", "group": "account"},  # Gitee 仓库双向同步
     # 第三方登录：需先在 oauth.providers 填凭据，未配置则开关打开也不展示
     {"key": "oauth_github", "icon": "fa-code-branch", "group": "security"},
     {"key": "oauth_google", "icon": "fa-g", "group": "security"},
     {"key": "oauth_microsoft", "icon": "fa-windows", "group": "security"},
     {"key": "oauth_wechat", "icon": "fa-comment-dots", "group": "security"},
     {"key": "oauth_qq", "icon": "fa-comment", "group": "security"},
+    {"key": "oauth_server", "icon": "fa-id-card", "group": "security"},  # OIDC Provider
     # 双因素 / 联系方式验证
     {"key": "login_captcha", "icon": "fa-shield-halved", "group": "security"},   # 登录图形验证码（SVG，纯标准库）
     {"key": "two_factor_auth", "icon": "fa-shield-halved", "group": "security"},

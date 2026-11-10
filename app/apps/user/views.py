@@ -82,9 +82,12 @@ def _render_settings(username, error, saved=""):
     from app.apps.twofa import service as twofa_service
     from app.apps.email import service as email_service
     from app.apps.oauth import service as oauth_service
+    from app.apps.gitee_sync import service as gitee_sync_service
 
     user = get_user(username) or {}
     contacts = email_service.get_contacts(username)
+    gitee_connection = gitee_sync_service.public_connection(
+        gitee_sync_service.get_connection(username))
     return render_template(
         "notes/user_settings.html",
         username=username,
@@ -102,4 +105,6 @@ def _render_settings(username, error, saved=""):
         phone_contact=contacts.get("phone"),
         oauth_providers=oauth_service.available_providers(),
         oauth_accounts=oauth_service.get_user_accounts(username),
+        gitee_sync_feature=feature_enabled("gitee_sync"),
+        gitee_connection=gitee_connection,
     )

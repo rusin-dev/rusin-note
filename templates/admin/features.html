@@ -25,5 +25,9 @@
     {% endfor %}
     <button type="submit" style="margin-top: 8px; max-width: 240px;">{{ t('admin_features_submit') }}</button>
 </form>
-<p style="margin-top: 24px;"><a href="/count">{{ t('nav_stats') }}</a> · <a href="/">{{ t('back_home') }}</a></p>
+<p style="margin-top: 24px;">
+    <a href="/count">{{ t('nav_stats') }}</a>
+    {% if feature_enabled('oauth_server') %} · <a href="/admin/oauth-clients">{{ t('oidc_admin_title') }}</a>{% endif %}
+    · <a href="/">{{ t('back_home') }}</a>
+</p>
 {% endblock %}

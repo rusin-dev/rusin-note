@@ -5,68 +5,61 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ full_title|e }}</title>
     <link rel="icon" href="/favicon.ico" type="image/x-icon">
-    <link rel="preload" href="{{ config.GLOBAL_CDN }}/npm/@fortawesome/fontawesome-free@6.5.2/webfonts/fa-solid-900.woff2" as="font" type="font/woff2" crossorigin>
-    <link rel="preload" href="{{ config.GLOBAL_CDN }}/npm/@fortawesome/fontawesome-free@6.5.2/webfonts/fa-brands-400.woff2" as="font" type="font/woff2" crossorigin>
-    <link rel="stylesheet" href="{{ config.GLOBAL_CDN }}/npm/@fortawesome/fontawesome-free@6.5.2/css/all.min.css" media="print" onload="this.media='all'">
-    <noscript><link rel="stylesheet" href="{{ config.GLOBAL_CDN }}/npm/@fortawesome/fontawesome-free@6.5.2/css/all.min.css"></noscript>
-    <script defer src="{{ config.GLOBAL_CDN }}/npm/marked@12.0.2/marked.min.js"></script>
-    <script defer src="{{ config.GLOBAL_CDN }}/npm/dompurify@3.1.7/dist/purify.min.js"></script>
-    {{ latex_head|safe }}
-    {{ code_highlight_head|safe }}
-    {{ heading_anchors_head|safe }}
-    {{ markdown_alerts_head|safe }}
+    <link rel="preload" href="{{ url_for('static', filename='vendor/fontawesome/webfonts/fa-solid-900.woff2') }}" as="font" type="font/woff2" crossorigin>
+    <link rel="preload" href="{{ url_for('static', filename='vendor/fontawesome/webfonts/fa-brands-400.woff2') }}" as="font" type="font/woff2" crossorigin>
+    <link rel="stylesheet" href="{{ url_for('static', filename='vendor/fontawesome/css/all.min.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='vendor/vditor/index.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='editor/markdown-editor.css') }}">
+    <script>
+        window.RUSIN_EDITOR_CONFIG = {{ {
+            'assetBase': url_for('static', filename='vendor/vditor'),
+            'lang': lang,
+            'placeholder': t('note_content_placeholder'),
+            'imagesApi': note_images_api or '',
+            'noteRefs': note_refs or none,
+            'l10n': {
+                'sourceMode': t('note_source_mode'),
+                'richMode': t('note_rich_mode')
+            }
+        }|tojson }};
+    </script>
+    <script defer src="{{ url_for('static', filename='vendor/vditor/index.min.js') }}"></script>
+    <script defer src="{{ url_for('static', filename='editor/markdown-editor.js') }}"></script>
     <style>
         {{ theme_vars|safe }}
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { background: var(--bg); color: var(--text); height: 100vh; overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif; }
+        body { background: var(--bg); color: var(--text); height: 100vh; height: 100dvh; overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
         {% include "partials/_navbar_css.html" %}
         {% include "partials/_page_transition_css.html" %}
-        /* note_edit 布局：导航栏固定在顶部，编辑器占满视口 */
         .navbar { position: fixed; top: 0; left: 0; right: 0; z-index: 30; }
-
-        .editor-shell { position: fixed; top: 0; left: 0; right: 0; bottom: 0; padding-top: 50px; display: flex; }
-        .pane { display: flex; flex-direction: column; min-width: 0; flex: 1 1 0; }
-        .pane.editor-pane { border-right: 1px solid var(--navbar-border); }
-        .pane.preview-pane { background: var(--bg); }
-        .pane-header { height: 34px; padding: 0 16px; font-size: 12px; color: var(--muted); border-bottom: 1px solid var(--navbar-border); background: var(--navbar-bg); text-transform: uppercase; letter-spacing: 0.5px; flex: 0 0 auto; display: flex; align-items: center; }
-        textarea { flex: 1; width: 100%; border: none; padding: 20px 24px; font-size: 16px; line-height: 1.7; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif; resize: none; outline: none; background: var(--bg); color: var(--text); }
-        .preview-body { flex: 1; overflow-y: auto; padding: 20px 24px; font-size: 16px; line-height: 1.7; word-break: break-word; }
-        .preview-empty { color: var(--muted); font-style: italic; }
-
-        /* 右下角悬浮按钮列：保存 / 附件 / 评论 / 删除自下而上堆叠，条件渲染的按钮缺席时整列自动收紧 */
+        .editor-shell { position: fixed; inset: 0; padding-top: calc(var(--nav-h, 50px) + 8px); display: flex; }
+        .pane { display: flex; flex: 1 1 auto; flex-direction: column; min-width: 0; min-height: 0; }
+        .pane-header { height: 38px; padding: 0 16px; font-size: 12px; color: var(--muted); border-bottom: 1px solid var(--navbar-border); background: var(--navbar-bg); text-transform: uppercase; letter-spacing: .5px; flex: 0 0 auto; display: flex; align-items: center; }
+        .editor-header { justify-content: space-between; gap: 12px; }
+        #noteForm { display: flex; flex: 1 1 auto; flex-direction: column; min-height: 0; }
+        .md-manual { color: var(--link); text-decoration: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-transform: none; letter-spacing: 0; }
+        .md-manual:hover { text-decoration: underline; }
         .floating-rail { position: fixed; bottom: 24px; right: 24px; z-index: 10; display: flex; flex-direction: column-reverse; align-items: flex-end; gap: 10px; }
-        .save-btn { background: var(--btn-bg); border: 1px solid var(--navbar-border); padding: 8px 20px; border-radius: 20px; font-size: 14px; color: var(--text); cursor: pointer; backdrop-filter: blur(4px); transition: all 0.2s; font-weight: 500; }
-        .save-btn:hover { background: var(--btn-hover); box-shadow: var(--glow-shadow); border-color: var(--glow-ring); }
-        .save-btn:active { background: var(--border); }
+        .save-btn, .attachment-btn { background: var(--btn-bg); border: 1px solid var(--navbar-border); padding: 8px 20px; border-radius: 20px; font-size: 14px; color: var(--text); cursor: pointer; backdrop-filter: blur(4px); transition: all .2s; font-weight: 500; text-decoration: none; }
+        .save-btn:hover, .attachment-btn:hover { background: var(--btn-hover); box-shadow: var(--glow-shadow); border-color: var(--glow-ring); }
+        .save-btn:active, .attachment-btn:active { background: var(--border); }
         .note-delete-form { margin: 0; }
-        .note-delete-btn { width: 38px; height: 38px; padding: 0; display: inline-flex; align-items: center; justify-content: center; background: var(--btn-bg); border: 1px solid var(--navbar-border); border-radius: 50%; font-size: 15px; color: var(--error); cursor: pointer; backdrop-filter: blur(4px); transition: box-shadow 0.2s ease, border-color 0.2s ease, background 0.2s ease; }
+        .note-delete-btn { width: 38px; height: 38px; padding: 0; display: inline-flex; align-items: center; justify-content: center; background: var(--btn-bg); border: 1px solid var(--navbar-border); border-radius: 50%; font-size: 15px; color: var(--error); cursor: pointer; backdrop-filter: blur(4px); transition: all .2s; }
         .note-delete-btn:hover { background: var(--btn-hover); border-color: var(--error); box-shadow: var(--glow-shadow); }
-        .attachment-btn { background: var(--btn-bg); border: 1px solid var(--navbar-border); padding: 8px 20px; border-radius: 20px; font-size: 14px; color: var(--text); cursor: pointer; backdrop-filter: blur(4px); transition: all 0.2s; font-weight: 500; }
-        .attachment-btn:hover { background: var(--btn-hover); box-shadow: var(--glow-shadow); border-color: var(--glow-ring); }
-        .attachment-btn:active { background: var(--border); }
-        .pane-header.editor-header { justify-content: space-between; }
-        .pane-header.preview-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-        .preview-title { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
-        .md-manual { color: var(--link); text-decoration: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .md-manual:hover { color: var(--link); text-decoration: underline; }
-        .switch { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; text-transform: none; letter-spacing: 0; font-size: 13px; font-weight: 400; color: var(--text); user-select: none; }
-        .switch input { display: none; }
-        .switch .track { position: relative; width: 36px; height: 20px; background: var(--border); border-radius: 999px; flex-shrink: 0; transition: background 0.2s ease; }
-        .switch .track::after { content: ''; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.3); transition: transform 0.2s ease; }
-        .switch input:checked + .track { background: var(--link); }
-        .switch input:checked + .track::after { transform: translateX(16px); }
-        .preview-off { height: 100%; display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: 14px; cursor: pointer; text-align: center; font-style: italic; padding: 0 16px; }
-        .save-hint { position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%); background: rgba(0, 0, 0, 0.75); color: #fff; padding: 10px 24px; border-radius: 24px; font-size: 14px; letter-spacing: 0.5px; backdrop-filter: blur(8px); opacity: 0; transition: opacity 0.4s ease, transform 0.4s ease; pointer-events: none; z-index: 20; font-weight: 400; box-shadow: 0 4px 20px rgba(0,0,0,0.2); }
+        .save-hint { position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,.75); color: #fff; padding: 10px 24px; border-radius: 24px; font-size: 14px; letter-spacing: .5px; backdrop-filter: blur(8px); opacity: 0; transition: opacity .4s, transform .4s; pointer-events: none; z-index: 45; box-shadow: 0 4px 20px rgba(0,0,0,.2); }
         .save-hint.show { opacity: 1; transform: translateX(-50%) translateY(0); }
-        .save-hint kbd { background: rgba(255, 255, 255, 0.2); padding: 2px 12px; border-radius: 6px; margin: 0 4px; font-size: 13px; border: 1px solid rgba(255, 255, 255, 0.15); font-family: inherit; }
-        /* 保存状态浮标：挂在悬浮按钮列上方，避免压住附件 / 评论按钮 */
-        .save-status { position: absolute; bottom: 100%; right: 0; margin-bottom: 6px; font-size: 14px; color: #4CAF50; opacity: 0; transition: opacity 0.3s ease, transform 0.3s ease; pointer-events: none; background: var(--status-bg); padding: 6px 18px; border-radius: 16px; border: 1px solid #4CAF50; box-shadow: 0 2px 12px rgba(0,0,0,0.08); transform: translateY(10px); }
+        .save-hint kbd { background: rgba(255,255,255,.2); padding: 2px 12px; border-radius: 6px; margin: 0 4px; font-size: 13px; border: 1px solid rgba(255,255,255,.15); font-family: inherit; }
+        .save-status { position: absolute; bottom: 100%; right: 0; margin-bottom: 6px; font-size: 14px; color: #4CAF50; opacity: 0; transition: opacity .3s, transform .3s; pointer-events: none; background: var(--status-bg); padding: 6px 18px; border-radius: 16px; border: 1px solid #4CAF50; box-shadow: 0 2px 12px rgba(0,0,0,.08); transform: translateY(10px); white-space: nowrap; }
         .save-status.show { opacity: 1; transform: translateY(0); }
         .save-status.saving { color: #ff9800; border-color: #ff9800; }
         .save-status.error { color: #f44336; border-color: #f44336; }
         .note-mtime { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); font-size: 12px; color: var(--muted); z-index: 10; user-select: none; }
-
-        /* 笔记快捷引用（#）：自动补全下拉框 */
+        .tag-bar { flex: 0 0 auto; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 120px 8px 20px; border-top: 1px solid var(--navbar-border); background: var(--navbar-bg); }
+        .tag-bar .tag-icon { color: var(--muted); font-size: 13px; flex-shrink: 0; }
+        .tag-bar .tag-label { font-size: 12px; color: var(--muted); flex-shrink: 0; text-transform: uppercase; letter-spacing: .5px; }
+        .tag-bar input { flex: 1; min-width: 120px; border: none; outline: none; background: transparent; color: var(--text); font-size: 14px; font-family: inherit; }
+        .tag-bar input::placeholder { color: var(--muted); opacity: .8; }
+        .tag-bar .meta-divider { width: 1px; align-self: stretch; background: var(--navbar-border); flex-shrink: 0; }
         .ref-popover { position: fixed; z-index: 40; min-width: min(280px, calc(100vw - 16px)); max-width: min(380px, calc(100vw - 16px)); background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,.18); overflow: hidden; display: none; }
         .ref-popover.show { display: block; }
         .ref-popover .ref-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 6px 12px; font-size: 12px; color: var(--muted); border-bottom: 1px solid var(--border); background: var(--navbar-bg); }
@@ -80,238 +73,90 @@
         .ref-item:hover, .ref-item.active { background: var(--btn-hover); }
         .ref-empty { padding: 10px 12px; font-size: 13px; color: var(--muted); }
         .ref-caret-mirror { position: absolute; top: 0; left: -9999px; visibility: hidden; white-space: pre-wrap; word-wrap: break-word; overflow-wrap: break-word; z-index: -1; }
-
-        /* 笔记标签 / 文件夹：编辑器底部元信息栏（右侧预留浮动保存按钮的空间） */
-        .tag-bar { flex: 0 0 auto; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 120px 8px 20px; border-top: 1px solid var(--navbar-border); background: var(--navbar-bg); }
-        .tag-bar .tag-icon { color: var(--muted); font-size: 13px; flex-shrink: 0; }
-        .tag-bar .tag-label { font-size: 12px; color: var(--muted); flex-shrink: 0; text-transform: uppercase; letter-spacing: 0.5px; }
-        .tag-bar input { flex: 1; min-width: 120px; border: none; outline: none; background: transparent; color: var(--text); font-size: 14px; font-family: inherit; }
-        .tag-bar input::placeholder { color: var(--muted); opacity: 0.8; }
-        .tag-bar .meta-divider { width: 1px; align-self: stretch; background: var(--navbar-border); flex-shrink: 0; }
-
-        /* 大纲预览（实时预览栏目录）：按钮 + 下拉浮层 */
-        .pane-header.preview-header { position: relative; }
-        .outline-btn { background: none; border: none; padding: 2px 8px; font-size: 12px; color: var(--link); cursor: pointer; border-radius: 6px; display: inline-flex; align-items: center; gap: 5px; text-transform: none; letter-spacing: 0; white-space: nowrap; }
-        .outline-btn:hover { background: var(--btn-hover); }
-        .outline-popover {
-            position: absolute; top: 100%; left: 12px; width: min(360px, 90%);
-            max-height: 50%; overflow-y: auto; padding: 6px;
-            background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px;
-            box-shadow: 0 8px 24px rgba(0,0,0,.18); z-index: 20; display: none;
-        }
-        .outline-popover.show { display: block; }
-        .outline-popover a { display: block; padding: 5px 8px; font-size: 13px; line-height: 1.5; color: var(--text); text-decoration: none; border-radius: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .outline-popover a:hover { background: var(--btn-hover); text-decoration: none; }
-        .outline-popover a.ol-l2 { padding-left: 20px; }
-        .outline-popover a.ol-l3 { padding-left: 32px; }
-        .outline-popover a.ol-l4 { padding-left: 44px; }
-        .outline-popover a.ol-l5 { padding-left: 56px; }
-        .outline-popover a.ol-l6 { padding-left: 68px; }
-        .markdown-body h1, .markdown-body h2, .markdown-body h3,
-        .markdown-body h4, .markdown-body h5, .markdown-body h6 { scroll-margin-top: 8px; }
-
-        /* Markdown preview typography (matches server-side bleach output) */
-        .markdown-body h1, .markdown-body h2, .markdown-body h3 { border-bottom: 1px solid var(--heading-border); padding-bottom: 6px; margin: 16px 0 12px; }
-        .markdown-body h1 { font-size: 1.8em; }
-        .markdown-body h2 { font-size: 1.4em; }
-        .markdown-body h3 { font-size: 1.2em; }
-        .markdown-body p { margin: 8px 0; }
-        .markdown-body ul, .markdown-body ol { padding-left: 2em; margin: 8px 0; }
-        .markdown-body code { background: var(--code-bg); padding: 2px 6px; border-radius: 4px; font-family: Consolas, Monaco, "Courier New", monospace; font-size: 0.9em; }
-        .markdown-body pre { background: var(--code-bg); padding: 12px; border-radius: 4px; overflow-x: auto; margin: 12px 0; }
-        .markdown-body pre code { background: transparent; padding: 0; }
-        .markdown-body blockquote { border-left: 4px solid var(--quote-border); padding-left: 16px; color: var(--quote-text); margin: 8px 0; }
-        .markdown-body a { color: var(--link); }
-        .markdown-body hr { border: none; border-top: 1px solid var(--heading-border); margin: 16px 0; }
-        .markdown-body table { border-collapse: collapse; margin: 12px 0; }
-        .markdown-body th, .markdown-body td { border: 1px solid var(--border); padding: 6px 10px; }
-        .markdown-body img { max-width: 100%; }
-
         {% include "partials/_markdown_alerts_css.html" %}
-
-        /* Mobile: hide preview by default; toggle button reveals it */
-        @media (max-width: 768px) {
-            .pane.preview-pane { display: none; }
-            .pane.editor-pane { border-right: none; }
-            .editor-shell.show-preview .pane.preview-pane { display: flex; position: absolute; top: var(--nav-h, 50px); left: 0; right: 0; bottom: 0; background: var(--bg); z-index: 5; }
-            .editor-shell.show-preview .pane.editor-pane { display: none; }
-        }
-        @media (min-width: 769px) {
-            .editor-shell.preview-hidden .pane.preview-pane { display: none; }
-            .editor-shell.preview-hidden .pane.editor-pane { border-right: none; }
-        }
         @media (max-width: 640px) {
             .navbar { gap: 12px; padding: 10px 16px; }
             .navbar-brand-name { max-width: 45vw; }
-            textarea { padding: 16px 18px; font-size: 15px; }
             .floating-rail { bottom: 16px; right: 16px; gap: 8px; }
-            .save-btn { padding: 6px 16px; font-size: 13px; }
+            .save-btn, .attachment-btn { padding: 6px 16px; font-size: 13px; }
             .note-delete-btn { width: 34px; height: 34px; font-size: 14px; }
-            .attachment-btn { padding: 6px 16px; font-size: 13px; }
             .save-hint { bottom: 70px; padding: 8px 16px; font-size: 12px; white-space: nowrap; }
             .save-status { margin-bottom: 4px; font-size: 12px; padding: 4px 14px; }
             .note-mtime { bottom: 16px; font-size: 11px; }
-            /* 元信息栏：收窄保存按钮预留空间，输入框允许收缩换行 */
             .tag-bar { padding: 8px 96px 8px 14px; gap: 6px; }
             .tag-bar input { min-width: 0; flex: 1 1 80px; }
         }
         @media (max-width: 480px) {
-            /* 极窄屏：隐藏居中时间戳，避免与右侧按钮列重叠 */
             .note-mtime { display: none; }
             .save-hint { white-space: normal; max-width: calc(100vw - 24px); text-align: center; }
         }
-        /* 简易模式：只保留读写保存，隐藏标签栏、预览窗格、附件、评论 */
-        .simple-mode .tag-bar { display: none !important; }
-        .simple-mode .pane.preview-pane { display: none !important; }
-        .simple-mode .pane.editor-pane { border-right: none !important; }
-        .simple-mode .editor-header { display: none !important; }
-        .simple-mode .attachment-btn { display: none !important; }
-        .simple-mode #commentBtn { display: none !important; }
-        /* 简易模式：编辑器内隐藏品牌名；其余导航栏隐藏逻辑见 partials/_navbar_css.html */
-        .simple-mode .navbar-brand { display: none !important; }
-        .simple-mode .note-mtime { display: none !important; }
+        .simple-mode .tag-bar, .simple-mode .editor-header, .simple-mode .attachment-btn,
+        .simple-mode #commentBtn, .simple-mode .navbar-brand, .simple-mode .note-mtime { display: none !important; }
     </style>
     <style>{% include "partials/_card_theme_css.html" %}</style>
-    <style>
-        {% include "partials/_responsive_css.html" %}
-        /* 编辑器顶部留白跟随导航栏实际高度（JS 测量写入 --nav-h，顶栏折叠换行变高时不遮挡面板头） */
-        .editor-shell { padding-top: calc(var(--nav-h, 50px) + 8px); }
-    </style>
-    <style>
-        /* 编辑器 / 预览 分隔条：可拖动自定义两栏宽度（见文件末尾脚本） */
-        .editor-shell { gap: 0; }
-        .splitter {
-            flex: 0 0 12px;
-            position: relative;
-            align-self: stretch;
-            cursor: col-resize;
-            touch-action: none;
-            background: transparent;
-        }
-        .splitter::before {
-            content: "";
-            position: absolute;
-            top: 50%; left: 50%;
-            transform: translate(-50%, -50%);
-            width: 3px; height: 44px;
-            border-radius: 3px;
-            background: var(--card-border);
-            transition: background 0.16s ease, box-shadow 0.16s ease, height 0.16s ease;
-        }
-        .splitter:hover::before,
-        .splitter:focus-visible::before,
-        .splitter.dragging::before {
-            background: var(--link);
-            height: 68px;
-            box-shadow: var(--glow-shadow);
-        }
-        .splitter:focus-visible { outline: none; }
-        .editor-shell.preview-hidden .splitter { display: none; }
-        .simple-mode .splitter { display: none !important; }
-        @media (max-width: 768px) {
-            .splitter { display: none; }
-            .editor-shell { gap: 12px; }
-        }
-    </style>
+    <style>{% include "partials/_responsive_css.html" %}</style>
 </head>
 <body>
     {% include "partials/_navbar.html" %}
-    <div class="editor-shell" id="editorShell">
-        <div class="pane editor-pane">
-            <div class="pane-header editor-header" id="editorHeader">
+    <main class="editor-shell" id="editorShell">
+        <section class="pane editor-pane" aria-label="{{ t('note_editor_label') }}">
+            <div class="pane-header editor-header">
                 <span>{{ t('note_editor_label') }}</span>
-                <label class="switch" id="previewSwitchWrap">
-                    <input type="checkbox" id="previewSwitch">
-                    <span class="track"></span>
-                    <span class="switch-label">{{ t('note_live_preview') }}</span>
-                </label>
+                <div class="editor-header-actions">
+                    {% if md_manual_url %}<a class="md-manual" href="{{ md_manual_url|e }}" target="_blank" rel="noopener noreferrer">{{ t('md_manual') }}</a>{% endif %}
+                    <button type="button" class="editor-mode-btn" id="editorModeToggle" aria-pressed="false" hidden>{{ t('note_source_mode') }}</button>
+                </div>
             </div>
-            <form method="POST" action="{{ action_url }}" id="noteForm" style="display:flex; flex-direction:column; flex:1; min-height:0;">
+            <form method="POST" action="{{ action_url }}" id="noteForm" data-editor-mode="source">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <textarea name="content" id="noteContent" autofocus spellcheck="true">{{ content|e }}</textarea>
+                <div id="richTextEditor" aria-label="{{ t('note_rich_mode') }}"></div>
+                <textarea name="content" id="noteContent" autofocus spellcheck="true" placeholder="{{ t('note_content_placeholder') }}">{{ content|e }}</textarea>
                 {% if note_tags_enabled or note_folders_enabled %}
                 <div class="tag-bar" id="tagBar">
                     {% if note_tags_enabled %}
                     <i class="fa-solid fa-tags tag-icon" aria-hidden="true"></i>
                     <label class="tag-label" for="noteTags">{{ t('note_tags_label') }}</label>
-                    <input type="text" name="tags" id="noteTags" autocomplete="off" spellcheck="false"
-                           placeholder="{{ t('note_tags_placeholder') }}" maxlength="250"
-                           value="{{ note_tags_value|e }}">
+                    <input type="text" name="tags" id="noteTags" autocomplete="off" spellcheck="false" placeholder="{{ t('note_tags_placeholder') }}" maxlength="250" value="{{ note_tags_value|e }}">
                     {% endif %}
-                    {% if note_tags_enabled and note_folders_enabled %}
-                    <span class="meta-divider" aria-hidden="true"></span>
-                    {% endif %}
+                    {% if note_tags_enabled and note_folders_enabled %}<span class="meta-divider" aria-hidden="true"></span>{% endif %}
                     {% if note_folders_enabled %}
                     <i class="fa-solid fa-folder tag-icon" aria-hidden="true"></i>
                     <label class="tag-label" for="noteFolder">{{ t('note_folders_label') }}</label>
-                    <input type="text" name="folder" id="noteFolder" autocomplete="off" spellcheck="false"
-                           list="folderOptions" placeholder="{{ t('note_folders_placeholder') }}"
-                           maxlength="64" value="{{ note_folder_value|e }}">
-                    <datalist id="folderOptions">
-                        {% for f in folder_options %}<option value="{{ f|e }}"></option>{% endfor %}
-                    </datalist>
+                    <input type="text" name="folder" id="noteFolder" autocomplete="off" spellcheck="false" list="folderOptions" placeholder="{{ t('note_folders_placeholder') }}" maxlength="64" value="{{ note_folder_value|e }}">
+                    <datalist id="folderOptions">{% for f in folder_options %}<option value="{{ f|e }}"></option>{% endfor %}</datalist>
                     {% endif %}
                 </div>
                 {% endif %}
             </form>
-        </div>
-        <div class="splitter" id="paneSplitter" role="separator" aria-orientation="vertical"
-             aria-label="{{ t('note_splitter_label') }}" title="{{ t('note_splitter_label') }}" tabindex="0"></div>
-        <div class="pane preview-pane">
-            <div class="pane-header preview-header" id="previewHeader">
-                <span class="preview-title">
-                    <span>{{ t('note_preview_label') }}</span>
-                    {% if md_manual_url %}<a class="md-manual" href="{{ md_manual_url|e }}" target="_blank" rel="noopener noreferrer">{{ t('md_manual') }}</a>{% endif %}
-                </span>
-                <button type="button" class="outline-btn" id="outlineBtn" aria-haspopup="true" aria-expanded="false" style="display:none;">
-                    <i class="fa-solid fa-list-ul" aria-hidden="true"></i>{{ t('outline_label') }}
-                </button>
-                <div class="outline-popover" id="outlinePopover" role="navigation" aria-label="{{ t('outline_label') }}"></div>
-            </div>
-            <div class="preview-body markdown-body" id="previewBody"></div>
-        </div>
-    </div>
-    {% if note_attachments_api %}
-    <input type="file" id="attachmentInput" style="display: none;" multiple>
-    {% endif %}
+        </section>
+    </main>
+    {% if note_attachments_api %}<input type="file" id="attachmentInput" style="display:none" multiple>{% endif %}
     <div class="floating-rail">
-        <div class="save-status" id="saveStatus"></div>
+        <div class="save-status" id="saveStatus" role="status" aria-live="polite"></div>
         <button type="button" class="save-btn" id="saveBtn">{{ t('note_save_btn') }}</button>
         {% if note_attachments_api %}
-        <button type="button" class="attachment-btn" id="attachmentBtn">
-            <i class="fa-solid fa-paperclip" aria-hidden="true"></i> {{ t('note_attachment_btn') }}
-        </button>
+        <button type="button" class="attachment-btn" id="attachmentBtn"><i class="fa-solid fa-paperclip" aria-hidden="true"></i> {{ t('note_attachment_btn') }}</button>
         {% endif %}
-        {% if comment_url %}
-        <a href="{{ comment_url }}" class="attachment-btn" id="commentBtn">
-            <i class="fa-solid fa-comments" aria-hidden="true"></i> {{ t('comments_title') }}
-        </a>
-        {% endif %}
+        {% if comment_url %}<a href="{{ comment_url }}" class="attachment-btn" id="commentBtn"><i class="fa-solid fa-comments" aria-hidden="true"></i> {{ t('comments_title') }}</a>{% endif %}
         {% if note_delete_url %}
-        <form method="POST" action="{{ note_delete_url|e }}" class="note-delete-form" id="noteDeleteForm"
-              data-confirm="{{ t('note_delete_confirm')|e }}">
+        <form method="POST" action="{{ note_delete_url|e }}" class="note-delete-form" id="noteDeleteForm" data-confirm="{{ t('note_delete_confirm')|e }}">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <button type="submit" class="note-delete-btn" id="noteDeleteBtn"
-                    title="{{ t('note_delete') }}" aria-label="{{ t('note_delete') }}">
-                <i class="fa-solid fa-trash-can" aria-hidden="true"></i>
-            </button>
+            <button type="submit" class="note-delete-btn" title="{{ t('note_delete') }}" aria-label="{{ t('note_delete') }}"><i class="fa-solid fa-trash-can" aria-hidden="true"></i></button>
         </form>
         {% endif %}
     </div>
     {% if note_delete_url %}
     <script>
-    (function () {
-        var form = document.getElementById('noteDeleteForm');
-        if (!form) return;
-        form.addEventListener('submit', function (e) {
-            if (!window.confirm(form.getAttribute('data-confirm') || '')) e.preventDefault();
-        });
-    })();
+        (function () {
+            var form = document.getElementById('noteDeleteForm');
+            form.addEventListener('submit', function (event) {
+                if (!window.confirm(form.getAttribute('data-confirm') || '')) event.preventDefault();
+            });
+        })();
     </script>
     {% endif %}
     <div class="save-hint" id="saveHint">{{ hint_text|safe }}</div>
-    <div class="save-status" id="saveStatus"></div>
-    <div class="note-mtime" id="noteMtime">{{ last_edited }}</div>
+    <div class="note-mtime">{{ last_edited }}</div>
     {% if note_refs %}
     <div class="ref-popover" id="refPopover" role="listbox" aria-label="{{ t('note_refs_label') }}">
         <div class="ref-head"><span>{{ t('note_refs_label') }}</span><span class="ref-scope" id="refScope"></span></div>
@@ -331,7 +176,6 @@
                 if (!navbar || !links || !menuBtn || !brand) return;
                 var wasOpen = navbar.classList.contains('menu-open');
                 navbar.classList.remove('menu-collapsed', 'menu-open');
-                // measuring：强制图标按钮文字展开后再量宽度，避免悬浮展开时溢出
                 navbar.classList.add('measuring');
                 [links, user].forEach(function (el) {
                     if (!el) return;
@@ -340,11 +184,7 @@
                     el.style.whiteSpace = 'nowrap';
                 });
                 if (user) user.style.flex = 'none';
-                var linksW = links.scrollWidth;
-                var userW = user ? user.scrollWidth : 0;
-                var langW = lang ? lang.offsetWidth : 0;
-                var menuW = menuBtn.offsetWidth;
-                var total = brand.offsetWidth + userW + linksW + langW + menuW + GAP * 3;
+                var total = brand.offsetWidth + links.scrollWidth + (user ? user.scrollWidth : 0) + (lang ? lang.offsetWidth : 0) + menuBtn.offsetWidth + GAP * 3;
                 [links, user].forEach(function (el) {
                     if (!el) return;
                     el.style.position = '';
@@ -362,11 +202,8 @@
             window.toggleMenu = function () {
                 var navbar = document.querySelector('.navbar');
                 var menuBtn = document.querySelector('.nav-menu-btn');
-                if (!navbar || !menuBtn) return;
                 var open = navbar.classList.toggle('menu-open');
-                menuBtn.innerHTML = open
-                    ? '<i class="fa-solid fa-xmark" aria-hidden="true"></i>'
-                    : '<i class="fa-solid fa-bars" aria-hidden="true"></i>';
+                menuBtn.innerHTML = open ? '<i class="fa-solid fa-xmark" aria-hidden="true"></i>' : '<i class="fa-solid fa-bars" aria-hidden="true"></i>';
             };
             window.addEventListener('load', updateMenuState);
             window.addEventListener('resize', updateMenuState);
@@ -374,7 +211,7 @@
         })();
     </script>
     <script>
-        (function() {
+        (function () {
             const form = document.getElementById('noteForm');
             const textarea = document.getElementById('noteContent');
             const tagsInput = document.getElementById('noteTags');
@@ -382,68 +219,40 @@
             const saveBtn = document.getElementById('saveBtn');
             const saveHint = document.getElementById('saveHint');
             const saveStatus = document.getElementById('saveStatus');
-            const previewBody = document.getElementById('previewBody');
-            const editorShell = document.getElementById('editorShell');
-            const editorHeader = document.getElementById('editorHeader');
-            const previewHeader = document.getElementById('previewHeader');
-            const previewSwitch = document.getElementById('previewSwitch');
-            const previewSwitchWrap = document.getElementById('previewSwitchWrap');
+            const DEFAULT_HINT = {{ hint_text|tojson }};
+            const L10N = {{ l10n|tojson }};
+            const CSRF_FIELD = 'csrf_token';
+            const IMAGES_API = {{ (note_images_api or '')|tojson }};
+            const ATTACHMENTS_API = {{ (note_attachments_api or '')|tojson }};
             let saveTimeout = null;
             let statusTimeout = null;
             let hintTimeout = null;
             let isSaving = false;
-            const DEFAULT_HINT = {{ hint_text|tojson }};
-            const L10N = {{ l10n|tojson }};
-            const CSRF_FIELD = "csrf_token";
+            let inputTimer = null;
 
-            // 实时渲染开关：默认取配置，访客可手动切换并以 localStorage 记住
-            const PREVIEW_KEY = 'rusin-live-preview';
-            let previewOn;
-            try {
-                const saved = localStorage.getItem(PREVIEW_KEY);
-                previewOn = saved === null ? {{ live_preview_default|tojson }} : saved === '1';
-            } catch (e) { previewOn = {{ live_preview_default|tojson }}; }
-
-            textarea.addEventListener('keydown', function(e) {
-                if (e.key === 'Tab') {
-                    e.preventDefault();
-                    const start = this.selectionStart;
-                    const end = this.selectionEnd;
-                    this.value = this.value.substring(0, start) + '    ' + this.value.substring(end);
-                    this.selectionStart = this.selectionEnd = start + 4;
-                    updatePreview();
+            function showHint(message, trustedHTML) {
+                if (message) {
+                    if (trustedHTML) saveHint.innerHTML = message;
+                    else saveHint.textContent = message;
                 }
-            });
+                saveHint.classList.add('show');
+                clearTimeout(hintTimeout);
+                hintTimeout = setTimeout(function () { saveHint.classList.remove('show'); }, 4000);
+            }
 
-            // 图床上传：粘贴 / 拖拽图片 → 上传到当前用户名下 → 光标处插入 Markdown 引用
-            const IMAGES_API = {{ (note_images_api or '')|tojson }};
-            function uploadImage(file) {
-                if (!IMAGES_API) return;
-                showStatus(L10N.imgUploading, 'saving');
-                const fd = new FormData();
-                fd.append('file', file, file.name || 'image');
-                fd.append(CSRF_FIELD, form.querySelector('input[name="' + CSRF_FIELD + '"]').value);
-                fetch(IMAGES_API, { method: 'POST', body: fd })
-                    .then(r => r.json().then(j => {
-                        if (!r.ok) throw new Error(j.error || ('HTTP ' + r.status));
-                        return j;
-                    }))
-                    .then(data => {
-                        insertAtCursor('![' + altName(file) + '](' + data.url + ')');
-                        showStatus(L10N.imgDone, '');
-                        showHint(L10N.imgDone);
-                    })
-                    .catch(err => {
-                        showStatus(L10N.imgFailed, 'error');
-                        showHint(err.message);
-                    });
+            function showStatus(message, type) {
+                saveStatus.textContent = message;
+                saveStatus.className = 'save-status show';
+                if (type) saveStatus.classList.add(type);
+                clearTimeout(statusTimeout);
+                statusTimeout = setTimeout(function () { saveStatus.classList.remove('show'); }, 2500);
             }
-            function altName(file) {
-                return (file && file.name ? file.name : 'image')
-                    .replace(/\.(png|jpe?g|gif|webp)$/i, '')
-                    .replace(/[\[\]]/g, '').slice(0, 60) || 'image';
-            }
+
             function insertAtCursor(text) {
+                if (window.RusinMarkdownEditor && window.RusinMarkdownEditor.isRich()) {
+                    window.RusinMarkdownEditor.insertValue('\n\n' + text + '\n\n');
+                    return;
+                }
                 const start = textarea.selectionStart;
                 const end = textarea.selectionEnd;
                 const before = textarea.value.slice(0, start);
@@ -455,6 +264,35 @@
                 textarea.selectionStart = textarea.selectionEnd = caret;
                 textarea.dispatchEvent(new Event('input', { bubbles: true }));
             }
+
+            function altName(file) {
+                return (file && file.name ? file.name : 'image').replace(/\.(png|jpe?g|gif|webp)$/i, '').replace(/[\[\]]/g, '').slice(0, 60) || 'image';
+            }
+
+            function uploadImage(file) {
+                if (!IMAGES_API) return Promise.reject(new Error('Image upload is disabled'));
+                showStatus(L10N.imgUploading, 'saving');
+                const fd = new FormData();
+                fd.append('file', file, file.name || 'image');
+                fd.append(CSRF_FIELD, form.querySelector('input[name="' + CSRF_FIELD + '"]').value);
+                return fetch(IMAGES_API, { method: 'POST', body: fd }).then(function (response) {
+                    return response.json().then(function (data) {
+                        if (!response.ok) throw new Error(data.error || ('HTTP ' + response.status));
+                        return data;
+                    });
+                }).then(function (data) {
+                    insertAtCursor('![' + altName(file) + '](' + data.url + ')');
+                    showStatus(L10N.imgDone, '');
+                    showHint(L10N.imgDone, false);
+                    return data;
+                }).catch(function (error) {
+                    showStatus(L10N.imgFailed, 'error');
+                    showHint(error.message, false);
+                    throw error;
+                });
+            }
+            window.RusinNoteUploadImage = uploadImage;
+
             function pickImage(files) {
                 if (!files || !files.length) return null;
                 for (let i = 0; i < files.length; i++) {
@@ -462,117 +300,93 @@
                 }
                 return null;
             }
-            textarea.addEventListener('paste', function(e) {
+
+            textarea.addEventListener('paste', function (event) {
                 if (!IMAGES_API) return;
-                const img = pickImage(e.clipboardData && e.clipboardData.files);
-                if (!img) return;
-                e.preventDefault();
-                uploadImage(img);
+                const image = pickImage(event.clipboardData && event.clipboardData.files);
+                if (!image) return;
+                event.preventDefault();
+                uploadImage(image).catch(function () {});
             });
-            ['dragover', 'dragenter'].forEach(function(evt) {
-                textarea.addEventListener(evt, function(e) { e.preventDefault(); });
+            ['dragover', 'dragenter'].forEach(function (name) {
+                textarea.addEventListener(name, function (event) { event.preventDefault(); });
             });
-            textarea.addEventListener('drop', function(e) {
+            textarea.addEventListener('drop', function (event) {
                 if (!IMAGES_API) return;
-                const img = pickImage(e.dataTransfer && e.dataTransfer.files);
-                if (!img) return;
-                e.preventDefault();
-                uploadImage(img);
+                const image = pickImage(event.dataTransfer && event.dataTransfer.files);
+                if (!image) return;
+                event.preventDefault();
+                uploadImage(image).catch(function () {});
             });
 
-            // 附件上传：选择文件 → 上传到当前用户名下 → 光标处插入 Markdown 链接
-            const ATTACHMENTS_API = {{ (note_attachments_api or '')|tojson }};
             function uploadAttachment(file) {
                 if (!ATTACHMENTS_API) return;
                 showStatus(L10N.attUploading, 'saving');
                 const fd = new FormData();
                 fd.append('file', file, file.name || 'file');
                 fd.append(CSRF_FIELD, form.querySelector('input[name="' + CSRF_FIELD + '"]').value);
-                fd.append('content', textarea.value);
-                fetch(ATTACHMENTS_API, { method: 'POST', body: fd })
-                    .then(r => r.json().then(j => {
-                        if (!r.ok) throw new Error(j.error || ('HTTP ' + r.status));
-                        return j;
-                    }))
-                    .then(data => {
-                        insertAtCursor('[' + data.name + '](' + data.url + ')');
-                        showStatus(L10N.attDone, '');
-                        showHint(L10N.attDone);
-                    })
-                    .catch(err => {
-                        showStatus(L10N.attFailed, 'error');
-                        showHint(err.message);
+                fd.append('content', window.RusinMarkdownEditor ? window.RusinMarkdownEditor.sync() : textarea.value);
+                fetch(ATTACHMENTS_API, { method: 'POST', body: fd }).then(function (response) {
+                    return response.json().then(function (data) {
+                        if (!response.ok) throw new Error(data.error || ('HTTP ' + response.status));
+                        return data;
                     });
+                }).then(function (data) {
+                    insertAtCursor('[' + data.name + '](' + data.url + ')');
+                    showStatus(L10N.attDone, '');
+                    showHint(L10N.attDone, false);
+                }).catch(function (error) {
+                    showStatus(L10N.attFailed, 'error');
+                    showHint(error.message, false);
+                });
             }
 
-            function showHint(message) {
-                if (message) saveHint.innerHTML = message;
-                saveHint.classList.add('show');
-                clearTimeout(hintTimeout);
-                hintTimeout = setTimeout(function() { saveHint.classList.remove('show'); }, 4000);
-            }
-
-            function showStatus(message, type) {
-                saveStatus.textContent = message;
-                saveStatus.className = 'save-status show';
-                if (type) saveStatus.classList.add(type);
-                clearTimeout(statusTimeout);
-                statusTimeout = setTimeout(function() { saveStatus.classList.remove('show'); }, 2500);
-            }
-
-            setTimeout(function() { showHint(DEFAULT_HINT); }, 600);
-
-            let inputTimer = null;
-            textarea.addEventListener('input', function() {
-                clearTimeout(inputTimer);
-                inputTimer = setTimeout(function() { showHint(DEFAULT_HINT); }, 3000);
-                updatePreview();
+            textarea.addEventListener('keydown', function (event) {
+                if (event.key !== 'Tab') return;
+                event.preventDefault();
+                const start = textarea.selectionStart;
+                const end = textarea.selectionEnd;
+                textarea.value = textarea.value.slice(0, start) + '    ' + textarea.value.slice(end);
+                textarea.selectionStart = textarea.selectionEnd = start + 4;
+                textarea.dispatchEvent(new Event('input', { bubbles: true }));
             });
-            textarea.addEventListener('focus', function() { showHint(DEFAULT_HINT); });
+            textarea.addEventListener('input', function () {
+                clearTimeout(inputTimer);
+                inputTimer = setTimeout(function () { showHint(DEFAULT_HINT, true); }, 3000);
+            });
+            textarea.addEventListener('focus', function () { showHint(DEFAULT_HINT, true); });
 
-            document.addEventListener('keydown', function(e) {
-                if ((e.ctrlKey || e.metaKey) && e.key === 's') {
-                    e.preventDefault();
+            document.addEventListener('keydown', function (event) {
+                if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
+                    event.preventDefault();
                     saveNote();
                 }
-                if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'p') {
-                    e.preventDefault();
-                    togglePreview();
+                if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'p' && window.RusinMarkdownEditor) {
+                    event.preventDefault();
+                    window.RusinMarkdownEditor.toggleMode();
                 }
-                if (e.key === 'Escape') {
+                if (event.key === 'Escape') {
                     saveHint.classList.remove('show');
                     saveStatus.classList.remove('show');
                 }
             });
 
-            // 附件上传按钮
-            var attachmentBtn = document.getElementById('attachmentBtn');
-            var attachmentInput = document.getElementById('attachmentInput');
+            const attachmentBtn = document.getElementById('attachmentBtn');
+            const attachmentInput = document.getElementById('attachmentInput');
             if (attachmentBtn && attachmentInput) {
-                attachmentBtn.addEventListener('click', function(e) {
-                    e.preventDefault();
-                    attachmentInput.click();
-                });
-                attachmentInput.addEventListener('change', function(e) {
-                    var files = e.target.files;
-                    if (!files || !files.length) return;
-                    for (var i = 0; i < files.length; i++) {
-                        uploadAttachment(files[i]);
-                    }
+                attachmentBtn.addEventListener('click', function () { attachmentInput.click(); });
+                attachmentInput.addEventListener('change', function () {
+                    Array.from(attachmentInput.files || []).forEach(uploadAttachment);
                     attachmentInput.value = '';
                 });
             }
 
-            saveBtn.addEventListener('click', function(e) {
-                e.preventDefault();
-                saveNote();
-            });
-
+            saveBtn.addEventListener('click', saveNote);
             function saveNote() {
                 if (isSaving) return;
                 isSaving = true;
                 showStatus(L10N.saving, 'saving');
-                const content = textarea.value;
+                const content = window.RusinMarkdownEditor ? window.RusinMarkdownEditor.sync() : textarea.value;
                 const csrfValue = form.querySelector('input[name="' + CSRF_FIELD + '"]').value;
                 let body = 'content=' + encodeURIComponent(content) + '&' + CSRF_FIELD + '=' + encodeURIComponent(csrfValue);
                 if (tagsInput) body += '&tags=' + encodeURIComponent(tagsInput.value);
@@ -581,293 +395,52 @@
                     method: 'POST',
                     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
                     body: body
-                })
-                .then(response => {
+                }).then(function (response) {
                     if (response.ok) {
                         isSaving = false;
                         showStatus(L10N.saved, '');
-                        showHint(L10N.savedHint);
+                        showHint(L10N.savedHint, true);
                         return null;
                     }
-                    return response.json()
-                        .catch(function() { return {}; })
-                        .then(function(j) {
-                            isSaving = false;
-                            showStatus(L10N.failedStatus.replace('{status}', response.status), 'error');
-                            showHint(j.error || L10N.retryHint);
-                        });
-                })
-                .catch(error => {
+                    return response.json().catch(function () { return {}; }).then(function (data) {
+                        isSaving = false;
+                        showStatus(L10N.failedStatus.replace('{status}', response.status), 'error');
+                        showHint(data.error || L10N.retryHint, false);
+                    });
+                }).catch(function (error) {
                     isSaving = false;
                     showStatus(L10N.netError, 'error');
-                    showHint(L10N.failedMsg + error.message);
+                    showHint(L10N.failedMsg + error.message, false);
                 });
             }
 
-            function updatePreview() {
-                if (!previewOn) return;
-                if (!window.marked) return;
-                const raw = textarea.value;
-                if (!raw.trim()) {
-                    previewBody.innerHTML = '';
-                    if (window.NoteOutline) window.NoteOutline.refresh();
-                    return;
-                }
-                let html = '';
-                try { html = window.marked.parse(raw, { breaks: false, gfm: true }); }
-                catch (e) { previewBody.innerHTML = '<p class="error">渲染失败</p>'; return; }
-                if (window.DOMPurify) {
-                    html = window.DOMPurify.sanitize(html, {
-                        ALLOWED_TAGS: ['p','br','strong','em','u','del','strike','a','ul','ol','li','blockquote','pre','code','h1','h2','h3','h4','h5','h6','hr','table','thead','tbody','tr','th','td','div','span','img','input','dl','dt','dd','details','summary','abbr','sup','sub'],
-                        ALLOWED_ATTR: ['href','title','target','class','src','alt','rel','type','checked','disabled','id','open']
-                    });
-                }
-                previewBody.innerHTML = html;
-                if (window.MarkdownAlerts) window.MarkdownAlerts.apply(previewBody);
-                if (window.NoteRefs) window.NoteRefs.linkify(previewBody);
-                if (window.CodeHighlight) window.CodeHighlight.apply(previewBody);
-                if (window.HeadingAnchors) window.HeadingAnchors.apply(previewBody);
-                if (window.renderMathInElement) {
-                    window.renderMathInElement(previewBody, {
-                        delimiters: [
-                            {left: '$$', right: '$$', display: true},
-                            {left: '$', right: '$', display: false},
-                            {left: '\\(', right: '\\)', display: false},
-                            {left: '\\[', right: '\\]', display: true}
-                        ],
-                        throwOnError: false
-                    });
-                }
-                if (window.NoteOutline) window.NoteOutline.refresh();
-            }
-
-            function applyPreviewState() {
-                previewSwitch.checked = previewOn;
-                editorShell.classList.toggle('preview-hidden', !previewOn);
-                (previewOn ? previewHeader : editorHeader).appendChild(previewSwitchWrap);
-                applySplit();
-                if (previewOn) {
-                    updatePreview();
-                } else {
-                    previewBody.innerHTML = '<div class="preview-off">' + L10N.previewOffHint + '</div>';
-                }
-            }
-
-            function syncPreviewToggle() {
-                previewOn = previewSwitch.checked;
-                try { localStorage.setItem(PREVIEW_KEY, previewOn ? '1' : '0'); } catch (e) {}
-                if (window.matchMedia('(max-width: 768px)').matches) {
-                    editorShell.classList.toggle('show-preview', previewOn);
-                }
-                applyPreviewState();
-            }
-
-            function togglePreview() {
-                previewSwitch.checked = !previewSwitch.checked;
-                syncPreviewToggle();
-            }
-
-            previewSwitch.addEventListener('change', syncPreviewToggle);
-
-            // ===== 编辑器 / 预览分隔条：拖动自定义宽度，localStorage 记忆 =====
-            const SPLIT_KEY = 'rusin-editor-split';
-            const splitter = document.getElementById('paneSplitter');
-            const editorPane = editorShell.querySelector('.pane.editor-pane');
-            const previewPane = editorShell.querySelector('.pane.preview-pane');
-            const SPLIT_MIN = 0.15, SPLIT_MAX = 0.85;
-            let splitRatio = 0.5;
-            try {
-                const savedSplit = parseFloat(localStorage.getItem(SPLIT_KEY));
-                if (isFinite(savedSplit)) splitRatio = Math.min(SPLIT_MAX, Math.max(SPLIT_MIN, savedSplit));
-            } catch (e) {}
-            let splitDragging = false;
-
-            function splitActive() {
-                return !!splitter && previewOn && !window.matchMedia('(max-width: 768px)').matches;
-            }
-
-            function applySplit() {
-                if (!editorPane || !previewPane || !splitter) return;
-                if (!splitActive()) {
-                    editorPane.style.flex = '';
-                    previewPane.style.flex = '';
-                    return;
-                }
-                const style = getComputedStyle(editorShell);
-                const avail = editorShell.clientWidth
-                    - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight)
-                    - splitter.offsetWidth;
-                if (avail <= 0) return;
-                editorPane.style.flex = '0 0 ' + Math.round(avail * splitRatio) + 'px';
-                previewPane.style.flex = '1 1 0';
-            }
-
-            function saveSplit() {
-                try { localStorage.setItem(SPLIT_KEY, String(splitRatio)); } catch (e) {}
-            }
-
-            function splitMove(clientX) {
-                const rect = editorShell.getBoundingClientRect();
-                const style = getComputedStyle(editorShell);
-                const padL = parseFloat(style.paddingLeft);
-                const avail = editorShell.clientWidth - padL - parseFloat(style.paddingRight) - splitter.offsetWidth;
-                if (avail <= 0) return;
-                const editorW = clientX - (rect.left + padL) - splitter.offsetWidth / 2;
-                splitRatio = Math.min(SPLIT_MAX, Math.max(SPLIT_MIN, editorW / avail));
-                editorPane.style.flex = '0 0 ' + Math.round(avail * splitRatio) + 'px';
-                previewPane.style.flex = '1 1 0';
-            }
-
-            if (splitter && editorPane && previewPane) {
-                splitter.addEventListener('pointerdown', function (e) {
-                    if (!splitActive()) return;
-                    if (e.pointerType === 'mouse' && e.button !== 0) return;
-                    splitDragging = true;
-                    splitter.classList.add('dragging');
-                    document.body.style.cursor = 'col-resize';
-                    document.body.style.userSelect = 'none';
-                    try { splitter.setPointerCapture(e.pointerId); } catch (err) {}
-                    e.preventDefault();
-                });
-                splitter.addEventListener('pointermove', function (e) {
-                    if (splitDragging) splitMove(e.clientX);
-                });
-                function endSplitDrag(e) {
-                    if (!splitDragging) return;
-                    splitDragging = false;
-                    splitter.classList.remove('dragging');
-                    document.body.style.cursor = '';
-                    document.body.style.userSelect = '';
-                    if (e && e.pointerId !== undefined) {
-                        try { splitter.releasePointerCapture(e.pointerId); } catch (err) {}
-                    }
-                    saveSplit();
-                }
-                splitter.addEventListener('pointerup', endSplitDrag);
-                splitter.addEventListener('pointercancel', endSplitDrag);
-                // 双击恢复默认 50 / 50
-                splitter.addEventListener('dblclick', function () {
-                    splitRatio = 0.5;
-                    applySplit();
-                    saveSplit();
-                });
-                // 键盘：左右方向键微调
-                splitter.addEventListener('keydown', function (e) {
-                    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
-                    e.preventDefault();
-                    splitRatio = Math.min(SPLIT_MAX, Math.max(SPLIT_MIN,
-                        splitRatio + (e.key === 'ArrowRight' ? 0.02 : -0.02)));
-                    applySplit();
-                    saveSplit();
-                });
-                window.addEventListener('resize', applySplit);
-            }
-
-            previewBody.addEventListener('click', function() {
-                if (!previewOn) {
-                    previewOn = true;
-                    try { localStorage.setItem(PREVIEW_KEY, '1'); } catch (e) {}
-                    applyPreviewState();
-                }
-            });
-
-            // Debounced preview on input
-            let previewDebounce = null;
-            textarea.addEventListener('input', function() {
-                clearTimeout(previewDebounce);
-                previewDebounce = setTimeout(updatePreview, 150);
-            });
-
-            // Initial render once all libraries are loaded (defer attributes)
-            function whenReady(cb) {
-                if (window.marked && window.DOMPurify) return cb();
-                setTimeout(function() { whenReady(cb); }, 50);
-            }
-            whenReady(applyPreviewState);
-
-            function autoResize() {
-                textarea.style.height = 'auto';
-                textarea.style.height = textarea.scrollHeight + 'px';
-            }
-            setTimeout(autoResize, 100);
-            textarea.addEventListener('input', autoResize);
-
-
+            setTimeout(function () { showHint(DEFAULT_HINT, true); }, 600);
         })();
     </script>
     <script>
-        /* 笔记快捷引用（#87）：编辑器中输入 # 弹出自己笔记的自动补全，
-           实时预览中把已存在笔记的 #id 渲染为链接（与服务端渲染规则一致）。 */
-        (function() {
+        (function () {
             const REFS = {{ (note_refs or none)|tojson }};
             const L10N = {{ l10n|tojson }};
             const textarea = document.getElementById('noteContent');
             const popover = document.getElementById('refPopover');
-
-            // 与服务端 utils.expand_note_refs 相同的排除集（JS 用分组替代 lookbehind）
-            const REF_TEXT_RE = /(^|[^\w#"'\(\[\/\\])#([A-Za-z0-9][A-Za-z0-9_\-]*)/g;
-            const refIds = new Set((REFS && REFS.ids) || []);
-
-            function linkify(root) {
-                if (!REFS || refIds.size === 0) return;
-                const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
-                    acceptNode: function(node) {
-                        const p = node.parentNode;
-                        if (!p) return NodeFilter.FILTER_REJECT;
-                        const tag = p.nodeName;
-                        if (tag === 'CODE' || tag === 'PRE' || tag === 'A' || tag === 'SCRIPT' || tag === 'STYLE')
-                            return NodeFilter.FILTER_REJECT;
-                        return node.nodeValue.indexOf('#') === -1
-                            ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT;
-                    }
-                });
-                const targets = [];
-                while (walker.nextNode()) targets.push(walker.currentNode);
-                targets.forEach(function(node) {
-                    const text = node.nodeValue;
-                    let m, last = 0, found = false;
-                    const frag = document.createDocumentFragment();
-                    REF_TEXT_RE.lastIndex = 0;
-                    while ((m = REF_TEXT_RE.exec(text)) !== null) {
-                        const id = m[2];
-                        if (id.length > 250 || !refIds.has(id)) continue;
-                        found = true;
-                        const at = m.index + m[1].length;
-                        frag.appendChild(document.createTextNode(text.slice(last, at)));
-                        const a = document.createElement('a');
-                        a.href = REFS.prefix + '/' + id;
-                        a.textContent = '#' + id;
-                        frag.appendChild(a);
-                        last = at + 1 + id.length;
-                    }
-                    if (found) {
-                        frag.appendChild(document.createTextNode(text.slice(last)));
-                        node.parentNode.replaceChild(frag, node);
-                    }
-                });
-            }
-            window.NoteRefs = { linkify: linkify };
-
             if (!REFS || !popover) return;
 
-            // ---------- 自动补全下拉框 ----------
-            // 光标前紧邻的未闭合 #token（前面须是行首/空白/括号等分隔符）
             const TOKEN_RE = /(?:^|[\s*_~>（(「【\[<"'，。；：、！？])(#[A-Za-z0-9_\-]*)$/;
             let items = [];
             let activeIndex = 0;
             let tokenStart = -1;
             let fetchTimer = null;
             let fetchSeq = 0;
-            let lastTokenKey = null;   // 当前已渲染的 token（未变化则不重渲染，避免方向键导航被 keyup 重置）
-            let suppressedStart = -2;  // Esc 关闭后记录 token 位置，token 变化/点击前不再弹出
+            let lastTokenKey = null;
+            let suppressedStart = -2;
             const queryCache = new Map();
 
             function currentToken() {
                 const pos = textarea.selectionStart;
                 if (pos !== textarea.selectionEnd) return null;
-                const m = TOKEN_RE.exec(textarea.value.slice(0, pos));
-                if (!m) return null;
-                return { start: pos - m[1].length, query: m[1].slice(1) };
+                const match = TOKEN_RE.exec(textarea.value.slice(0, pos));
+                if (!match) return null;
+                return { start: pos - match[1].length, query: match[1].slice(1) };
             }
 
             let mirror = null;
@@ -876,12 +449,9 @@
                     mirror = document.createElement('div');
                     mirror.className = 'ref-caret-mirror';
                     document.body.appendChild(mirror);
-                    const cs = getComputedStyle(textarea);
-                    ['fontFamily', 'fontSize', 'fontWeight', 'lineHeight', 'letterSpacing',
-                     'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft',
-                     'borderTopWidth', 'borderRightWidth', 'borderBottomWidth', 'borderLeftWidth',
-                     'boxSizing', 'width', 'textIndent'].forEach(function(p) {
-                        mirror.style[p] = cs[p];
+                    const style = getComputedStyle(textarea);
+                    ['fontFamily', 'fontSize', 'fontWeight', 'lineHeight', 'letterSpacing', 'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft', 'borderTopWidth', 'borderRightWidth', 'borderBottomWidth', 'borderLeftWidth', 'boxSizing', 'width', 'textIndent'].forEach(function (property) {
+                        mirror.style[property] = style[property];
                     });
                 }
                 mirror.textContent = textarea.value.slice(0, textarea.selectionStart);
@@ -889,26 +459,27 @@
                 marker.textContent = '\u200b';
                 mirror.appendChild(marker);
                 const base = mirror.getBoundingClientRect();
-                const mRect = marker.getBoundingClientRect();
-                const taRect = textarea.getBoundingClientRect();
-                const top = taRect.top + (mRect.top - base.top) - textarea.scrollTop;
-                const left = taRect.left + (mRect.left - base.left) - textarea.scrollLeft;
-                return { top: top, left: left };
+                const markerRect = marker.getBoundingClientRect();
+                const textareaRect = textarea.getBoundingClientRect();
+                return {
+                    top: textareaRect.top + markerRect.top - base.top - textarea.scrollTop,
+                    left: textareaRect.left + markerRect.left - base.left - textarea.scrollLeft
+                };
             }
 
             function positionPopover() {
-                const c = caretCoords();
-                const pw = popover.offsetWidth || 300;
-                let left = Math.max(8, Math.min(c.left, window.innerWidth - pw - 8));
-                let top = c.top + 22;
-                if (top + 280 > window.innerHeight) top = Math.max(8, c.top - 258);
+                const coords = caretCoords();
+                const width = popover.offsetWidth || 300;
+                let left = Math.max(8, Math.min(coords.left, window.innerWidth - width - 8));
+                let top = coords.top + 22;
+                if (top + 280 > window.innerHeight) top = Math.max(8, coords.top - 258);
                 popover.style.left = left + 'px';
                 popover.style.top = top + 'px';
             }
 
             function highlight() {
                 const rows = popover.querySelectorAll('.ref-item');
-                rows.forEach(function(el, i) { el.classList.toggle('active', i === activeIndex); });
+                rows.forEach(function (row, index) { row.classList.toggle('active', index === activeIndex); });
                 if (rows[activeIndex]) rows[activeIndex].scrollIntoView({ block: 'nearest' });
             }
 
@@ -919,63 +490,50 @@
                 const box = document.getElementById('refList');
                 box.textContent = '';
                 if (!list.length) {
-                    const d = document.createElement('div');
-                    d.className = 'ref-empty';
-                    d.textContent = L10N.refNoMatch;
-                    box.appendChild(d);
+                    const empty = document.createElement('div');
+                    empty.className = 'ref-empty';
+                    empty.textContent = L10N.refNoMatch;
+                    box.appendChild(empty);
                     return;
                 }
-                list.forEach(function(it, i) {
+                list.forEach(function (item, index) {
                     const row = document.createElement('div');
                     row.className = 'ref-item';
                     row.setAttribute('role', 'option');
                     const id = document.createElement('span');
                     id.className = 'ref-id';
-                    id.textContent = '#' + it.id;
+                    id.textContent = '#' + item.id;
                     const title = document.createElement('span');
-                    title.className = 'ref-title' + (it.title ? '' : ' empty');
-                    title.textContent = it.title || '—';
+                    title.className = 'ref-title' + (item.title ? '' : ' empty');
+                    title.textContent = item.title || '—';
                     const time = document.createElement('span');
                     time.className = 'ref-time';
-                    time.textContent = it.mtime ? new Date(it.mtime * 1000).toLocaleDateString() : '';
-                    row.appendChild(id); row.appendChild(title); row.appendChild(time);
-                    row.addEventListener('mousedown', function(e) { e.preventDefault(); choose(i); });
+                    time.textContent = item.mtime ? new Date(item.mtime * 1000).toLocaleDateString() : '';
+                    row.appendChild(id);
+                    row.appendChild(title);
+                    row.appendChild(time);
+                    row.addEventListener('mousedown', function (event) { event.preventDefault(); choose(index); });
                     box.appendChild(row);
                 });
                 highlight();
             }
 
-            function loadQuery(q) {
-                if (queryCache.has(q)) { renderItems(queryCache.get(q), q); return; }
+            function loadQuery(query) {
+                if (queryCache.has(query)) { renderItems(queryCache.get(query), query); return; }
                 clearTimeout(fetchTimer);
-                fetchTimer = setTimeout(function() {
-                    const seq = ++fetchSeq;
-                    fetch(REFS.api + '?q=' + encodeURIComponent(q), { headers: { 'Accept': 'application/json' } })
-                        .then(function(r) { if (!r.ok) throw new Error(r.status); return r.json(); })
-                        .then(function(data) {
-                            if (seq !== fetchSeq) return;
-                            const list = (data && data.items) || [];
-                            if (queryCache.size > 60) queryCache.clear();
-                            queryCache.set(q, list);
-                            renderItems(list, q);
-                        })
-                        .catch(function() {});
+                fetchTimer = setTimeout(function () {
+                    const sequence = ++fetchSeq;
+                    fetch(REFS.api + '?q=' + encodeURIComponent(query), { headers: { 'Accept': 'application/json' } }).then(function (response) {
+                        if (!response.ok) throw new Error(response.status);
+                        return response.json();
+                    }).then(function (data) {
+                        if (sequence !== fetchSeq) return;
+                        const list = (data && data.items) || [];
+                        if (queryCache.size > 60) queryCache.clear();
+                        queryCache.set(query, list);
+                        renderItems(list, query);
+                    }).catch(function () {});
                 }, 200);
-            }
-
-            function update(fromInput) {
-                const tok = currentToken();
-                if (!tok) { hide(); return; }
-                // Esc 挂起：token 未变（如方向键的 keyup）不重新弹出
-                if (suppressedStart === tok.start && !fromInput) return;
-                const key = tok.start + ':' + tok.query;
-                if (isOpen() && key === lastTokenKey) return;  // 未变化，保持当前列表与选中项
-                suppressedStart = -2;
-                lastTokenKey = key;
-                tokenStart = tok.start;
-                popover.classList.add('show');
-                positionPopover();
-                loadQuery(tok.query);
             }
 
             function hide() {
@@ -987,102 +545,59 @@
 
             function isOpen() { return popover.classList.contains('show'); }
 
-            function choose(i) {
-                const it = items[i];
-                if (!it) return;
+            function update(fromInput) {
+                const token = currentToken();
+                if (!token) { hide(); return; }
+                if (suppressedStart === token.start && !fromInput) return;
+                const key = token.start + ':' + token.query;
+                if (isOpen() && key === lastTokenKey) return;
+                suppressedStart = -2;
+                lastTokenKey = key;
+                tokenStart = token.start;
+                popover.classList.add('show');
+                positionPopover();
+                loadQuery(token.query);
+            }
+
+            function choose(index) {
+                const item = items[index];
+                if (!item) return;
                 const end = textarea.selectionStart;
                 const rest = /^[A-Za-z0-9_\-]*/.exec(textarea.value.slice(end));
-                const insert = '#' + it.id + ' ';
-                textarea.value = textarea.value.slice(0, tokenStart) + insert
-                    + textarea.value.slice(end + (rest ? rest[0].length : 0));
-                const caret = tokenStart + insert.length;
+                const insert = '#' + item.id + ' ';
+                textarea.value = textarea.value.slice(0, tokenStart) + insert + textarea.value.slice(end + (rest ? rest[0].length : 0));
                 textarea.focus();
-                textarea.selectionStart = textarea.selectionEnd = caret;
+                textarea.selectionStart = textarea.selectionEnd = tokenStart + insert.length;
                 hide();
                 textarea.dispatchEvent(new Event('input', { bubbles: true }));
             }
 
-            // 键盘导航用捕获阶段拦截，避免触发 Tab 插入空格等既有编辑器快捷键
-            document.addEventListener('keydown', function(e) {
-                if (!isOpen() || document.activeElement !== textarea || e.isComposing) return;
-                if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-                    e.preventDefault(); e.stopPropagation();
+            document.addEventListener('keydown', function (event) {
+                if (!isOpen() || document.activeElement !== textarea || event.isComposing) return;
+                if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+                    event.preventDefault();
+                    event.stopPropagation();
                     if (!items.length) return;
-                    activeIndex = (activeIndex + (e.key === 'ArrowDown' ? 1 : items.length - 1)) % items.length;
+                    activeIndex = (activeIndex + (event.key === 'ArrowDown' ? 1 : items.length - 1)) % items.length;
                     highlight();
-                } else if (e.key === 'Enter' || e.key === 'Tab') {
-                    if (!items.length) return;  // 无候选项：放行默认行为（换行 / 既有 Tab 处理）
-                    e.preventDefault(); e.stopPropagation();
+                } else if (event.key === 'Enter' || event.key === 'Tab') {
+                    if (!items.length) return;
+                    event.preventDefault();
+                    event.stopPropagation();
                     choose(activeIndex);
-                } else if (e.key === 'Escape') {
-                    e.preventDefault(); e.stopPropagation();
+                } else if (event.key === 'Escape') {
+                    event.preventDefault();
+                    event.stopPropagation();
                     suppressedStart = tokenStart;
                     hide();
                 }
             }, true);
-
-            ['input', 'click', 'keyup'].forEach(function(evt) {
-                textarea.addEventListener(evt, function() { update(evt !== 'keyup'); });
+            ['input', 'click', 'keyup'].forEach(function (name) {
+                textarea.addEventListener(name, function () { update(name !== 'keyup'); });
             });
             textarea.addEventListener('focus', update);
             textarea.addEventListener('blur', hide);
             textarea.addEventListener('scroll', hide);
-        })();
-    </script>
-    <script>
-        /* 大纲预览：实时预览栏的标题目录。每次预览渲染后由 updatePreview 调用
-           refresh() 重建列表，点击条目滚动预览区定位到对应章节。 */
-        (function() {
-            const btn = document.getElementById('outlineBtn');
-            const pop = document.getElementById('outlinePopover');
-            const previewBody = document.getElementById('previewBody');
-            if (!btn || !pop || !previewBody) return;
-
-            let headings = [];
-
-            function refresh() {
-                headings = [];
-                let minLevel = 7;
-                previewBody.querySelectorAll('h1,h2,h3,h4,h5,h6').forEach(function(h) {
-                    const l = parseInt(h.tagName.charAt(1), 10);
-                    if (l >= 1 && l <= 6) {
-                        minLevel = Math.min(minLevel, l);
-                        headings.push({ el: h, level: l });
-                    }
-                });
-                btn.style.display = headings.length ? '' : 'none';
-                if (!headings.length) { hide(); pop.textContent = ''; return; }
-                pop.textContent = '';
-                headings.forEach(function(h, i) {
-                    if (!h.el.id) h.el.id = 'pv-outline-' + i;
-                    const a = document.createElement('a');
-                    a.href = '#' + h.el.id;
-                    // 缩进相对最浅标题计算，与服务端只读页大纲规则一致
-                    a.className = 'ol-l' + Math.min(h.level - minLevel + 1, 6);
-                    a.textContent = h.el.textContent;
-                    a.addEventListener('click', function(e) {
-                        e.preventDefault();
-                        hide();
-                        h.el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                    });
-                    pop.appendChild(a);
-                });
-            }
-
-            function isOpen() { return pop.classList.contains('show'); }
-            function hide() { pop.classList.remove('show'); btn.setAttribute('aria-expanded', 'false'); }
-            btn.addEventListener('click', function() {
-                pop.classList.toggle('show');
-                btn.setAttribute('aria-expanded', isOpen() ? 'true' : 'false');
-            });
-            document.addEventListener('click', function(e) {
-                if (isOpen() && !pop.contains(e.target) && !btn.contains(e.target)) hide();
-            });
-            document.addEventListener('keydown', function(e) {
-                if (e.key === 'Escape' && isOpen()) hide();
-            });
-
-            window.NoteOutline = { refresh: refresh };
         })();
     </script>
 </body>

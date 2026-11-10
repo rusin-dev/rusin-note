@@ -158,6 +158,21 @@
       "qq": {"app_id": "", "app_secret": ""}
     }
   },
+  "gitee_sync": {
+    "client_id": "",
+    "client_secret": "",
+    "scope": "user_info projects pull_requests hook",
+    "timeout_seconds": 10,
+    "poll_seconds": 300,
+    "max_notes": 1000,
+    "max_file_kb": 2048
+  },
+  "oauth_server": {
+    "issuer": "",
+    "authorization_code_ttl_seconds": 300,
+    "access_token_ttl_seconds": 3600,
+    "id_token_ttl_seconds": 300
+  },
   "security": {
     "code_length": 6,
     "code_ttl_seconds": 600,
@@ -200,6 +215,8 @@
     "oauth_microsoft": false,
     "oauth_wechat": false,
     "oauth_qq": false,
+    "gitee_sync": false,
+    "oauth_server": false,
     "two_factor_auth": false,
     "email_verify": false,
     "phone_verify": false
