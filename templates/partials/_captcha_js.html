@@ -13,6 +13,9 @@
         var xEl = document.getElementById('captchaX');
         var trajEl = document.getElementById('captchaTraj');
         var hintText = hint.textContent;
+        var TXT_CHECK = {{ t('login_captcha_slide_checking')|tojson }};
+        var TXT_OK = {{ t('login_captcha_slide_ok')|tojson }};
+        var TXT_FAIL = {{ t('login_captcha_slide_fail')|tojson }};
 
         var W = parseFloat(root.dataset.w);
         var S = parseFloat(root.dataset.s);
@@ -20,7 +23,7 @@
         var yTop = parseFloat(root.dataset.y);
         var curve = JSON.parse(root.dataset.curve);
 
-        var scale = 1, d = 0, dragging = false;
+        var scale = 1, d = 0, dragging = false, locked = false, checking = false;
         var startX = 0, startY = 0, startD = 0, t0 = 0, traj = [];
 
         function curveValue(x) {
@@ -59,9 +62,9 @@
         }
 
         function reset() {
-            d = 0; traj = []; dragging = false;
+            d = 0; traj = []; dragging = false; locked = false; checking = false;
             xEl.value = ''; trajEl.value = '';
-            root.classList.remove('is-dragging');
+            root.classList.remove('is-dragging', 'is-ok', 'is-fail', 'is-checking');
             hint.textContent = hintText;
             render();
         }
@@ -76,6 +79,7 @@
         }
 
         function onDown(e) {
+            if (locked || checking) { return; }
             dragging = true;
             startX = e.clientX; startY = e.clientY; startD = d;
             t0 = performance.now(); traj = [];
@@ -102,15 +106,57 @@
             root.classList.remove('is-dragging');
             sample(e.clientY);
             commit();
+            verifyRelease();
+        }
+
+        // 中断（pointercancel / 拖拽被打断）：本挑战作废，自动换一张新图重来
+        function onCancel(e) {
+            if (!dragging) { return; }
+            dragging = false;
+            root.classList.remove('is-dragging');
+            reset();
+            refreshCaptcha();
+        }
+
+        // 松手即校验：一次挑战只允许一段连续拖拽。服务端确认对齐才置绿（诚实反馈），
+        // 未对齐或请求失败自动换新图；不前端猜测对齐（缺口是服务端机密）。
+        function verifyRelease() {
+            locked = true; checking = true;
+            root.classList.add('is-checking');
+            hint.textContent = TXT_CHECK;
+            var csrfEl = document.querySelector('input[name="csrf_token"]');
+            var fd = new FormData();
+            fd.append('captcha_token', tokenEl.value);
+            fd.append('captcha_x', xEl.value);
+            fd.append('captcha_traj', trajEl.value);
+            function fail() {
+                checking = false;
+                root.classList.remove('is-checking');
+                root.classList.add('is-fail');
+                hint.textContent = TXT_FAIL;
+                setTimeout(function () { refreshCaptcha(); }, 700);
+            }
+            fetch('/login/captcha/verify', {
+                method: 'POST', body: fd, credentials: 'same-origin',
+                headers: { 'X-CSRFToken': csrfEl ? csrfEl.value : '' }
+            }).then(function (r) { return r.json(); }).then(function (dd) {
+                checking = false;
+                root.classList.remove('is-checking');
+                if (dd && dd.ok) {
+                    root.classList.add('is-ok');
+                    hint.textContent = TXT_OK;
+                } else { fail(); }
+            }).catch(fail);
         }
 
         thumb.addEventListener('pointerdown', onDown);
         document.addEventListener('pointermove', onMove);
         document.addEventListener('pointerup', onUp);
-        document.addEventListener('pointercancel', onUp);
+        document.addEventListener('pointercancel', onCancel);
 
         // 键盘可达性：方向键移动滑块并实时记录轨迹（无障碍兜底）
         thumb.addEventListener('keydown', function (e) {
+            if (locked || checking) { return; }
             var step = S / 24;
             if (e.key === 'ArrowRight' || e.key === 'ArrowUp') { d = Math.min(S, d + step); }
             else if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') { d = Math.max(0, d - step); }

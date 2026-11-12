@@ -266,6 +266,9 @@ STRINGS = {
         "feature_login_captcha": "登录图形验证码",
         "login_captcha_slide": "滑动拼图验证",
         "login_captcha_slide_hint": "拖动滑块，把拼图补到缺口处",
+        "login_captcha_slide_checking": "校验中…",
+        "login_captcha_slide_ok": "验证通过，可提交",
+        "login_captcha_slide_fail": "未对齐，已更换拼图",
         # 第三方登录（OAuth）
         "login_or": "或使用以下方式登录",
         "otp_login_link": "使用邮箱 / 手机号验证码登录",
@@ -980,6 +983,9 @@ STRINGS = {
         "feature_login_captcha": "Login image captcha",
         "login_captcha_slide": "Slide puzzle verification",
         "login_captcha_slide_hint": "Drag the slider to fit the puzzle into the gap",
+        "login_captcha_slide_checking": "Checking…",
+        "login_captcha_slide_ok": "Verified, ready to submit",
+        "login_captcha_slide_fail": "Not aligned, new puzzle loaded",
         # OAuth third-party login
         "login_or": "Or continue with",
         "otp_login_link": "Sign in with an email / phone code",

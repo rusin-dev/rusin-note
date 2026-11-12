@@ -94,6 +94,22 @@ def login_captcha_refresh():
     return jsonify(out)
 
 
+@bp.route("/login/captcha/verify", methods=["POST"])
+@limiter.limit(lambda: f"{config.GET_RATE_MAX} per {config.GET_RATE_WINDOW} second")
+def login_captcha_verify():
+    """松手即校验：消耗一次性滑动挑战并累计 IP 风险；对齐才写 session 预校验，
+    供表单提交复用。仅返回 ok，不泄露缺口/可疑度（防对齐 oracle 与打草惊蛇）。"""
+    from app.core import captcha
+    if not feature_enabled("login_captcha"):
+        abort(404)
+    if captcha.current_type() != "slide":
+        return jsonify({"ok": False}), 400
+    ok = captcha.verify_form(request.form, g.client_ip)
+    if ok:
+        captcha.mark_slide_verified(request.form.get("captcha_token", ""))
+    return jsonify({"ok": bool(ok)})
+
+
 @bp.route("/logout", methods=["POST"])
 def logout():
     token = get_session_token()

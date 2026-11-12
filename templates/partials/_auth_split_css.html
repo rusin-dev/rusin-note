@@ -43,6 +43,14 @@ body.auth-page .container {
 .slide-thumb:active { cursor: grabbing; }
 .slide-thumb:focus-visible { outline: 2px solid var(--link); outline-offset: 2px; }
 .slide-captcha.is-dragging .slide-thumb { border-color: var(--link); }
+.slide-captcha.is-checking .slide-thumb { border-color: var(--link); cursor: progress; }
+.slide-captcha.is-checking .slide-hint { color: var(--link); }
+.slide-captcha.is-ok .slide-thumb { background: var(--link); border-color: var(--link); color: #ffffff; }
+.slide-captcha.is-ok .slide-track-fill { opacity: 0.32; }
+.slide-captcha.is-ok .slide-hint { color: var(--link); font-weight: 600; }
+.slide-captcha.is-fail .slide-thumb { border-color: #d64545; color: #d64545; }
+.slide-captcha.is-fail .slide-hint { color: #d64545; font-weight: 600; }
+.slide-captcha.is-ok .slide-thumb, .slide-captcha.is-fail .slide-thumb { cursor: default; }
 @media (max-width: 768px) {
     .auth-split { grid-template-columns: 1fr; }
     .auth-art { display: none; }

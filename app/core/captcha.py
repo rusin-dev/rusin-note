@@ -11,12 +11,13 @@ import secrets
 import threading
 import time
 
-from flask import g, has_request_context
+from flask import g, has_request_context, session
 
 from app.core import config
 from app.core.storage import StorageError, storage
 
 K_CAPTCHAS = "login_captchas"
+K_SLIDE_VERIFIED = "slide_verified"
 CODE_LENGTH = 6
 TTL_SECONDS = 600
 _TOKEN_RE = re.compile(r"^[0-9a-f]{16,64}$")
@@ -220,6 +221,20 @@ def build_challenge() -> dict:
     return {"type": "slide", "token": token, "slide": ch}
 
 
+def mark_slide_verified(token: str) -> None:
+    """松手校验通过后把 token 记入 session，供表单提交一次性复用（不再二次校验）。"""
+    ttl = float(config.CAPTCHA_SLIDE.get("ttl_seconds", 300) or 300)
+    session[K_SLIDE_VERIFIED] = {"token": token, "exp": time.time() + ttl}
+
+
+def consume_slide_verified(token: str) -> bool:
+    """提交时消费松手预校验结果：token 匹配且未过期才放行，无论成败均清除。"""
+    entry = session.pop(K_SLIDE_VERIFIED, None)
+    if not isinstance(entry, dict) or entry.get("exp", 0) < time.time():
+        return False
+    return bool(token) and entry.get("token") == token
+
+
 def verify_form(form, ip: str) -> bool:
     """按类型校验表单验证码，并累计 IP 风险分（滑动拼图静默放行 + 逐步升级）。
 
@@ -239,6 +254,13 @@ def verify_form(form, ip: str) -> bool:
         return ok
     import json
     from app.core import slide_captcha
+    if consume_slide_verified(form.get("captcha_token", "")):
+        _stash_debug("debug_verify", {
+            "type": "slide", "ok": True, "suspicion": None,
+            "confidence": None, "reason": "preverified",
+            "tolerance": None, "require_human": False, "slider_x": None,
+        })
+        return True
     try:
         x = float(form.get("captcha_x", "") or 0)
     except (TypeError, ValueError):

@@ -277,3 +277,79 @@ class TestCaptchaType:
             expect(d.get("type") == "image" and "<svg" in d.get("svg", ""), "刷新端点返回图形码")
         finally:
             config.CAPTCHA_TYPE = old
+
+
+class TestSlideReleaseVerify:
+    """松手即校验（AJAX）：对齐才 ok、消耗挑战、session 预校验供提交一次性复用。"""
+
+    def _verify(self, client, fields, csrf):
+        return client.post("/login/captcha/verify", data={"csrf_token": csrf, **fields})
+
+    def test_release_ok_then_submit_reuses(self, ctx):
+        logger.info("=== [S] 松手校验通过 → 提交复用预校验 ===")
+        ctx.client.environ_base["REMOTE_ADDR"] = "203.0.113.61"
+        html = ctx.client.get("/register").get_data(as_text=True)
+        token = _token_of(html)
+        fields = _solve_slide(token)
+        resp = self._verify(ctx.client, fields, csrf_of(html))
+        expect(resp.status_code == 200, "松手校验端点 200")
+        expect(json.loads(resp.data).get("ok") is True, "对齐 → ok=true")
+        expect(not sc.peek(token), "挑战已被消耗（一次性）")
+        resp2 = ctx.client.post("/register", data={
+            "username": "releaseok", "password": DEFAULT_PASSWORD, "confirm": DEFAULT_PASSWORD,
+            "csrf_token": csrf_of(html), "agree_terms": "1", "captcha_token": token,
+        })
+        expect(resp2.status_code == 302, "提交复用预校验 -> 302")
+        expect(bool((get_user("releaseok") or {}).get("salt")), "用户已创建")
+
+    def test_release_misaligned_consumes_and_blocks(self, ctx):
+        logger.info("=== [T] 松手未对齐 → ok=false 且消耗挑战 ===")
+        ctx.client.environ_base["REMOTE_ADDR"] = "203.0.113.62"
+        html = ctx.client.get("/register").get_data(as_text=True)
+        token = _token_of(html)
+        fields = _solve_slide(token)
+        fields["captcha_x"] = "3"
+        resp = self._verify(ctx.client, fields, csrf_of(html))
+        expect(json.loads(resp.data).get("ok") is False, "错位 → ok=false")
+        expect(not sc.peek(token), "错位也消耗挑战")
+        resp2 = ctx.client.post("/register", data={
+            "username": "releasebad", "password": DEFAULT_PASSWORD, "confirm": DEFAULT_PASSWORD,
+            "csrf_token": csrf_of(html), "agree_terms": "1", **fields,
+        })
+        expect(resp2.status_code == 400, "无预校验且 token 已耗 → 提交 400")
+
+    def test_release_requires_csrf(self, ctx):
+        logger.info("=== [U] 松手校验需 CSRF ===")
+        html = ctx.client.get("/register").get_data(as_text=True)
+        fields = _solve_slide(_token_of(html))
+        resp = ctx.client.post("/login/captcha/verify", data=fields)
+        expect(resp.status_code == 400, "缺 CSRF 返回 400")
+
+    def test_preverified_one_time(self, ctx):
+        logger.info("=== [V] 预校验一次性：复用后失效 ===")
+        ctx.client.environ_base["REMOTE_ADDR"] = "203.0.113.63"
+        html = ctx.client.get("/register").get_data(as_text=True)
+        token = _token_of(html)
+        fields = _solve_slide(token)
+        self._verify(ctx.client, fields, csrf_of(html))
+        r1 = ctx.client.post("/register", data={
+            "username": "preonce", "password": DEFAULT_PASSWORD, "confirm": DEFAULT_PASSWORD,
+            "csrf_token": csrf_of(html), "agree_terms": "1", "captcha_token": token})
+        expect(r1.status_code == 302, "首次提交复用成功")
+        logout(ctx.client)
+        html2 = ctx.client.get("/login").get_data(as_text=True)
+        r2 = ctx.client.post("/login", data={
+            "username": "preonce", "password": DEFAULT_PASSWORD,
+            "csrf_token": csrf_of(html2), "captcha_token": token})
+        expect(r2.status_code == 400, "预校验已消费 → 再次提交 400")
+
+    def test_image_type_rejects_release(self, ctx):
+        logger.info("=== [W] image 类型不支持松手校验 ===")
+        old = config.CAPTCHA_TYPE
+        config.CAPTCHA_TYPE = "image"
+        try:
+            html = ctx.client.get("/register").get_data(as_text=True)
+            resp = ctx.client.post("/login/captcha/verify", data={"csrf_token": csrf_of(html)})
+            expect(resp.status_code == 400, "image 类型返回 400")
+        finally:
+            config.CAPTCHA_TYPE = old
