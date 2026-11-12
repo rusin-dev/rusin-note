@@ -1,0 +1,154 @@
+{# 开发/排障诊断面板：仅 config.DEBUG_PANEL 且回环（或显式 remote）时由 base.html 引入。
+   暴露验证码答案/缺口、轨迹可疑度与置信度、IP 风控分、TTFB 等，生产切勿开启。 #}
+{% macro row(k, v) %}
+<div class="dbg-row"><span>{{ k }}</span><b>{% if v is none %}—{% elif v is mapping or (v is sequence and v is not string) %}{{ v|tojson }}{% else %}{{ v }}{% endif %}</b></div>
+{% endmacro %}
+<style>
+    .dbg-panel {
+        position: fixed; right: 12px; bottom: 12px; z-index: 9999;
+        width: 360px; max-width: calc(100vw - 24px); max-height: 70vh;
+        overflow: auto; font: 12px/1.5 Consolas, Monaco, "Courier New", monospace;
+        background: rgba(12, 16, 15, 0.94); color: #d7e0dc;
+        border: 1px solid #2fae8b; border-radius: 10px;
+        box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45);
+    }
+    .dbg-panel > summary {
+        position: sticky; top: 0; cursor: pointer; user-select: none;
+        padding: 8px 12px; font-weight: 700; letter-spacing: 0.5px;
+        background: #0e8a6d; color: #ffffff; list-style: none;
+        display: flex; align-items: center; justify-content: space-between;
+    }
+    .dbg-panel > summary::-webkit-details-marker { display: none; }
+    .dbg-panel > summary::after { content: "\25B4"; }
+    .dbg-panel:not([open]) > summary::after { content: "\25BE"; }
+    .dbg-body { padding: 8px 12px 12px; }
+    .dbg-sec { margin-top: 10px; }
+    .dbg-sec:first-child { margin-top: 2px; }
+    .dbg-sec > h4 {
+        margin: 0 0 4px; font-size: 11px; text-transform: uppercase;
+        letter-spacing: 0.6px; color: #2fae8b; border-bottom: 1px solid #22302b;
+        padding-bottom: 3px;
+    }
+    .dbg-row { display: flex; justify-content: space-between; gap: 10px; padding: 1px 0; }
+    .dbg-row > span { color: #8fa39c; flex-shrink: 0; }
+    .dbg-row > b { font-weight: 600; text-align: right; word-break: break-all; min-width: 0; }
+    .dbg-row > b.dbg-ok { color: #7fd0b8; }
+    .dbg-row > b.dbg-bad { color: #ff8f8f; }
+    .dbg-warn { margin-top: 8px; color: #ffcf8f; font-size: 11px; }
+</style>
+<details class="dbg-panel" id="dbgPanel" open>
+    <summary>DEBUG PANEL</summary>
+    <div class="dbg-body">
+        {% if debug_data %}
+        <div class="dbg-sec">
+            <h4>请求 Request</h4>
+            {{ row('method', debug_data.request.method) }}
+            {{ row('path', debug_data.request.path) }}
+            {{ row('client_ip', debug_data.request.client_ip) }}
+            {{ row('ip_source', debug_data.request.ip_source) }}
+            {{ row('remote_addr', debug_data.request.remote_addr) }}
+            {{ row('user', debug_data.request.user) }}
+            {{ row('simple_mode', debug_data.request.simple_mode) }}
+            {{ row('user_agent', debug_data.request.user_agent) }}
+        </div>
+        <div class="dbg-sec">
+            <h4>性能 Performance</h4>
+            {{ row('server_ms', debug_data.perf.server_ms) }}
+            <div class="dbg-row"><span>ttfb_ms</span><b id="dbg-ttfb">…</b></div>
+            <div class="dbg-row"><span>dns_ms</span><b id="dbg-dns">…</b></div>
+            <div class="dbg-row"><span>connect_ms</span><b id="dbg-connect">…</b></div>
+            <div class="dbg-row"><span>domcontentloaded_ms</span><b id="dbg-dcl">…</b></div>
+            <div class="dbg-row"><span>load_ms</span><b id="dbg-load">…</b></div>
+            <div class="dbg-row"><span>transfer_bytes</span><b id="dbg-transfer">…</b></div>
+        </div>
+        <div class="dbg-sec">
+            <h4>验证码 Captcha</h4>
+            {{ row('type', debug_data.captcha.type) }}
+            {% if debug_data.captcha.challenge %}
+            {% set ch = debug_data.captcha.challenge %}
+            {{ row('token', ch.token) }}
+            {% if ch.type == 'image' %}
+            {{ row('answer(实际验证码)', ch.answer) }}
+            {% else %}
+            {{ row('target(缺口x)', ch.target) }}
+            {{ row('S(滑块量程)', ch.S) }}
+            {{ row('tm(拼图最远)', ch.tm) }}
+            {{ row('curve(阻尼)', ch.curve) }}
+            {% endif %}
+            {% endif %}
+            {% if debug_data.captcha.verify %}
+            {% set vf = debug_data.captcha.verify %}
+            <div class="dbg-row"><span>ok</span><b class="{{ 'dbg-ok' if vf.ok else 'dbg-bad' }}">{{ vf.ok }}</b></div>
+            {{ row('suspicion(可疑度)', vf.suspicion) }}
+            {{ row('confidence(置信度)', vf.confidence) }}
+            {{ row('reason', vf.reason) }}
+            {{ row('tolerance_px', vf.tolerance) }}
+            {{ row('require_human', vf.require_human) }}
+            {{ row('slider_x', vf.slider_x) }}
+            {% endif %}
+        </div>
+        <div class="dbg-sec">
+            <h4>风控 Risk</h4>
+            {{ row('enabled', debug_data.risk.enabled) }}
+            {{ row('ip', debug_data.risk.ip) }}
+            {{ row('score(风控值)', debug_data.risk.score) }}
+            {{ row('tier', debug_data.risk.tier) }}
+            {{ row('flagged', debug_data.risk.flagged) }}
+            {{ row('suspicious', debug_data.risk.suspicious) }}
+            {{ row('fails', debug_data.risk.fails) }}
+            {{ row('regs', debug_data.risk.regs) }}
+            {{ row('tolerance_px', debug_data.risk.tolerance_px) }}
+            {{ row('require_human', debug_data.risk.require_human) }}
+        </div>
+        <div class="dbg-sec">
+            <h4>环境 Env</h4>
+            {{ row('storage', debug_data.env.storage) }}
+            {{ row('data_dir', debug_data.env.data_dir) }}
+            {{ row('serverless', debug_data.env.serverless) }}
+            {{ row('secure_cookies', debug_data.env.secure_cookies) }}
+            {{ row('trusted_proxies', debug_data.env.trusted_proxies) }}
+            {{ row('login_captcha', debug_data.env.login_captcha) }}
+            {{ row('cache_backend', debug_data.env.cache_backend) }}
+            {{ row('lang', debug_data.env.lang) }}
+        </div>
+        <div class="dbg-warn">调试模式：暴露验证码与风控敏感信息，仅限本地排障。</div>
+        {% endif %}
+    </div>
+</details>
+<script>
+    (function () {
+        function set(id, val) {
+            var el = document.getElementById(id);
+            if (el) { el.textContent = val; }
+        }
+        function ms(x) { return (typeof x === 'number' && isFinite(x)) ? Math.round(x * 10) / 10 : '—'; }
+        var nav = (performance.getEntriesByType && performance.getEntriesByType('navigation')[0]) || null;
+        if (nav) {
+            set('dbg-ttfb', ms(nav.responseStart - nav.requestStart));
+            set('dbg-dns', ms(nav.domainLookupEnd - nav.domainLookupStart));
+            set('dbg-connect', ms(nav.connectEnd - nav.connectStart));
+            set('dbg-dcl', ms(nav.domContentLoadedEventEnd - nav.startTime));
+            set('dbg-load', ms(nav.loadEventEnd - nav.startTime));
+            set('dbg-transfer', nav.transferSize || 0);
+        } else if (performance.timing) {
+            var t = performance.timing;
+            set('dbg-ttfb', ms(t.responseStart - t.requestStart));
+            set('dbg-dns', ms(t.domainLookupEnd - t.domainLookupStart));
+            set('dbg-connect', ms(t.connectEnd - t.connectStart));
+            set('dbg-dcl', ms(t.domContentLoadedEventEnd - t.navigationStart));
+            set('dbg-load', ms(t.loadEventEnd - t.navigationStart));
+            set('dbg-transfer', '—');
+        }
+        // DCL/load 事件晚于本内联脚本执行；loadEventEnd 又在 load 回调结束后才写入，
+        // 故 load 后再延一个任务回填才有非零值
+        window.addEventListener('load', function () {
+            setTimeout(function () {
+                var n = (performance.getEntriesByType && performance.getEntriesByType('navigation')[0]) || null;
+                if (n) {
+                    set('dbg-dcl', ms(n.domContentLoadedEventEnd - n.startTime));
+                    set('dbg-load', ms(n.loadEventEnd - n.startTime));
+                }
+            }, 0);
+        });
+    })();
+</script>

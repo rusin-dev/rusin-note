@@ -112,7 +112,11 @@ def create_app() -> Flask:
         WTF_CSRF_TIME_LIMIT=None,
         RATELIMIT_STORAGE_URI=os.environ.get("REDIS_URL") or "memory://",
         GLOBAL_CDN=config.GLOBAL_CDN,
+        DEBUG_PANEL=config.DEBUG_PANEL,
     )
+
+    if config.DEBUG_PANEL:
+        logger.warning("调试面板已开启（RUSIN_DEBUG_PANEL）：页面将暴露验证码与风控敏感信息，仅限本地排障")
 
     log_ip_policy()
 
