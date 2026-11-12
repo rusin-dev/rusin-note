@@ -185,6 +185,14 @@
 
    页面存于存储后端 KV 键 `wiki:pages`，修订历史存 `wiki:revisions`（file 后端即数据目录下 `wiki_pages.json` / `wiki_revisions.json`）。移动页面会级联迁移其子页面与修订历史；存在子页面的页面不可直接删除。
 
+## 登录验证码
+
+- `captcha`：登录 / 注册页验证码，整体受功能开关 `login_captcha` 控制（默认开）。  
+   - `type`：验证码类型，默认 `image`（SVG 图形码，矢量路径渲染、不含可读文本节点）；设为 `slide` 切换为滑动拼图行为验证。  
+   - `slide`：滑动拼图参数（仅 `type=slide` 生效）：`width` / `height` 背景尺寸（默认 320×160）、`piece` 拼图边长（46）、`tolerance_px` 对齐容差（6，风险升级时收紧）、`ttl_seconds` 挑战有效期（300）、`min_drag_ms` / `max_drag_ms` 轨迹时长上下限（250 / 20000）、`min_samples` 最少采样点（8）、`damping_min` / `damping_max` 随机阻尼局部斜率范围（0.55 / 2.2）。  
+   - `risk`：IP 风险分体系：`enabled`（true）、`decay_hours` 半衰期（12）、`suspicious_points` 可疑放行加分（14）、`fail_points` 失败加分（5）、`escalate_score` 收紧阈值（30）、`flag_score` 标记阈值（60）、`reg_window_seconds` 注册计数窗口（3600）、`max_registrations` 窗口内第 N 次可疑注册即标记（2）。  
+   滑动拼图为「松手即校验」：一次挑战只允许一段连续拖拽，服务端确认对齐才提示通过，未对齐或拖拽中断自动更换新图；位置对齐即静默放行，轨迹可疑度累计 IP 风险分并逐步收紧验证（不打草惊蛇）。缺口位置与阻尼曲线仅存服务端，前端不下发答案。
+
 ## 密码策略
 
 - `password_policy`：密码策略，定义访客密码的复杂度要求。  

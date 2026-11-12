@@ -197,7 +197,7 @@
     }
   },
   "captcha": {
-    "type": "slide",
+    "type": "image",
     "slide": {
       "width": 320,
       "height": 160,

@@ -196,7 +196,7 @@ def render_svg(code: str) -> str:
 
 def current_type() -> str:
     """当前验证码类型（slide / image），动态读配置便于运行时切换与测试。"""
-    return config.CAPTCHA_TYPE if config.CAPTCHA_TYPE in ("slide", "image") else "slide"
+    return config.CAPTCHA_TYPE if config.CAPTCHA_TYPE in ("slide", "image") else "image"
 
 
 def _stash_debug(attr: str, value: dict) -> None:

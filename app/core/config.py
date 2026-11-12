@@ -217,8 +217,8 @@ DEFAULT_CONFIG = {
             "webhook_url": "", "token": "",
         },
     },
-    "captcha": {                              # 登录/注册验证码：滑动拼图（默认）或原图形码
-        "type": "slide",                         # slide=滑动拼图行为验证；image=原 SVG 图形码
+    "captcha": {                              # 登录/注册验证码：图形码（默认）或滑动拼图
+        "type": "image",                         # image=原 SVG 图形码；slide=滑动拼图行为验证
         "slide": {
             "width": 320,                        # 背景宽（px）
             "height": 160,                       # 背景高（px）
@@ -756,11 +756,11 @@ except (TypeError, ValueError):
 SMTP_CFG = SECURITY_CFG.get("smtp", DEFAULT_CONFIG["security"]["smtp"]) or {}
 SMS_CFG = SECURITY_CFG.get("sms", DEFAULT_CONFIG["security"]["sms"]) or {}
 
-# ---------- 验证码（滑动拼图 / 图形码） ----------
+# ---------- 验证码（图形码默认 / 滑动拼图可配置） ----------
 CAPTCHA_CFG = config.get("captcha", DEFAULT_CONFIG["captcha"])
-CAPTCHA_TYPE = str(CAPTCHA_CFG.get("type", "slide") or "slide").strip().lower()
+CAPTCHA_TYPE = str(CAPTCHA_CFG.get("type", "image") or "image").strip().lower()
 if CAPTCHA_TYPE not in ("slide", "image"):
-    CAPTCHA_TYPE = "slide"
+    CAPTCHA_TYPE = "image"
 CAPTCHA_SLIDE = CAPTCHA_CFG.get("slide", DEFAULT_CONFIG["captcha"]["slide"]) or {}
 CAPTCHA_RISK = CAPTCHA_CFG.get("risk", DEFAULT_CONFIG["captcha"]["risk"]) or {}
 

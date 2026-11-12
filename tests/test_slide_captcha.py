@@ -30,6 +30,15 @@ logger = logging.getLogger("rusin.tests.slide")
 _TOKEN_RE = re.compile(r'name="captcha_token"[^>]*value="([^"]+)"')
 
 
+@pytest.fixture(autouse=True)
+def _force_slide_type():
+    """默认配置已切回图形码；本模块滑动用例显式固定 type=slide。"""
+    old = config.CAPTCHA_TYPE
+    config.CAPTCHA_TYPE = "slide"
+    yield
+    config.CAPTCHA_TYPE = old
+
+
 def _token_of(html: str) -> str:
     m = _TOKEN_RE.search(html)
     expect(bool(m), "页面含验证码 token")
