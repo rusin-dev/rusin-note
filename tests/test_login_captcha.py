@@ -12,6 +12,8 @@ import json
 import logging
 import re
 
+import pytest
+
 from app.core import captcha as captcha_mod
 from app.core.extensions import cache
 from app.core.feature_flags import FEATURE_KEYS, set_flags
@@ -24,6 +26,16 @@ logger = logging.getLogger("rusin.tests.captcha")
 
 _TOKEN_RE = re.compile(r'name="captcha_token"[^>]*value="([^"]+)"')
 USER = "capuser"
+
+
+@pytest.fixture(autouse=True)
+def _force_image_captcha():
+    """本模块专测原图形验证码：固定 type=image（滑动拼图见 test_slide_captcha.py）。"""
+    from app.core import config
+    old = config.CAPTCHA_TYPE
+    config.CAPTCHA_TYPE = "image"
+    yield
+    config.CAPTCHA_TYPE = old
 
 
 def test_svg_does_not_expose_plaintext_answer():

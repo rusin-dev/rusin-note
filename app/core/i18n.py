@@ -264,6 +264,8 @@ STRINGS = {
         "login_captcha_refresh": "看不清？点击刷新",
         "err_captcha": "验证码错误或已过期，请重试",
         "feature_login_captcha": "登录图形验证码",
+        "login_captcha_slide": "滑动拼图验证",
+        "login_captcha_slide_hint": "拖动滑块，把拼图补到缺口处",
         # 第三方登录（OAuth）
         "login_or": "或使用以下方式登录",
         "otp_login_link": "使用邮箱 / 手机号验证码登录",
@@ -976,6 +978,8 @@ STRINGS = {
         "login_captcha_refresh": "Can't read it? Click to refresh",
         "err_captcha": "Captcha is wrong or expired, please try again",
         "feature_login_captcha": "Login image captcha",
+        "login_captcha_slide": "Slide puzzle verification",
+        "login_captcha_slide_hint": "Drag the slider to fit the puzzle into the gap",
         # OAuth third-party login
         "login_or": "Or continue with",
         "otp_login_link": "Sign in with an email / phone code",
