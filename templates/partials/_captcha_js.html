@@ -1,4 +1,191 @@
 {% if captcha_enabled %}
+{% if captcha_type == 'slide' %}
+<script>
+    (function () {
+        var root = document.getElementById('slideCaptcha');
+        if (!root) { return; }
+        var bg = document.getElementById('slideBg');
+        var piece = document.getElementById('slidePiece');
+        var thumb = document.getElementById('slideThumb');
+        var fill = document.getElementById('slideFill');
+        var hint = document.getElementById('slideHint');
+        var tokenEl = document.getElementById('captchaToken');
+        var xEl = document.getElementById('captchaX');
+        var trajEl = document.getElementById('captchaTraj');
+        var hintText = hint.textContent;
+        var TXT_CHECK = {{ t('login_captcha_slide_checking')|tojson }};
+        var TXT_OK = {{ t('login_captcha_slide_ok')|tojson }};
+        var TXT_FAIL = {{ t('login_captcha_slide_fail')|tojson }};
+
+        var W = parseFloat(root.dataset.w);
+        var S = parseFloat(root.dataset.s);
+        var pw = parseFloat(root.dataset.pw);
+        var yTop = parseFloat(root.dataset.y);
+        var curve = JSON.parse(root.dataset.curve);
+
+        var scale = 1, d = 0, dragging = false, locked = false, checking = false;
+        var startX = 0, startY = 0, startD = 0, t0 = 0, traj = [];
+
+        function curveValue(x) {
+            if (x <= curve[0][0]) { return curve[0][1]; }
+            var last = curve[curve.length - 1];
+            if (x >= last[0]) { return last[1]; }
+            for (var i = 0; i < curve.length - 1; i++) {
+                var a = curve[i], b = curve[i + 1];
+                if (x >= a[0] && x <= b[0]) {
+                    var span = (b[0] - a[0]) || 1;
+                    return a[1] + (b[1] - a[1]) * (x - a[0]) / span;
+                }
+            }
+            return last[1];
+        }
+
+        function render() {
+            piece.style.left = (curveValue(d) * scale) + 'px';
+            thumb.style.left = (d * scale) + 'px';
+            fill.style.width = (d * scale + pw * scale / 2) + 'px';
+            thumb.setAttribute('aria-valuenow', String(Math.round(d)));
+        }
+
+        function layout() {
+            var w = bg.clientWidth || W;
+            scale = w / W;
+            piece.style.width = (pw * scale) + 'px';
+            piece.style.top = (yTop * scale) + 'px';
+            thumb.style.width = (pw * scale) + 'px';
+            render();
+        }
+
+        function commit() {
+            xEl.value = String(Math.round(d * 100) / 100);
+            trajEl.value = JSON.stringify(traj);
+        }
+
+        function reset() {
+            d = 0; traj = []; dragging = false; locked = false; checking = false;
+            xEl.value = ''; trajEl.value = '';
+            root.classList.remove('is-dragging', 'is-ok', 'is-fail', 'is-checking');
+            hint.textContent = hintText;
+            render();
+        }
+
+        function sample(clientY) {
+            traj.push({
+                x: Math.round(d * 100) / 100,
+                y: Math.round((clientY - startY) * 100) / 100,
+                t: Math.round(performance.now() - t0)
+            });
+            if (traj.length > 400) { traj.splice(0, traj.length - 400); }
+        }
+
+        function onDown(e) {
+            if (locked || checking) { return; }
+            dragging = true;
+            startX = e.clientX; startY = e.clientY; startD = d;
+            t0 = performance.now(); traj = [];
+            root.classList.add('is-dragging');
+            if (thumb.setPointerCapture && e.pointerId != null) {
+                try { thumb.setPointerCapture(e.pointerId); } catch (err) {}
+            }
+            sample(e.clientY);
+            e.preventDefault();
+        }
+
+        function onMove(e) {
+            if (!dragging) { return; }
+            var delta = (e.clientX - startX) / scale;
+            d = Math.max(0, Math.min(S, startD + delta));
+            render();
+            sample(e.clientY);
+            e.preventDefault();
+        }
+
+        function onUp(e) {
+            if (!dragging) { return; }
+            dragging = false;
+            root.classList.remove('is-dragging');
+            sample(e.clientY);
+            commit();
+            verifyRelease();
+        }
+
+        // 中断（pointercancel / 拖拽被打断）：本挑战作废，自动换一张新图重来
+        function onCancel(e) {
+            if (!dragging) { return; }
+            dragging = false;
+            root.classList.remove('is-dragging');
+            reset();
+            refreshCaptcha();
+        }
+
+        // 松手即校验：一次挑战只允许一段连续拖拽。服务端确认对齐才置绿（诚实反馈），
+        // 未对齐或请求失败自动换新图；不前端猜测对齐（缺口是服务端机密）。
+        function verifyRelease() {
+            locked = true; checking = true;
+            root.classList.add('is-checking');
+            hint.textContent = TXT_CHECK;
+            var csrfEl = document.querySelector('input[name="csrf_token"]');
+            var fd = new FormData();
+            fd.append('captcha_token', tokenEl.value);
+            fd.append('captcha_x', xEl.value);
+            fd.append('captcha_traj', trajEl.value);
+            function fail() {
+                checking = false;
+                root.classList.remove('is-checking');
+                root.classList.add('is-fail');
+                hint.textContent = TXT_FAIL;
+                setTimeout(function () { refreshCaptcha(); }, 700);
+            }
+            fetch('/login/captcha/verify', {
+                method: 'POST', body: fd, credentials: 'same-origin',
+                headers: { 'X-CSRFToken': csrfEl ? csrfEl.value : '' }
+            }).then(function (r) { return r.json(); }).then(function (dd) {
+                checking = false;
+                root.classList.remove('is-checking');
+                if (dd && dd.ok) {
+                    root.classList.add('is-ok');
+                    hint.textContent = TXT_OK;
+                } else { fail(); }
+            }).catch(fail);
+        }
+
+        thumb.addEventListener('pointerdown', onDown);
+        document.addEventListener('pointermove', onMove);
+        document.addEventListener('pointerup', onUp);
+        document.addEventListener('pointercancel', onCancel);
+
+        // 键盘可达性：方向键移动滑块并实时记录轨迹（无障碍兜底）
+        thumb.addEventListener('keydown', function (e) {
+            if (locked || checking) { return; }
+            var step = S / 24;
+            if (e.key === 'ArrowRight' || e.key === 'ArrowUp') { d = Math.min(S, d + step); }
+            else if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') { d = Math.max(0, d - step); }
+            else { return; }
+            if (!t0) { t0 = performance.now(); startY = 0; traj = []; }
+            render();
+            traj.push({ x: Math.round(d * 100) / 100, y: (traj.length % 3) - 1, t: Math.round(performance.now() - t0) });
+            commit();
+            e.preventDefault();
+        });
+
+        window.refreshCaptcha = function () {
+            fetch('/login/captcha').then(function (r) { return r.json(); }).then(function (dd) {
+                if (dd.type !== 'slide') { return; }
+                tokenEl.value = dd.token;
+                bg.innerHTML = dd.bg;
+                piece.innerHTML = dd.piece;
+                W = dd.W; S = dd.S; pw = dd.pw; yTop = dd.y_top; curve = dd.curve;
+                root.dataset.w = W; root.dataset.s = S; root.dataset.pw = pw; root.dataset.y = yTop;
+                reset();
+                layout();
+            }).catch(function () {});
+        };
+
+        window.addEventListener('resize', layout);
+        layout();
+    })();
+</script>
+{% else %}
 <script>
     function refreshCaptcha() {
         fetch('/login/captcha')
@@ -11,4 +198,5 @@
     }
     document.getElementById('captchaBox').addEventListener('click', refreshCaptcha);
 </script>
+{% endif %}
 {% endif %}

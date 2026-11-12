@@ -217,6 +217,31 @@ DEFAULT_CONFIG = {
             "webhook_url": "", "token": "",
         },
     },
+    "captcha": {                              # 登录/注册验证码：图形码（默认）或滑动拼图
+        "type": "image",                         # image=原 SVG 图形码；slide=滑动拼图行为验证
+        "slide": {
+            "width": 320,                        # 背景宽（px）
+            "height": 160,                       # 背景高（px）
+            "piece": 46,                         # 拼图块边长（px）
+            "tolerance_px": 6,                   # 位置对齐容差（px），风险升级时收紧
+            "ttl_seconds": 300,                  # 挑战有效期（秒）
+            "min_drag_ms": 250,                  # 轨迹最短时长（低于视为瞬移）
+            "max_drag_ms": 20000,                # 轨迹最长时长
+            "min_samples": 8,                    # 轨迹最少采样点
+            "damping_min": 0.55,                 # 随机阻尼局部斜率下限（阻滞感）
+            "damping_max": 2.2,                  # 随机阻尼局部斜率上限（过滑感）
+        },
+        "risk": {                                # IP 风险分体系（静默放行 + 逐步升级）
+            "enabled": True,
+            "decay_hours": 12,                   # 风险分半衰期（小时）
+            "suspicious_points": 14,             # 每次"像机器但位置对齐"的放行加分
+            "fail_points": 5,                    # 每次位置未对齐失败加分
+            "escalate_score": 30,                # 达到该分：验证收紧（容差减半 + 要求类人轨迹）
+            "flag_score": 60,                    # 达到该分：标记 IP，注册账号打风控标
+            "reg_window_seconds": 3600,          # 注册计数窗口（秒）
+            "max_registrations": 2,              # 窗口内第 N 次注册且有可疑历史即标记
+        },
+    },
     "features": {                             # 功能开关默认值（运行时可在 /admin/features 切换）
         "world_notes": True,
         "benben": True,
@@ -730,6 +755,21 @@ except (TypeError, ValueError):
     SECURITY_TIMEOUT_SECONDS = 10
 SMTP_CFG = SECURITY_CFG.get("smtp", DEFAULT_CONFIG["security"]["smtp"]) or {}
 SMS_CFG = SECURITY_CFG.get("sms", DEFAULT_CONFIG["security"]["sms"]) or {}
+
+# ---------- 验证码（图形码默认 / 滑动拼图可配置） ----------
+CAPTCHA_CFG = config.get("captcha", DEFAULT_CONFIG["captcha"])
+CAPTCHA_TYPE = str(CAPTCHA_CFG.get("type", "image") or "image").strip().lower()
+if CAPTCHA_TYPE not in ("slide", "image"):
+    CAPTCHA_TYPE = "image"
+CAPTCHA_SLIDE = CAPTCHA_CFG.get("slide", DEFAULT_CONFIG["captcha"]["slide"]) or {}
+CAPTCHA_RISK = CAPTCHA_CFG.get("risk", DEFAULT_CONFIG["captcha"]["risk"]) or {}
+
+# ---------- 调试面板（仅开发/排障，启动 flag 或环境变量显式开启） ----------
+# 开启后页面渲染诊断面板：验证码答案/缺口与阻尼曲线、轨迹可疑度与置信度、IP 风控分、
+# TTFB 等。因暴露敏感信息，默认仅回环客户端可见；RUSIN_DEBUG_PANEL_REMOTE=1 才允许
+# 远程查看（生产切勿开启）。
+DEBUG_PANEL = os.environ.get("RUSIN_DEBUG_PANEL", "").strip().lower() in ("1", "true", "yes", "on")
+DEBUG_PANEL_REMOTE = os.environ.get("RUSIN_DEBUG_PANEL_REMOTE", "").strip().lower() in ("1", "true", "yes", "on")
 
 # ---------- 功能开关管理员 ----------
 # config.json 的 admin_users 与环境变量 RUSIN_ADMIN 取并集

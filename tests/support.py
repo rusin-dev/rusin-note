@@ -41,13 +41,55 @@ def csrf_from(client, path: str) -> str:
 
 
 def _captcha_data(html: str) -> dict:
-    """开启图形验证码时读取一次性 token 与答案，返回可并入表单的字段。"""
+    """开启验证码时读取一次性 token 并求解，返回可并入表单的字段。
+
+    自动识别图形码（captcha 文本）与滑动拼图（captcha_x + captcha_traj）：
+    滑动拼图按服务端阻尼曲线反解滑块位移，并合成类人轨迹（避免测试 IP 累积
+    风险分触发升级/标记）。
+    """
     token_match = re.search(r'name="captcha_token"[^>]*value="([^"]+)"', html)
     if not token_match:
         return {}
-    from app.core import captcha
     token = token_match.group(1)
+    if 'name="captcha_x"' in html:
+        return _solve_slide(token)
+    from app.core import captcha
     return {"captcha_token": token, "captcha": captcha.peek(token)}
+
+
+def _solve_slide(token: str) -> dict:
+    """反解滑动拼图：二分求使曲线输出=缺口 target 的滑块位移 d，合成类人轨迹。"""
+    import json
+    from app.core import slide_captcha
+    sec = slide_captcha.peek(token)
+    curve, S, target = sec.get("curve", []), sec.get("S", 0), sec.get("t", 0)
+    lo, hi = 0.0, float(S)
+    for _ in range(60):
+        mid = (lo + hi) / 2
+        if slide_captcha.curve_value(curve, mid) < target:
+            lo = mid
+        else:
+            hi = mid
+    d = round((lo + hi) / 2, 2)
+    return {"captcha_token": token, "captcha_x": str(d),
+            "captcha_traj": json.dumps(_human_traj(d))}
+
+
+def _human_traj(d: float, n: int = 42, dur: float = 1150.0) -> list:
+    """合成类人拖动轨迹：smoothstep 缓入缓出 + 手部抖动 + 末段微 overshoot。"""
+    traj = []
+    for i in range(n):
+        p = i / (n - 1)
+        ease = p * p * (3 - 2 * p)
+        x = d * ease
+        if i > n * 0.8:
+            x += 1.2 if i % 2 else -0.8  # 末段微修正
+        x += 0.5 if i % 3 else -0.4
+        y = 2.0 + (i % 5) * 0.8
+        t = dur * p + (i % 4) * 3
+        traj.append({"x": round(x, 2), "y": round(y, 2), "t": round(t, 1)})
+    traj[-1]["x"] = round(d, 2)
+    return traj
 
 
 def register(client, username: str, password: str = DEFAULT_PASSWORD, agree: bool = True):

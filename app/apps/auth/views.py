@@ -33,20 +33,25 @@ PENDING_2FA_KEY = "pending_2fa"
 
 def _login_ctx(with_captcha: bool = False):
     """登录/注册页上下文：启用的第三方登录 Provider；with_captcha 为真且开关
-    打开时生成一次性图形验证码（token + 内联 SVG）。"""
+    打开时按配置签发一次性验证码（滑动拼图或图形码）。"""
     from app.apps.oauth import service as oauth_service
     ctx = {
         "oauth_providers": oauth_service.available_providers(),
-        "captcha_enabled": False, "captcha_token": "", "captcha_svg": "",
+        "captcha_enabled": False, "captcha_type": "", "captcha_token": "",
+        "captcha_svg": "", "captcha_slide": None,
     }
     if with_captcha and feature_enabled("login_captcha"):
         from app.core import captcha
-        token, code = captcha.generate()
+        ch = captcha.build_challenge()
         ctx.update({
             "captcha_enabled": True,
-            "captcha_token": token,
-            "captcha_svg": captcha.render_svg(code),
+            "captcha_type": ch["type"],
+            "captcha_token": ch["token"],
         })
+        if ch["type"] == "image":
+            ctx["captcha_svg"] = ch["svg"]
+        else:
+            ctx["captcha_slide"] = ch["slide"]
     return ctx
 
 
@@ -76,12 +81,33 @@ def login_get():
 @bp.route("/login/captcha", methods=["GET"])
 @limiter.limit(lambda: f"{config.GET_RATE_MAX} per {config.GET_RATE_WINDOW} second")
 def login_captcha_refresh():
-    """刷新图形验证码：返回新的一次性 token 与 SVG 标记（登录页 JS 调用）。"""
+    """刷新验证码：按配置返回新的一次性图形码（token+svg）或滑动拼图挑战。"""
     from app.core import captcha
     if not feature_enabled("login_captcha"):
         abort(404)
-    token, code = captcha.generate()
-    return jsonify({"token": token, "svg": captcha.render_svg(code)})
+    ch = captcha.build_challenge()
+    out = {"type": ch["type"], "token": ch["token"]}
+    if ch["type"] == "image":
+        out["svg"] = ch["svg"]
+    else:
+        out.update(ch["slide"])
+    return jsonify(out)
+
+
+@bp.route("/login/captcha/verify", methods=["POST"])
+@limiter.limit(lambda: f"{config.GET_RATE_MAX} per {config.GET_RATE_WINDOW} second")
+def login_captcha_verify():
+    """松手即校验：消耗一次性滑动挑战并累计 IP 风险；对齐才写 session 预校验，
+    供表单提交复用。仅返回 ok，不泄露缺口/可疑度（防对齐 oracle 与打草惊蛇）。"""
+    from app.core import captcha
+    if not feature_enabled("login_captcha"):
+        abort(404)
+    if captcha.current_type() != "slide":
+        return jsonify({"ok": False}), 400
+    ok = captcha.verify_form(request.form, g.client_ip)
+    if ok:
+        captcha.mark_slide_verified(request.form.get("captcha_token", ""))
+    return jsonify({"ok": bool(ok)})
 
 
 @bp.route("/logout", methods=["POST"])
@@ -129,11 +155,10 @@ def register_post():
     if request.form.get("agree_terms") != "1":
         return _fail(t(lang, "err_agree_terms"))
 
-    # 图形验证码先行校验（与登录一致）：一次性 token，成败即销毁，失败重新签发
+    # 验证码先行校验（与登录一致）：一次性 token，成败即销毁，失败重新签发
     if feature_enabled("login_captcha"):
         from app.core import captcha
-        if not captcha.verify(request.form.get("captcha_token", ""),
-                              request.form.get("captcha", "")):
+        if not captcha.verify_form(request.form, g.client_ip):
             return _fail(t(lang, "err_captcha"))
 
     username = request.form.get("username", "").strip()
@@ -158,6 +183,10 @@ def register_post():
     if not register_user(username, {"salt": salt, "hash": hashed}):
         return _fail(t(lang, "err_username_taken"))
 
+    # IP 风险体系：可疑 IP 的后续注册静默打风控标（不阻断、不提示，避免打草惊蛇）
+    from app.core import captcha_risk
+    captcha_risk.on_register(g.client_ip, username)
+
     token = create_session(username)
     # 注册后回跳到发起登录的站内页面，默认进入工作台首页
     resp = make_response(redirect(login_next.consume()))
@@ -169,11 +198,10 @@ def register_post():
 @limiter.limit(lambda: f"{config.RATE_MAX} per {config.RATE_WINDOW} second")
 def login_post():
     lang = getattr(g, "lang", "zh")
-    # 图形验证码先行校验：一次性 token，无论成败即销毁（防重放），失败重新签发
+    # 验证码先行校验：一次性 token，无论成败即销毁（防重放），失败重新签发
     if feature_enabled("login_captcha"):
         from app.core import captcha
-        if not captcha.verify(request.form.get("captcha_token", ""),
-                              request.form.get("captcha", "")):
+        if not captcha.verify_form(request.form, g.client_ip):
             return render_template("auth/login.html", error=t(lang, "err_captcha"),
                                    **_login_ctx(with_captcha=True)), 400
 

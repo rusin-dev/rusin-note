@@ -11,9 +11,13 @@ import secrets
 import threading
 import time
 
+from flask import g, has_request_context, session
+
+from app.core import config
 from app.core.storage import StorageError, storage
 
 K_CAPTCHAS = "login_captchas"
+K_SLIDE_VERIFIED = "slide_verified"
 CODE_LENGTH = 6
 TTL_SECONDS = 600
 _TOKEN_RE = re.compile(r"^[0-9a-f]{16,64}$")
@@ -186,3 +190,92 @@ def render_svg(code: str) -> str:
             f'stroke="{secrets.choice(_COLORS)}" stroke-opacity="0.2" stroke-width="1"/>')
     parts.append("</svg>")
     return "".join(parts)
+
+
+# ---------- 统一入口：按配置分发图形码 / 滑动拼图 ----------
+
+def current_type() -> str:
+    """当前验证码类型（slide / image），动态读配置便于运行时切换与测试。"""
+    return config.CAPTCHA_TYPE if config.CAPTCHA_TYPE in ("slide", "image") else "image"
+
+
+def _stash_debug(attr: str, value: dict) -> None:
+    """调试面板开启时把挑战/校验细节挂到 g，供诊断面板可视化（默认关闭）。"""
+    if config.DEBUG_PANEL and has_request_context():
+        setattr(g, attr, value)
+
+
+def build_challenge() -> dict:
+    """签发一次性挑战，返回 {type, token, svg?} 或 {type, token, slide:{...}}。"""
+    if current_type() == "image":
+        token, code = generate()
+        _stash_debug("debug_challenge", {"type": "image", "token": token, "answer": code})
+        return {"type": "image", "token": token, "svg": render_svg(code)}
+    from app.core import slide_captcha
+    token, ch = slide_captcha.generate()
+    sec = slide_captcha.peek(token)
+    _stash_debug("debug_challenge", {
+        "type": "slide", "token": token, "target": sec.get("t"),
+        "curve": sec.get("curve"), "S": sec.get("S"), "tm": sec.get("tm"),
+    })
+    return {"type": "slide", "token": token, "slide": ch}
+
+
+def mark_slide_verified(token: str) -> None:
+    """松手校验通过后把 token 记入 session，供表单提交一次性复用（不再二次校验）。"""
+    ttl = float(config.CAPTCHA_SLIDE.get("ttl_seconds", 300) or 300)
+    session[K_SLIDE_VERIFIED] = {"token": token, "exp": time.time() + ttl}
+
+
+def consume_slide_verified(token: str) -> bool:
+    """提交时消费松手预校验结果：token 匹配且未过期才放行，无论成败均清除。"""
+    entry = session.pop(K_SLIDE_VERIFIED, None)
+    if not isinstance(entry, dict) or entry.get("exp", 0) < time.time():
+        return False
+    return bool(token) and entry.get("token") == token
+
+
+def verify_form(form, ip: str) -> bool:
+    """按类型校验表单验证码，并累计 IP 风险分（滑动拼图静默放行 + 逐步升级）。
+
+    图形码读 captcha_token + captcha；滑动拼图读 captcha_token + captcha_x（最终
+    滑块位移）+ captcha_traj（JSON 轨迹）。位置对齐即通过，轨迹可疑度交 risk 累计。
+    """
+    from app.core import captcha_risk
+    if current_type() == "image":
+        ok = verify(form.get("captcha_token", ""), form.get("captcha", ""))
+        suspicion = 0.0 if ok else 100.0
+        captcha_risk.record(ip, ok, suspicion, kind="image")
+        _stash_debug("debug_verify", {
+            "type": "image", "ok": ok, "suspicion": suspicion,
+            "confidence": round(100.0 - suspicion, 1), "reason": "image",
+            "tolerance": None, "require_human": False,
+        })
+        return ok
+    import json
+    from app.core import slide_captcha
+    if consume_slide_verified(form.get("captcha_token", "")):
+        _stash_debug("debug_verify", {
+            "type": "slide", "ok": True, "suspicion": None,
+            "confidence": None, "reason": "preverified",
+            "tolerance": None, "require_human": False, "slider_x": None,
+        })
+        return True
+    try:
+        x = float(form.get("captcha_x", "") or 0)
+    except (TypeError, ValueError):
+        x = 0.0
+    try:
+        traj = json.loads(form.get("captcha_traj", "") or "[]")
+    except (ValueError, TypeError):
+        traj = []
+    tolerance, require_human = captcha_risk.difficulty(ip)
+    ok, suspicion, reason = slide_captcha.verify(
+        form.get("captcha_token", ""), x, traj, tolerance, require_human)
+    captcha_risk.record(ip, ok, suspicion)
+    _stash_debug("debug_verify", {
+        "type": "slide", "ok": ok, "suspicion": round(suspicion, 1),
+        "confidence": round(100.0 - suspicion, 1), "reason": reason,
+        "tolerance": tolerance, "require_human": require_human, "slider_x": x,
+    })
+    return ok

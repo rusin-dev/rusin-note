@@ -264,6 +264,11 @@ STRINGS = {
         "login_captcha_refresh": "看不清？点击刷新",
         "err_captcha": "验证码错误或已过期，请重试",
         "feature_login_captcha": "登录图形验证码",
+        "login_captcha_slide": "滑动拼图验证",
+        "login_captcha_slide_hint": "拖动滑块，把拼图补到缺口处",
+        "login_captcha_slide_checking": "校验中…",
+        "login_captcha_slide_ok": "验证通过，可提交",
+        "login_captcha_slide_fail": "未对齐，已更换拼图",
         # 第三方登录（OAuth）
         "login_or": "或使用以下方式登录",
         "otp_login_link": "使用邮箱 / 手机号验证码登录",
@@ -976,6 +981,11 @@ STRINGS = {
         "login_captcha_refresh": "Can't read it? Click to refresh",
         "err_captcha": "Captcha is wrong or expired, please try again",
         "feature_login_captcha": "Login image captcha",
+        "login_captcha_slide": "Slide puzzle verification",
+        "login_captcha_slide_hint": "Drag the slider to fit the puzzle into the gap",
+        "login_captcha_slide_checking": "Checking…",
+        "login_captcha_slide_ok": "Verified, ready to submit",
+        "login_captcha_slide_fail": "Not aligned, new puzzle loaded",
         # OAuth third-party login
         "login_or": "Or continue with",
         "otp_login_link": "Sign in with an email / phone code",
@@ -1458,6 +1468,7 @@ def detect_lang_from_request() -> str:
 def register_i18n(app: Flask) -> None:
     """注册 Jinja2 全局上下文，使模板可直接用 {{ t('key') }} / {{ lang }} / {{ theme_vars }} / {{ current_user }} / {{ site_name }}"""
     from app.core import config as _cfg
+    from app.core import debug_panel
     from app.core.feature_flags import feature_enabled
     from app.core.theme import THEME_VARS
     from app.core.utils import (
@@ -1469,6 +1480,7 @@ def register_i18n(app: Flask) -> None:
     def inject_globals():
         lang = getattr(g, "lang", DEFAULT_LANG)
         current_user = getattr(g, "current_user", None)
+        dbg = debug_panel.request_allowed()
         # 导航栏「切换组织」列表：仅登录且启用组织时构建；页面缓存按访问者隔离
         user_orgs = []
         if current_user and feature_enabled("orgs"):
@@ -1491,6 +1503,8 @@ def register_i18n(app: Flask) -> None:
             "markdown_alerts_head": render_markdown_alerts_head(),
             "get_avatar": get_avatar_url,
             "feature_enabled": feature_enabled,
+            "debug_panel": dbg,
+            "debug_data": debug_panel.snapshot() if dbg else None,
         }
 
 

@@ -75,6 +75,8 @@ def _opportunistic_cleanup() -> None:
 def register_request_hooks(app: Flask) -> None:
     @app.before_request
     def _attach_request_context():
+        if config.DEBUG_PANEL:
+            g.debug_t0 = time.perf_counter()
         resolution = analyze_client_ip(request.remote_addr, request.headers)
         if resolution.headers_ignored:
             # 携带了代理头但直连对端不可信：疑似伪造，按直连 IP 处理并告警

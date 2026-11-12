@@ -192,6 +192,14 @@ This document lists every `config.json` setting and environment variable, its me
 
    Pages are stored in the storage backend KV key `wiki:pages`, revisions in `wiki:revisions` (file backend: `wiki_pages.json` / `wiki_revisions.json` in the data directory). Moving a page cascades to its sub-pages and revisions; a page with sub-pages cannot be deleted directly.
 
+## Login captcha
+
+- `captcha`: login / registration captcha, governed overall by the `login_captcha` feature flag (on by default).  
+   - `type`: captcha type, default `image` (SVG image captcha rendered as vector paths with no readable text nodes); set to `slide` to switch to the slide-puzzle behavioral captcha.  
+   - `slide`: slide-puzzle parameters (only when `type=slide`): `width` / `height` background size (default 320×160), `piece` puzzle edge length (46), `tolerance_px` alignment tolerance (6, tightened as risk escalates), `ttl_seconds` challenge lifetime (300), `min_drag_ms` / `max_drag_ms` trajectory duration bounds (250 / 20000), `min_samples` minimum sample points (8), `damping_min` / `damping_max` random damping local-slope range (0.55 / 2.2).  
+   - `risk`: IP risk-score system: `enabled` (true), `decay_hours` half-life (12), `suspicious_points` points per suspicious pass (14), `fail_points` points per failure (5), `escalate_score` tightening threshold (30), `flag_score` flagging threshold (60), `reg_window_seconds` registration counting window (3600), `max_registrations` the Nth suspicious registration within the window gets flagged (2).  
+   The slide puzzle verifies on release: one challenge allows a single continuous drag, success is shown only after the server confirms alignment, and a misaligned or interrupted drag automatically loads a fresh puzzle. Position alignment passes silently while trajectory suspicion accumulates into the IP risk score and progressively tightens verification (no tipping off). The gap position and damping curve live only on the server; the answer is never sent to the client.
+
 ## Password policy
 
 - `password_policy`: password policy, defining the complexity requirements for guest passwords.  

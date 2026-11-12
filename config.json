@@ -196,6 +196,31 @@
       "token": ""
     }
   },
+  "captcha": {
+    "type": "image",
+    "slide": {
+      "width": 320,
+      "height": 160,
+      "piece": 46,
+      "tolerance_px": 6,
+      "ttl_seconds": 300,
+      "min_drag_ms": 250,
+      "max_drag_ms": 20000,
+      "min_samples": 8,
+      "damping_min": 0.55,
+      "damping_max": 2.2
+    },
+    "risk": {
+      "enabled": true,
+      "decay_hours": 12,
+      "suspicious_points": 14,
+      "fail_points": 5,
+      "escalate_score": 30,
+      "flag_score": 60,
+      "reg_window_seconds": 3600,
+      "max_registrations": 2
+    }
+  },
   "features": {
     "world_notes": true,
     "benben": true,
