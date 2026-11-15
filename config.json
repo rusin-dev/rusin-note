@@ -246,7 +246,7 @@
     "email_verify": false,
     "phone_verify": false
   },
-  "admin_users": ["admin"],
+  "admin_users": ["sysadmin"],
   "max_note_id_length": 250,
   "max_note_tags": 10,
   "max_tag_length": 24,
