@@ -45,6 +45,7 @@ FEATURES = [
     {"key": "note_folders", "icon": "fa-folder", "group": "notes"},       # 笔记文件夹（单归属归类 + 列表页筛选）
     {"key": "note_pins", "icon": "fa-thumbtack", "group": "notes"},       # 笔记置顶（列表页图钉开关，置顶浮前）
     {"key": "notes_import_export", "icon": "fa-file-export", "group": "notes"},  # 笔记批量导入/导出（/user/<u>/export|import）
+    {"key": "downloads", "icon": "fa-desktop", "group": "notes"},          # 桌面客户端下载页（/downloads）
     {"key": "heading_anchors", "icon": "fa-anchor", "group": "rendering"},    # Markdown 标题锚点（slug id + 页内 #链接 + 深链定位）
     {"key": "markdown_alerts", "icon": "fa-circle-exclamation", "group": "rendering"},  # Markdown 提示卡片（[!NOTE] 等 GitHub 风格可折叠卡片）
     {"key": "latex_render", "icon": "fa-square-root-variable", "group": "rendering"},

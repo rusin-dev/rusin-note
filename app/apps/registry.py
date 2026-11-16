@@ -9,6 +9,7 @@ from app.apps.attachments.views import bp as attachments_bp
 from app.apps.auth.views import bp as auth_bp
 from app.apps.benben.views import bp as benben_bp
 from app.apps.comments.views import bp as comments_bp
+from app.apps.downloads.views import bp as downloads_bp
 from app.apps.email.views import bp as email_bp
 from app.apps.gitee_sync.views import bp as gitee_sync_bp
 from app.apps.home.views import bp as home_bp
@@ -52,6 +53,8 @@ def register_blueprints(app: Flask) -> None:
     # 内置 Web wiki（/docs 公开 + /admin/wiki 管理）：须在插件与 world_short 之前，
     # 单段 /docs 优先于插件命名空间匹配
     app.register_blueprint(wiki_bp)
+    # 桌面客户端下载页（/downloads 单段路由，同样须先于 world_short）
+    app.register_blueprint(downloads_bp)
     # 插件蓝图（Phase 1 安装 + 注册）：必须在 world_short 之前，
     # 否则插件的单段路由（如 /myplug）会被 /<id> 短链抢匹配
     from app.core import plugins

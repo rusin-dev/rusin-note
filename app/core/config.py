@@ -173,6 +173,11 @@ DEFAULT_CONFIG = {
         "max_slug_depth": 4,                 # slug 层级深度上限（/ 分隔）
         "home_slug": "home",                 # /docs 首页对应的页面 slug
     },
+    "downloads": {                            # 桌面客户端下载落地页（/downloads，安装包站点自托管）
+        "dir": "downloads",                    # 相对 RUSIN_DATA_DIR 的安装包目录
+        "max_file_mb": 512,                    # 单个安装包体积上限（MB），超限拒绝服务
+        "download_rate_limit": {"window_seconds": 60, "max_requests": 10},
+    },
     "oauth": {                                # 第三方登录
         "enabled": False,                      # 总开关，默认全关
         "auto_register": True,                 # 未绑定时自动注册新用户
@@ -256,6 +261,7 @@ DEFAULT_CONFIG = {
         "note_attachments": True,
         "comments": True,
         "wiki": False,                       # 内置 Web wiki（默认关，管理员在 /admin/features 启用）
+        "downloads": True,                   # 桌面客户端下载页（/downloads）
         # 第三方登录：需先在 oauth.providers 填凭据
         "oauth_github": False,
         "oauth_google": False,
@@ -679,6 +685,15 @@ WIKI_MAX_PAGES = _positive_int(WIKI_CFG.get("max_pages", 500), 500) or 500
 WIKI_MAX_REVISIONS = _positive_int(WIKI_CFG.get("max_revisions", 20), 20) or 20
 WIKI_MAX_SLUG_DEPTH = _positive_int(WIKI_CFG.get("max_slug_depth", 4), 4) or 4
 WIKI_HOME_SLUG = str(WIKI_CFG.get("home_slug", "home") or "home")
+
+# ---------- 桌面客户端下载（/downloads，安装包站点自托管） ----------
+DOWNLOADS_CFG = config.get("downloads", DEFAULT_CONFIG["downloads"])
+DOWNLOADS_DIR = str(DOWNLOADS_CFG.get("dir", "downloads") or "downloads").strip()
+DOWNLOADS_MAX_FILE_BYTES = (_positive_int(DOWNLOADS_CFG.get("max_file_mb", 512), 512) or 512) * 1024 * 1024
+_DOWNLOADS_RATE_CFG = DOWNLOADS_CFG.get("download_rate_limit",
+                                        DEFAULT_CONFIG["downloads"]["download_rate_limit"])
+DOWNLOADS_RATE_WINDOW = _positive_int(_DOWNLOADS_RATE_CFG.get("window_seconds", 60), 60) or 60
+DOWNLOADS_RATE_MAX = _positive_int(_DOWNLOADS_RATE_CFG.get("max_requests", 10), 10) or 10
 
 # ---------- 第三方登录（OAuth） ----------
 # 端点硬编码在 oauth/service.py，这里只放凭据与开关；凭据留空即未配置

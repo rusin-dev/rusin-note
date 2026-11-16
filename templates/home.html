@@ -76,6 +76,16 @@
             <span class="home-card-arrow"><i class="fa-solid fa-arrow-right" aria-hidden="true"></i></span>
         </a>
         {% endif %}
+        {% if feature_enabled('downloads') %}
+        <a class="home-card" href="/downloads">
+            <span class="home-card-icon"><i class="fa-solid fa-desktop" aria-hidden="true"></i></span>
+            <span class="home-card-body">
+                <span class="home-card-title">{{ t('downloads_card_t') }}</span>
+                <span class="home-card-desc">{{ t('downloads_card_d') }}</span>
+            </span>
+            <span class="home-card-arrow"><i class="fa-solid fa-arrow-right" aria-hidden="true"></i></span>
+        </a>
+        {% endif %}
         {% if show_benben %}
         <a class="home-card" href="/benben">
             <span class="home-card-icon"><i class="fa-solid fa-sticky-note" aria-hidden="true"></i></span>

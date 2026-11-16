@@ -1,0 +1,27 @@
+[project]
+name = "rusin-note-desktop"
+version = "0.1.0"
+description = "rusin-note 桌面客户端：WebView 原生壳，笔记数据全部存放在网页版"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "anthropic>=1.11.0",
+    "httpx>=0.28.1",
+    "openai>=3.26.0",
+    "pywebview>=6.0,<7.0; sys_platform != 'linux'",
+    "pywebview[gtk]>=6.0,<7.0; sys_platform == 'linux'",
+    "requests>=2.34.2",
+]
+
+[dependency-groups]
+dev = [
+    "pyinstaller>=6.0,<7.0",
+    "pytest>=9.1.1",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+markers = [
+    "network: 依赖真实网络（站点更新清单）的用例",
+]

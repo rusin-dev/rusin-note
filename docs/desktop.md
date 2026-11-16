@@ -1,0 +1,164 @@
+# 桌面客户端（rusin-note-desktop）
+
+桌面端是 rusin-note 网页版的 **WebView 原生壳**：一个独立窗口直接加载你的站点，不用开浏览器、不用找标签页。
+
+**笔记数据全部存放在网页版**，桌面端本地不保存任何笔记、附件或同步状态。本地数据目录只放三样东西：客户端配置（站点地址、窗口几何）、日志、WebView 会话数据（Cookie / localStorage，用于保持登录态）。换一台电脑装桌面端、登录同一账号，看到的就是同一份笔记。
+
+代码在本仓库的 [`desktop/`](../desktop/) 子目录，是一个独立的 uv 项目（自己的 `pyproject.toml` 与 `uv.lock`），与网页版共用一个仓库但互不依赖。
+
+## 用户指南
+
+### 安装
+
+1. 打开站点的 `/downloads` 页面，按你的系统下载对应安装包（Windows `.zip` / macOS `.zip` 内含 `.app` / Linux `.tar.gz`）。
+2. 解压到任意目录，运行 `rusin-note-desktop`（Windows 为 `rusin-note-desktop.exe`）。免安装，不写注册表。
+3. 首次运行会显示「连接站点」页，填入你的 rusin-note 地址（例如 `https://note.example.com`），点击连接。
+4. 在窗口里正常登录即可。登录态会被保存，下次启动直接进入站点。
+
+Windows 需要 [WebView2 运行时](https://developer.microsoft.com/microsoft-edge/webview2/)（Win10/11 通常已随 Edge 预装）；Linux 需要 GTK3 与 WebKit2GTK 4.1。
+
+### 菜单
+
+| 菜单 | 作用 |
+|---|---|
+| 文件 → 更改站点地址… | 重新打开连接页，切换到另一个 rusin-note 实例 |
+| 文件 → 检查更新… | 读取站点 `/downloads/manifest.json`，发现新版本时询问是否打开下载页 |
+| 文件 → 退出 | 关闭窗口 |
+| 视图 → 重新加载 | 刷新当前页面（站点不可达时回到连接页） |
+| 视图 → 全屏 | 切换全屏 |
+
+窗口大小、位置与最大化状态会在关闭时记住，下次启动还原。同一时刻只允许一个实例运行（重复启动会直接退出），避免两个进程并发写同一份配置。
+
+站点内的外部链接（含第三方登录跳转）交给系统浏览器打开，附件下载正常保存到系统下载目录。
+
+### 本地数据目录
+
+| 系统 | 路径 |
+|---|---|
+| Windows | `%APPDATA%\rusin-note-desktop\` |
+| macOS | `~/Library/Application Support/rusin-note-desktop/` |
+| Linux | `$XDG_DATA_HOME/rusin-note-desktop/`（默认 `~/.local/share/rusin-note-desktop/`） |
+
+目录内为 `config.json`（客户端配置）、`logs/desktop.log`（滚动日志，4 MB × 3）、`webview/`（会话数据）、`instance.lock`（单实例锁）。
+
+环境变量：
+
+- `RUSIN_DESKTOP_DATA_DIR`：覆盖数据目录，便于便携运行与测试；
+- `RUSIN_DESKTOP_DEBUG`：设为 `1` 开启 WebView 调试日志（默认关闭）。
+
+> `webview/` 内含登录 Cookie，等同于浏览器配置文件，不要把它放进公共备份或共享目录。删除该目录即退出登录。
+
+### 更新
+
+桌面端不自动更新。菜单「检查更新…」会把随包携带的 `data/metadata.json`（版本 + 渠道）与站点清单比对：渠道必须一致（`stable` 只认 `stable`），版本更高时提示打开 `/downloads` 下载新包，覆盖解压即可，配置与登录态不受影响。
+
+## 管理员：发布安装包
+
+安装包**站点自托管**，不走 GitHub Releases，也不进 Git。
+
+### 1. 构建
+
+在 `desktop/` 下（需要 [uv](https://docs.astral.sh/uv/)）：
+
+```bash
+uv sync                              # 安装依赖（含 dev 组的 PyInstaller）
+uv run python release/build.py       # 构建当前平台
+```
+
+产物落在 `desktop/dist/downloads/`：
+
+```plaintext
+dist/downloads/
+├─ rusin-note-desktop-0.1.0-windows-x64.zip      安装包
+└─ manifest-windows-x64.json                     该平台分清单（含 sha256）
+```
+
+常用参数：`--version`（默认取 `pyproject.toml`）、`--channel stable|beta`、`--notes "更新说明"`、`--released-at YYYY-MM-DD`。
+
+三个平台各自构建后，把分清单与安装包放到同一目录再合并：
+
+```bash
+uv run python release/build.py --merge dist/downloads
+```
+
+合并会校验各平台版本/渠道一致，按 Windows → macOS → Linux 排序产出 `manifest.json`。
+
+### 2. 投放
+
+把整个目录的内容复制到网页版数据目录下的 `downloads/`（即 `config.json` 的 `downloads.dir`，默认 `<RUSIN_DATA_DIR>/downloads/`）：
+
+```plaintext
+<RUSIN_DATA_DIR>/downloads/
+├─ manifest.json
+├─ rusin-note-desktop-0.1.0-windows-x64.zip
+├─ rusin-note-desktop-0.1.0-macos-arm64.zip
+└─ rusin-note-desktop-0.1.0-linux-x64.tar.gz
+```
+
+投放后立即生效（服务层不缓存清单，落地页展示延迟由视图缓存 TTL 决定）。清单缺失时 `/downloads` 显示「暂无安装包」，不会报错。
+
+多实例部署（Vercel / Lambda）需要把安装包放到共享存储或对象存储并自行同步——`downloads/` 是本地目录，无服务器平台的只读文件系统不适合托管安装包，建议这类部署把 `/downloads` 指向自建 VPS 站点，或关闭 `downloads` 功能开关。
+
+### 3. CI 自动构建
+
+[`.github/workflows/desktop-build.yml`](../.github/workflows/desktop-build.yml)：
+
+- 推 `desktop-v*` 标签或手动触发（workflow_dispatch，可填版本/渠道/更新说明）→ 三平台矩阵构建，各平台先跑自己的测试套件；
+- 标签带预发布后缀（如 `desktop-v1.0.0-rc.1`）自动归入 `beta` 渠道；
+- `merge` 作业合并清单，产出名为 `downloads` 的 artifact，下载后整体投放到服务器即可；
+- 改动 `desktop/**` 的 push / PR 只跑桌面端单元测试，不构建。
+
+### 4. 校验与安全
+
+清单是外部输入，服务层逐项校验：产物 id 只允许小写字母数字与 `_-`、文件名须匹配后缀白名单、sha256 须为 64 位小写十六进制、产物路径做 realpath 越界防护、体积超过 `downloads.max_file_mb` 的条目直接丢弃。下载响应带 `Content-Disposition: attachment`、`X-Content-Type-Options: nosniff`，支持 Range 断点续传，并按 `downloads.download_rate_limit` 限流。
+
+落地页公开显示每个安装包的完整 SHA256，用户可自行校验：
+
+```bash
+sha256sum rusin-note-desktop-0.1.0-windows-x64.zip
+```
+
+相关配置项见 [配置项详解](configuration.md#桌面客户端下载)。
+
+## 开发者
+
+```plaintext
+desktop/
+├─ main.py                  入口（uv run python main.py）
+├─ pyproject.toml / uv.lock  独立 uv 项目，Python >= 3.12
+├─ data/metadata.json       随包版本信息（构建时写入）
+├─ src/
+│  ├─ app.py                数据目录 → 单实例锁 → 配置 → 窗口
+│  ├─ core/
+│  │  ├─ window.py          WebView 原生壳、菜单、窗口几何、更新检查
+│  │  ├─ setup.py           首次运行「连接站点」页（自包含 HTML）
+│  │  ├─ site.py            站点 URL 规范化与校验
+│  │  ├─ data.py            DataService（仅客户端配置）
+│  │  └─ logger.py          滚动文件日志
+│  └─ modules/
+│     ├─ storage/config.py  JSON 配置存储（原子写入）
+│     ├─ updater.py         站点清单拉取与版本比较
+│     └─ ai_copilot/        AI provider 适配（保留模块，尚未接入壳）
+├─ release/
+│  ├─ build.py              构建 + 打包 + 清单生成/合并
+│  └─ rusin-note-desktop.spec  PyInstaller onedir 配置
+└─ tests/                   pytest（network 标记的用例依赖真实站点）
+```
+
+```bash
+uv sync                                   # 安装依赖
+uv run python main.py                     # 运行桌面端
+uv run pytest tests/ -q -m "not network"  # 单元测试（跳过联网用例）
+uv run pytest tests/ -q                   # 含联网用例
+uv run python release/build.py            # 构建当前平台安装包
+```
+
+桌面端**只用 uv**（`uv run` / `uv sync` / `uv pip install`），不要用 pip 直接装依赖或另建虚拟环境。
+
+技术要点：
+
+- WebView 由 [pywebview](https://pywebview.flowrl.com/) 提供，Windows 走 EdgeChromium/WebView2（pythonnet），macOS 走 Cocoa/WebKit，Linux 走 GTK/WebKit2GTK；
+- `webview.start(private_mode=False, storage_path=<数据目录>/webview)` 保留 Cookie 与 localStorage，这是「比浏览器更方便」的关键——登录态跨启动保持；
+- `OPEN_EXTERNAL_LINKS_IN_BROWSER=True` 让外链与 OAuth 跳转走系统浏览器，`ALLOW_DOWNLOADS=True` 允许附件下载；
+- 窗口几何在 `closing` 事件里落盘（最大化时不写尺寸，避免还原后尺寸失真）；
+- PyInstaller 为 onedir 模式，pywebview 自带的 hook 会收集 WebView2 DLL 与 JS 资源，spec 只额外补平台相关的 hiddenimports 与 `data/metadata.json`。

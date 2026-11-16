@@ -45,6 +45,7 @@
             <a {{ nav_attrs('/user/' ~ current_user ~ '/notifications')|safe }} href="/user/{{ current_user|e }}/notifications"><i class="fa-solid fa-bell" aria-hidden="true"></i>{{ t('nav_notifications') }}<span class="notif-badge" id="navNotifBadge" aria-hidden="true" hidden></span></a>
             <a {{ nav_attrs('/user/' ~ current_user ~ '/settings')|safe }} href="/user/{{ current_user|e }}/settings"><i class="fa-solid fa-gear" aria-hidden="true"></i>{{ t('nav_settings') }}</a>
             {% if feature_enabled('wiki') %}<a {{ nav_attrs('/docs', 'nav-link', false, ['/admin/wiki'])|safe }} href="/docs"><i class="fa-solid fa-book" aria-hidden="true"></i>{{ t('nav_wiki') }}</a>{% endif %}
+            {% if feature_enabled('downloads') and not simple_mode %}<a {{ nav_attrs('/downloads')|safe }} href="/downloads"><i class="fa-solid fa-desktop" aria-hidden="true"></i>{{ t('nav_downloads') }}</a>{% endif %}
             <form action="/logout" method="POST" style="display:inline">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <button type="submit" class="nav-link-btn"><i class="fa-solid fa-right-from-bracket" aria-hidden="true"></i>{{ t('nav_logout') }}</button>
@@ -56,6 +57,7 @@
             {% if feature_enabled('open_register') %}<a {{ nav_attrs('/register')|safe }} href="/register"><i class="fa-solid fa-user-plus" aria-hidden="true"></i>{{ t('nav_register') }}</a>{% endif %}
             <a {{ nav_attrs('/login')|safe }} href="/login"><i class="fa-solid fa-right-to-bracket" aria-hidden="true"></i>{{ t('nav_login') }}</a>
             {% if feature_enabled('wiki') %}<a {{ nav_attrs('/docs')|safe }} href="/docs"><i class="fa-solid fa-book" aria-hidden="true"></i>{{ t('nav_wiki') }}</a>{% endif %}
+            {% if feature_enabled('downloads') %}<a {{ nav_attrs('/downloads')|safe }} href="/downloads"><i class="fa-solid fa-desktop" aria-hidden="true"></i>{{ t('nav_downloads') }}</a>{% endif %}
             <a {{ nav_attrs('/count')|safe }} href="/count"><i class="fa-solid fa-chart-simple" aria-hidden="true"></i>{{ t('nav_stats') }}</a>
             <a {{ nav_attrs('/disclaimer')|safe }} href="/disclaimer"><i class="fa-solid fa-circle-info" aria-hidden="true"></i>{{ t('nav_disclaimer') }}</a>
         </span>

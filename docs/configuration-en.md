@@ -192,6 +192,17 @@ This document lists every `config.json` setting and environment variable, its me
 
    Pages are stored in the storage backend KV key `wiki:pages`, revisions in `wiki:revisions` (file backend: `wiki_pages.json` / `wiki_revisions.json` in the data directory). Moving a page cascades to its sub-pages and revisions; a page with sub-pages cannot be deleted directly.
 
+## Desktop client downloads
+
+- `downloads`: **self-hosted** desktop installers (`/downloads` landing page, `/downloads/file/<id>` download, `/downloads/manifest.json` manifest; gated by the `downloads` feature flag, on by default). Installers are never committed to Git — the `desktop/` build pipeline produces them and you drop them into the data directory.
+    - `dir`: installer directory relative to the data directory, default `downloads` (i.e. `<RUSIN_DATA_DIR>/downloads/`);
+    - `max_file_mb`: per-installer size cap in MB, default `512`; oversized artifacts are dropped by manifest validation;
+    - `download_rate_limit`: download throttling — `window_seconds` window length (default `60`) and `max_requests` downloads per IP within the window (default `10`).
+
+    `manifest.json` is produced by `desktop/release/build.py --merge` and carries `version` / `channel` (`stable` or `beta`) / `released_at` (`YYYY-MM-DD`) / `notes` / `artifacts[]`; each artifact has `id` (e.g. `windows-x64`, used in the download URL) / `platform` / `arch` / `file` / `sha256`. The manifest is admin-supplied external input, so the service layer validates every field: ids allow only lowercase alphanumerics plus `_-`, filenames must match the suffix whitelist (`.exe` `.msi` `.dmg` `.pkg` `.zip` `.appimage` `.deb` `.rpm` `.tar.gz`), sha256 must be 64 lowercase hex characters, and artifact paths are realpath-checked against directory traversal. A missing or corrupt manifest is treated as "no installers yet" — the download page never 500s.
+
+    The desktop client's "check for updates" reads this site's `/downloads/manifest.json` and compares it against the bundled `data/metadata.json`; a manifest whose channel does not match is rejected. See [Desktop client](desktop.md) for the build and release flow.
+
 ## Login captcha
 
 - `captcha`: login / registration captcha, governed overall by the `login_captcha` feature flag (on by default).  

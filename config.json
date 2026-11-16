@@ -146,6 +146,14 @@
     "max_slug_depth": 4,
     "home_slug": "home"
   },
+  "downloads": {
+    "dir": "downloads",
+    "max_file_mb": 512,
+    "download_rate_limit": {
+      "window_seconds": 60,
+      "max_requests": 10
+    }
+  },
   "oauth": {
     "enabled": false,
     "auto_register": true,
@@ -235,6 +243,7 @@
     "note_attachments": true,
     "comments": true,
     "wiki": false,
+    "downloads": true,
     "oauth_github": false,
     "oauth_google": false,
     "oauth_microsoft": false,

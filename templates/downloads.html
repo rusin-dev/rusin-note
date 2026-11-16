@@ -1,0 +1,346 @@
+{% extends "base.html" %}
+{% block extra_head %}
+<style>
+    /* ===== 桌面客户端下载落地页：Hero / 平台卡片 / 特性 / 步骤 / 校验 / FAQ ===== */
+    .dl-hero { text-align: center; padding: 40px 8px 4px; }
+    .dl-badge {
+        display: inline-flex; align-items: center; gap: 7px;
+        padding: 5px 14px; border-radius: 999px; font-size: 12px; font-weight: 600;
+        background: var(--card-icon-bg); color: var(--link); border: 1px solid var(--card-border);
+    }
+    .dl-tagline {
+        border: none; padding: 0; margin: 16px auto 0; max-width: 720px;
+        font-size: 36px; font-weight: 700; line-height: 1.25;
+        background: linear-gradient(135deg, var(--hero-grad-a), var(--hero-grad-b));
+        -webkit-background-clip: text; background-clip: text;
+        -webkit-text-fill-color: transparent; color: transparent;
+    }
+    .dl-sub { color: var(--muted); font-size: 15px; line-height: 1.7; margin: 14px auto 0; max-width: 620px; }
+    .dl-cta { display: flex; justify-content: center; align-items: center; gap: 12px; margin-top: 26px; flex-wrap: wrap; }
+    .dl-btn {
+        display: inline-flex; align-items: center; justify-content: center; gap: 9px;
+        padding: 13px 28px; border-radius: 999px; text-decoration: none;
+        font-size: 15px; font-weight: 600; border: 1px solid transparent; cursor: pointer;
+    }
+    .dl-btn.primary { background: var(--link); color: #ffffff; border-color: var(--link); }
+    .dl-btn.primary:hover { filter: brightness(0.92); color: #ffffff; text-decoration: none; }
+    .dl-btn.ghost { background: var(--card-bg); color: var(--text); border-color: var(--card-border); }
+    .dl-btn.ghost:hover { color: var(--text); text-decoration: none; }
+    .dl-btn.sm { padding: 9px 18px; font-size: 14px; width: 100%; }
+    .dl-meta { display: flex; justify-content: center; gap: 10px; flex-wrap: wrap; margin-top: 18px; font-size: 13px; color: var(--muted); }
+    .dl-meta span { display: inline-flex; align-items: center; gap: 6px; }
+    .dl-dot { width: 3px; height: 3px; border-radius: 50%; background: var(--muted); display: inline-block; }
+
+    .dl-sec { margin-top: 46px; }
+    .dl-sec > h2 { font-size: 20px; font-weight: 600; border: none; padding: 0; margin: 0 0 6px; }
+    .dl-sec-sub { color: var(--muted); font-size: 14px; margin: 0 0 18px; line-height: 1.6; }
+
+    /* --- 平台下载卡片 --- */
+    .dl-platforms { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(230px, 100%), 1fr)); gap: 16px; }
+    .dl-platform {
+        position: relative; display: flex; flex-direction: column; gap: 12px;
+        background: var(--bg); border: 1px solid var(--card-border); border-radius: 14px;
+        padding: 24px 20px 20px; text-align: center;
+    }
+    .dl-platform.dl-recommended { border-color: var(--link); box-shadow: var(--glow-shadow); }
+    .dl-platform-icon { font-size: 30px; color: var(--card-head); line-height: 1; }
+    .dl-platform.dl-recommended .dl-platform-icon { color: var(--link); }
+    .dl-platform-name { font-size: 17px; font-weight: 600; margin: 0; }
+    .dl-platform-spec { font-size: 12px; color: var(--muted); margin: -6px 0 0; }
+    .dl-flag {
+        position: absolute; top: -10px; left: 50%; transform: translateX(-50%);
+        padding: 3px 12px; border-radius: 999px; white-space: nowrap;
+        background: var(--link); color: #ffffff; font-size: 11px; font-weight: 600;
+    }
+    .dl-sha { border-top: 1px solid var(--list-border); padding-top: 10px; text-align: left; }
+    .dl-sha summary {
+        display: flex; align-items: center; gap: 6px; cursor: pointer;
+        font-size: 12px; color: var(--muted); list-style: none;
+    }
+    .dl-sha summary::-webkit-details-marker { display: none; }
+    .dl-sha-caret { font-size: 10px; transition: transform 0.2s ease; }
+    .dl-sha[open] .dl-sha-caret { transform: rotate(180deg); }
+    .dl-sha-row { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+    .dl-sha-value {
+        flex: 1; min-width: 0; font-family: Consolas, Monaco, "Courier New", monospace;
+        font-size: 11px; color: var(--card-detail); background: var(--code-bg);
+        border-radius: 6px; padding: 6px 8px; overflow-x: auto; white-space: nowrap;
+    }
+    .dl-copy {
+        flex-shrink: 0; width: auto; padding: 5px 10px; font-size: 11px;
+        border-radius: 6px; border: 1px solid var(--border); background: var(--btn-bg); color: var(--text);
+    }
+    .dl-copy:hover { background: var(--btn-hover); }
+
+    /* --- 特性卡片 --- */
+    .dl-features { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(250px, 100%), 1fr)); gap: 16px; }
+    .dl-feature { display: flex; gap: 14px; background: var(--bg); border: 1px solid var(--card-border); border-radius: 12px; padding: 18px 20px; }
+    .dl-feature-icon {
+        flex-shrink: 0; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center;
+        border-radius: 10px; background: var(--card-icon-bg); color: var(--link); font-size: 16px;
+    }
+    .dl-feature-body { min-width: 0; }
+    .dl-feature h3 { font-size: 15px; font-weight: 600; margin: 0 0 5px; }
+    .dl-feature p { font-size: 13px; line-height: 1.65; color: var(--muted); margin: 0; }
+
+    /* --- 三步上手 --- */
+    .dl-steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr)); gap: 16px; }
+    .dl-step { background: var(--bg); border: 1px solid var(--card-border); border-radius: 12px; padding: 22px 20px; }
+    .dl-step-no {
+        display: inline-flex; align-items: center; justify-content: center;
+        width: 30px; height: 30px; border-radius: 50%; margin-bottom: 12px;
+        background: var(--card-icon-bg); color: var(--link); font-weight: 700; font-size: 14px;
+    }
+    .dl-step h3 { font-size: 15px; font-weight: 600; margin: 0 0 6px; }
+    .dl-step p { font-size: 13px; line-height: 1.7; color: var(--muted); margin: 0; }
+
+    /* --- 校验命令 --- */
+    .dl-verify { background: var(--bg); border: 1px solid var(--card-border); border-radius: 12px; padding: 18px 20px; }
+    .dl-verify-row { display: flex; align-items: baseline; gap: 12px; padding: 7px 0; flex-wrap: wrap; }
+    .dl-verify-os { flex-shrink: 0; width: 82px; font-size: 13px; font-weight: 600; color: var(--card-head); }
+    .dl-verify-cmd {
+        flex: 1; min-width: 0; font-family: Consolas, Monaco, "Courier New", monospace;
+        font-size: 12px; color: var(--card-detail); background: var(--code-bg);
+        border-radius: 6px; padding: 7px 10px; overflow-x: auto; white-space: nowrap;
+    }
+
+    /* --- FAQ --- */
+    .dl-faq { background: var(--bg); border: 1px solid var(--card-border); border-radius: 12px; padding: 0 18px; margin-bottom: 10px; }
+    .dl-faq summary {
+        display: flex; align-items: center; justify-content: space-between; gap: 10px;
+        cursor: pointer; padding: 15px 0; font-weight: 500; font-size: 15px; list-style: none;
+    }
+    .dl-faq summary::-webkit-details-marker { display: none; }
+    .dl-faq-caret { color: var(--muted); font-size: 12px; flex-shrink: 0; transition: transform 0.2s ease; }
+    .dl-faq[open] .dl-faq-caret { transform: rotate(180deg); }
+    .dl-faq-body { padding: 0 0 15px; font-size: 14px; line-height: 1.75; color: var(--muted); }
+
+    /* --- 空状态 / 底部横幅 --- */
+    .dl-empty { text-align: center; padding: 44px 20px; background: var(--bg); border: 1px dashed var(--border); border-radius: 14px; }
+    .dl-empty > i { font-size: 30px; color: var(--muted); }
+    .dl-empty h3 { font-size: 17px; font-weight: 600; margin: 14px 0 6px; }
+    .dl-empty p { font-size: 14px; color: var(--muted); margin: 0 auto; max-width: 460px; line-height: 1.7; }
+    .dl-admin-hint {
+        margin: 18px auto 0; max-width: 560px; text-align: left; font-size: 12px; line-height: 1.7;
+        color: var(--card-detail); background: var(--code-bg); border-radius: 8px; padding: 12px 14px;
+    }
+    .dl-band { margin-top: 48px; text-align: center; padding: 40px 20px; border-radius: 16px; background: linear-gradient(135deg, var(--hero-grad-a), var(--hero-grad-b)); }
+    .dl-band h2 { font-size: 23px; font-weight: 700; color: #ffffff; border: none; padding: 0; margin: 0; }
+    .dl-band p { color: rgba(255, 255, 255, 0.88); margin: 10px 0 22px; font-size: 15px; }
+    .dl-band .dl-btn.primary { background: #ffffff; color: var(--link); border-color: #ffffff; }
+    .dl-band .dl-btn.primary:hover { background: #ffffff; filter: brightness(0.95); color: var(--link); }
+    .dl-notes { margin-top: 18px; font-size: 13px; line-height: 1.75; color: var(--muted); white-space: pre-line; }
+
+    @media (max-width: 640px) {
+        .dl-hero { padding-top: 24px; }
+        .dl-tagline { font-size: 26px; }
+        .dl-sec { margin-top: 34px; }
+        .dl-band h2 { font-size: 19px; }
+        .dl-verify-os { width: 100%; }
+    }
+</style>
+{% endblock %}
+{% block content %}
+{% set os_icons = {"windows": "fa-windows", "macos": "fa-apple", "linux": "fa-linux"} %}
+{% set os_names = {"windows": t('downloads_platform_windows'), "macos": t('downloads_platform_macos'), "linux": t('downloads_platform_linux')} %}
+
+<header class="dl-hero">
+    <span class="dl-badge"><i class="fa-solid fa-desktop" aria-hidden="true"></i>{{ t('downloads_hero_badge') }}</span>
+    <h1 class="dl-tagline">{{ t('downloads_hero_title') }}</h1>
+    <p class="dl-sub">{{ t('downloads_hero_sub') }}</p>
+    {% if artifacts %}
+    <div class="dl-cta">
+        <a class="dl-btn primary" id="dlHeroBtn" href="{{ artifacts[0].url|e }}">
+            <i class="fa-solid fa-download" aria-hidden="true"></i>
+            <span id="dlHeroLabel">{{ t('downloads_cta_generic') }}</span>
+        </a>
+        <a class="dl-btn ghost" href="#dl-platforms"><i class="fa-solid fa-layer-group" aria-hidden="true"></i>{{ t('downloads_all_platforms') }}</a>
+    </div>
+    <div class="dl-meta">
+        {% if manifest.version %}<span><i class="fa-solid fa-tag" aria-hidden="true"></i>{{ t('downloads_version', version=manifest.version) }}</span>{% endif %}
+        <span><i class="fa-solid fa-circle-check" aria-hidden="true"></i>{{ t('downloads_channel_' ~ manifest.channel) }}</span>
+        {% if manifest.released_at %}<span class="dl-dot" aria-hidden="true"></span><span><i class="fa-solid fa-calendar" aria-hidden="true"></i>{{ t('downloads_released', date=manifest.released_at) }}</span>{% endif %}
+    </div>
+    {% if manifest.notes %}<p class="dl-notes">{{ manifest.notes|e }}</p>{% endif %}
+    {% endif %}
+</header>
+
+<section class="dl-sec" id="dl-platforms">
+    <h2>{{ t('downloads_all_platforms') }}</h2>
+    {% if artifacts %}
+    <div class="dl-platforms">
+        {% for a in artifacts %}
+        <article class="dl-platform" data-platform="{{ a.platform|e }}" data-id="{{ a.id|e }}">
+            <span class="dl-flag" hidden>{{ t('downloads_detected') }}</span>
+            <span class="dl-platform-icon"><i class="fa-brands {{ os_icons[a.platform]|e }}" aria-hidden="true"></i></span>
+            <h3 class="dl-platform-name">{{ os_names[a.platform]|e }}</h3>
+            <p class="dl-platform-spec">{{ a.arch|e }}{% if a.size_text %} · {{ a.size_text|e }}{% endif %}</p>
+            <a class="dl-btn primary sm" href="{{ a.url|e }}" download>
+                <i class="fa-solid fa-download" aria-hidden="true"></i>{{ t('downloads_cta', platform=os_names[a.platform]) }}
+            </a>
+            {% if a.sha256 %}
+            <details class="dl-sha">
+                <summary><i class="fa-solid fa-chevron-down dl-sha-caret" aria-hidden="true"></i>{{ t('downloads_sha256') }}</summary>
+                <div class="dl-sha-row">
+                    <code class="dl-sha-value">{{ a.sha256|e }}</code>
+                    <button type="button" class="dl-copy" data-sha="{{ a.sha256|e }}">{{ t('downloads_copy') }}</button>
+                </div>
+            </details>
+            {% endif %}
+        </article>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="dl-empty">
+        <i class="fa-solid fa-box-open" aria-hidden="true"></i>
+        <h3>{{ t('downloads_empty_title') }}</h3>
+        <p>{{ t('downloads_empty_desc') }}</p>
+        {% if show_admin_hint %}<div class="dl-admin-hint">{{ t('downloads_empty_admin_hint') }}</div>{% endif %}
+    </div>
+    {% endif %}
+</section>
+
+<section class="dl-sec">
+    <h2>{{ t('downloads_why_title') }}</h2>
+    <div class="dl-features">
+        {% set why_icons = ["fa-window-restore", "fa-cloud", "fa-wand-magic-sparkles", "fa-expand", "fa-clone", "fa-arrow-up-right-from-square"] %}
+        {% for i in range(1, 7) %}
+        <div class="dl-feature">
+            <span class="dl-feature-icon"><i class="fa-solid {{ why_icons[i - 1]|e }}" aria-hidden="true"></i></span>
+            <div class="dl-feature-body">
+                <h3>{{ t('downloads_why_' ~ i ~ '_t') }}</h3>
+                <p>{{ t('downloads_why_' ~ i ~ '_d') }}</p>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</section>
+
+<section class="dl-sec">
+    <h2>{{ t('downloads_steps_title') }}</h2>
+    <div class="dl-steps">
+        {% for i in range(1, 4) %}
+        <div class="dl-step">
+            <span class="dl-step-no">{{ i }}</span>
+            <h3>{{ t('downloads_step_' ~ i ~ '_t') }}</h3>
+            <p>{{ t('downloads_step_' ~ i ~ '_d') }}</p>
+        </div>
+        {% endfor %}
+    </div>
+</section>
+
+{% if artifacts %}
+<section class="dl-sec">
+    <h2>{{ t('downloads_verify_title') }}</h2>
+    <p class="dl-sec-sub">{{ t('downloads_verify_desc') }}</p>
+    <div class="dl-verify">
+        <div class="dl-verify-row">
+            <span class="dl-verify-os">Windows</span>
+            <code class="dl-verify-cmd">certutil -hashfile rusin-note-desktop.exe SHA256</code>
+        </div>
+        <div class="dl-verify-row">
+            <span class="dl-verify-os">macOS</span>
+            <code class="dl-verify-cmd">shasum -a 256 rusin-note-desktop.dmg</code>
+        </div>
+        <div class="dl-verify-row">
+            <span class="dl-verify-os">Linux</span>
+            <code class="dl-verify-cmd">sha256sum rusin-note-desktop.AppImage</code>
+        </div>
+    </div>
+</section>
+{% endif %}
+
+<section class="dl-sec">
+    <h2>{{ t('downloads_faq_title') }}</h2>
+    {% for i in range(1, 6) %}
+    <details class="dl-faq">
+        <summary>{{ t('downloads_faq_q' ~ i) }}<i class="fa-solid fa-chevron-down dl-faq-caret" aria-hidden="true"></i></summary>
+        <div class="dl-faq-body">{{ t('downloads_faq_a' ~ i) }}</div>
+    </details>
+    {% endfor %}
+</section>
+
+<div class="dl-band">
+    <h2>{{ t('downloads_hero_title') }}</h2>
+    <p>{{ t('downloads_hero_sub') }}</p>
+    {% if artifacts %}
+    <a class="dl-btn primary" href="{{ artifacts[0].url|e }}"><i class="fa-solid fa-download" aria-hidden="true"></i>{{ t('downloads_cta_generic') }}</a>
+    {% else %}
+    <a class="dl-btn primary" href="/"><i class="fa-solid fa-arrow-left" aria-hidden="true"></i>{{ t('downloads_back_home') }}</a>
+    {% endif %}
+</div>
+
+{% set dl_js = [] %}
+{% for a in artifacts %}{% set _ = dl_js.append({"id": a.id, "platform": a.platform, "url": a.url}) %}{% endfor %}
+<script>
+(function () {
+    var ARTIFACTS = {{ dl_js|tojson }};
+    var NAMES = {{ os_names|tojson }};
+    var CTA = {{ t('downloads_cta', platform='{platform}')|tojson }};
+    if (!ARTIFACTS.length) return;
+
+    // 平台识别：userAgentData.platform 优先，回退 UA 字符串（iPad 桌面 UA 归入 macOS）
+    function detect() {
+        var p = '';
+        try { p = (navigator.userAgentData && navigator.userAgentData.platform) || ''; } catch (e) {}
+        p = p || navigator.platform || '';
+        var ua = navigator.userAgent || '';
+        var s = (p + ' ' + ua).toLowerCase();
+        if (s.indexOf('win') !== -1) return 'windows';
+        if (s.indexOf('mac') !== -1 || s.indexOf('iphone') !== -1 || s.indexOf('ipad') !== -1) return 'macos';
+        if (s.indexOf('linux') !== -1 || s.indexOf('x11') !== -1) return 'linux';
+        return '';
+    }
+
+    var platform = detect();
+    var match = null;
+    for (var i = 0; i < ARTIFACTS.length; i++) {
+        if (ARTIFACTS[i].platform === platform) { match = ARTIFACTS[i]; break; }
+    }
+    if (!match) match = ARTIFACTS[0];
+
+    var hero = document.getElementById('dlHeroBtn');
+    var label = document.getElementById('dlHeroLabel');
+    if (hero && label) {
+        hero.setAttribute('href', match.url);
+        label.textContent = CTA.replace('{platform}', NAMES[match.platform] || match.platform);
+    }
+    var cards = document.querySelectorAll('.dl-platform');
+    for (var j = 0; j < cards.length; j++) {
+        if (cards[j].getAttribute('data-id') !== match.id) continue;
+        cards[j].classList.add('dl-recommended');
+        var flag = cards[j].querySelector('.dl-flag');
+        if (flag) flag.hidden = false;
+    }
+
+    // SHA256 复制：clipboard API 不可用时回退选中文本，让用户手动复制
+    var copied = {{ t('downloads_copied')|tojson }};
+    var copyLabel = {{ t('downloads_copy')|tojson }};
+    var buttons = document.querySelectorAll('.dl-copy');
+    for (var k = 0; k < buttons.length; k++) {
+        buttons[k].addEventListener('click', function () {
+            var btn = this;
+            var value = btn.getAttribute('data-sha') || '';
+            function done() {
+                btn.textContent = copied;
+                setTimeout(function () { btn.textContent = copyLabel; }, 1600);
+            }
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(value).then(done, function () { select(); });
+            } else {
+                select();
+            }
+            function select() {
+                var code = btn.parentNode.querySelector('.dl-sha-value');
+                if (!code || !window.getSelection) return;
+                var range = document.createRange();
+                range.selectNodeContents(code);
+                var sel = window.getSelection();
+                sel.removeAllRanges();
+                sel.addRange(range);
+            }
+        });
+    }
+})();
+</script>
+{% endblock %}

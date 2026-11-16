@@ -121,6 +121,8 @@ def index():
         if feature_enabled("open_register"):
             cards.append(("/register", "fa-user-plus", t(lang, "home_register"), t(lang, "home_register_desc")))
         cards.append(("/count", "fa-chart-simple", t(lang, "home_stats"), t(lang, "home_stats_desc")))
+        if feature_enabled("downloads"):
+            cards.append(("/downloads", "fa-desktop", t(lang, "downloads_card_t"), t(lang, "downloads_card_d")))
     return render_template("home.html", site_name=config.SITE_NAME or "如形の笔记", cards=cards,
                            recent_notes=recent_notes, recent_shares=recent_shares,
                            current_user=current_user, show_benben=feature_enabled("benben"),

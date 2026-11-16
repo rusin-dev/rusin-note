@@ -22,6 +22,11 @@
             <i class="fa-solid fa-book" aria-hidden="true"></i><span class="side-text">{{ t('nav_wiki') }}</span>
         </a>
         {% endif %}
+        {% if feature_enabled('downloads') and not simple_mode %}
+        <a {{ nav_attrs('/downloads', 'side-link')|safe }} href="/downloads" title="{{ t('nav_downloads') }}">
+            <i class="fa-solid fa-desktop" aria-hidden="true"></i><span class="side-text">{{ t('nav_downloads') }}</span>
+        </a>
+        {% endif %}
         <a {{ nav_attrs('/user/' ~ current_user ~ '/notifications', 'side-link')|safe }} href="/user/{{ current_user|e }}/notifications" title="{{ t('nav_notifications') }}">
             <i class="fa-solid fa-bell" aria-hidden="true"></i><span class="side-text">{{ t('nav_notifications') }}</span><span class="notif-badge" id="sideNotifBadge" aria-hidden="true" hidden></span>
         </a>

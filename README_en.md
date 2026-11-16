@@ -39,6 +39,7 @@
 - **Multi-language and personalization**: Built-in Simplified Chinese / English (manual switch or browser-language fallback); per-user settings for simple mode, change password, and change username (all data migrated automatically).
 - **Feature flags**: Admins toggle public notes, benben, share links, registration, images/attachments, comments, LaTeX, highlighting, and more at `/admin/features`; changes persist and take effect without restarting, and disabled routes return 404 with their entry points hidden.
 - **Plugin system**: Drop a `*.plugin.zip` into the runtime directory to auto-extract, install, and load its Flask blueprint, with upstream auto-update (unsupported on read-only serverless). See [Plugin System](docs/plugins-en.md).
+- **Desktop client**: `desktop/` ships a native WebView shell — a standalone window on your site, no browser needed. **All note data still lives in the web app**; locally it keeps only client config and your sign-in session. Installers are self-hosted on your own `/downloads` page (with SHA256 checksums) and run straight from the extracted folder. See [Desktop Client](docs/desktop-en.md).
 - **Deployment-friendly with baseline protection**: Configuration lives in `config.json`, with pluggable data backends (sqlite / file / upstash / postgres / memory); built-in CSRF protection, multi-tier IP rate limiting, `X-Forwarded-For` forgery protection, content sanitization, and an optional nginx + ModSecurity reverse-proxy WAF.
 
 > Per-feature toggles, quotas and limits are documented in [Configuration Options](docs/configuration-en.md).
@@ -99,6 +100,7 @@ Advanced deployment topics:
 | [Configuration Options](docs/configuration-en.md) | Every `config.json` setting, defaults, security notes, `RUSIN_*` env vars |
 | [IP Rate Limiting and XFF Forgery Protection](docs/deployment/ip-and-proxy-en.md) | Trusted-proxy check, right-to-left XFF, IP lists |
 | [Plugin System](docs/plugins-en.md) | Package structure, install/update flow, security |
+| [Desktop Client](docs/desktop-en.md) | Using the desktop app, building installers, self-hosted publishing, `desktop/` conventions |
 | [Collaboration Guide](docs/CONTRIBUTING.md) | Contributing flow |
 | [Disclaimer](docs/Disclaimer-en.md) | Terms of use |
 
@@ -128,8 +130,12 @@ rusin-note/
 │
 ├─ templates/           Jinja2 templates (all front-end CSS/JS inlined, bilingual)
 ├─ tests/               pytest end-to-end tests + frontend_check.py syntax check
-├─ docs/                documentation (deployment/ guides, configuration, plugins, …)
-└─ .github/             ISSUE_TEMPLATE and workflows (check / codeql / release / sync …)
+├─ desktop/             desktop client (standalone uv project: WebView shell + release tooling)
+│  ├─ src/              app / core (window, setup, site, data, logger) / modules
+│  ├─ release/          build.py + PyInstaller spec
+│  └─ tests/            desktop pytest (cases marked `network` need a live site)
+├─ docs/                documentation (deployment/ guides, configuration, plugins, desktop, …)
+└─ .github/             ISSUE_TEMPLATE and workflows (check / codeql / release / desktop-build / sync …)
 ```
 
 Architecture: a shared kernel `app/core/` (infrastructure + cross-feature domain services) plus feature Apps `app/apps/<feature>/` (each with its own `views.py` blueprint and optional `service.py`); all modules access data only through the unified `app/core/storage.py` interface with pluggable backends. For detailed module responsibilities and the route table, see the Skill: `.opencode/skills/rusin-note-codebase/SKILL.md`.

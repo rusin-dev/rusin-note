@@ -26,6 +26,11 @@ log/
 attachments/
 !/app/apps/attachments/
 
+# 桌面端（desktop/）：uv 锁文件须入库以保证构建可复现，构建产物不入库
+!desktop/uv.lock
+desktop/build/
+desktop/dist/
+
 # 本地运行时数据
 /data/
 /notes/
