@@ -53,6 +53,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # 编译 pycairo / pygobject 需要系统头文件与 pkg-config
+      - name: 安装 Linux 系统依赖
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libgirepository1.0-dev gir1.2-webkit2-4.1 libgtk-3-dev \
+            libcairo2-dev pkg-config gcc python3-dev
+        working-directory: .
+
       - name: 安装 uv
         uses: astral-sh/setup-uv@v5
         with:
@@ -139,6 +148,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      # merge 里也要 uv sync，同样需要系统依赖
+      - name: 安装 Linux 系统依赖
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libgirepository1.0-dev gir1.2-webkit2-4.1 libgtk-3-dev \
+            libcairo2-dev pkg-config gcc python3-dev
+        working-directory: .
 
       - name: 安装 uv
         uses: astral-sh/setup-uv@v5
