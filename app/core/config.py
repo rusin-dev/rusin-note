@@ -1,6 +1,7 @@
 """配置加载与全局常量"""
 import os
 import json
+import re
 import string
 
 # ---------- Markdown / Bleach / Pygments 可选依赖 ----------
@@ -173,8 +174,11 @@ DEFAULT_CONFIG = {
         "max_slug_depth": 4,                 # slug 层级深度上限（/ 分隔）
         "home_slug": "home",                 # /docs 首页对应的页面 slug
     },
-    "downloads": {                            # 桌面客户端下载落地页（/downloads，安装包站点自托管）
-        "dir": "downloads",                    # 相对 RUSIN_DATA_DIR 的安装包目录
+    "downloads": {                            # 桌面客户端下载落地页（/downloads）
+        "dir": "downloads",                    # 相对 RUSIN_DATA_DIR 的安装包目录（本地投放模式）
+        "github_repo": "",                     # 形如 owner/repo：从该仓库 Releases 读取清单与安装包
+        "manifest_url": "",                    # 显式清单地址（优先于 github_repo，可用于 beta 的 tag 地址）
+        "manifest_cache_seconds": 300,         # 远程清单进程内缓存（秒），避免每次请求都出网
         "max_file_mb": 512,                    # 单个安装包体积上限（MB），超限拒绝服务
         "download_rate_limit": {"window_seconds": 60, "max_requests": 10},
     },
@@ -694,6 +698,30 @@ _DOWNLOADS_RATE_CFG = DOWNLOADS_CFG.get("download_rate_limit",
                                         DEFAULT_CONFIG["downloads"]["download_rate_limit"])
 DOWNLOADS_RATE_WINDOW = _positive_int(_DOWNLOADS_RATE_CFG.get("window_seconds", 60), 60) or 60
 DOWNLOADS_RATE_MAX = _positive_int(_DOWNLOADS_RATE_CFG.get("max_requests", 10), 10) or 10
+
+# 远程清单：github_repo（读该仓库 Releases 资产）或显式 manifest_url；
+# 两者都为空时回退到本地 <DATA_DIR>/downloads/manifest.json（VPS 投放方式）。
+_GITHUB_REPO_RE = re.compile(r"^[A-Za-z0-9_.\-]{1,100}/[A-Za-z0-9_.\-]{1,100}$")
+DOWNLOADS_GITHUB_REPO = str(
+    DOWNLOADS_CFG.get("github_repo")
+    or os.environ.get("RUSIN_DOWNLOADS_GITHUB_REPO")
+    or ""
+).strip()
+if DOWNLOADS_GITHUB_REPO and not _GITHUB_REPO_RE.match(DOWNLOADS_GITHUB_REPO):
+    DOWNLOADS_GITHUB_REPO = ""
+DOWNLOADS_MANIFEST_URL = str(
+    DOWNLOADS_CFG.get("manifest_url")
+    or os.environ.get("RUSIN_DOWNLOADS_MANIFEST_URL")
+    or ""
+).strip()
+if not DOWNLOADS_MANIFEST_URL and DOWNLOADS_GITHUB_REPO:
+    DOWNLOADS_MANIFEST_URL = (
+        f"https://github.com/{DOWNLOADS_GITHUB_REPO}/releases/latest/download/manifest.json"
+    )
+DOWNLOADS_MANIFEST_CACHE_SECONDS = _positive_int(
+    DOWNLOADS_CFG.get("manifest_cache_seconds", 300),
+    DEFAULT_CONFIG["downloads"]["manifest_cache_seconds"],
+) or 300
 
 # ---------- 第三方登录（OAuth） ----------
 # 端点硬编码在 oauth/service.py，这里只放凭据与开关；凭据留空即未配置

@@ -83,7 +83,49 @@ uv run python release/build.py --merge dist/downloads
 
 合并会校验各平台版本/渠道一致，按 Windows → macOS → Linux 排序产出 `manifest.json`。
 
-### 2. 投放
+### 2. 发布与投放
+
+安装包有两种来源，二选一（也可同时配置，远程优先）：
+
+#### A. GitHub Releases（推荐，Vercel / Lambda 等无服务器部署唯一可行方式）
+
+安装包不进 Git，但可以挂在 **GitHub Release 资产**上——Release 资产独立存储，不会让仓库历史膨胀，且支持 HTTPS、Range 断点续传与匿名下载。
+
+1. 在发布桌面端的仓库（建议独立仓库，如 `<owner>/rusin-note-desktop`）打标签并发 Release，附件包含 `manifest.json` 与各平台安装包；
+2. 网页版配置仓库名（环境变量优先，便于在 Vercel 上切换而不用改代码）：
+
+   ```json
+   "downloads": {
+     "github_repo": "rusin-dev/rusin-note-desktop"
+   }
+   ```
+
+   或设置环境变量 `RUSIN_DOWNLOADS_GITHUB_REPO=rusin-dev/rusin-note-desktop`。
+
+3. 应用会读取：
+
+   ```plaintext
+   https://github.com/<owner>/<repo>/releases/latest/download/manifest.json
+   ```
+
+   并把 `/downloads/file/<id>` 实现为 **302** 跳转到同一 Release 的资产地址——安装包字节不经过应用服务器，不会消耗 Vercel 带宽。落地页、`/downloads/manifest.json` 与桌面端「检查更新」行为完全不变。
+
+细节与注意事项：
+
+- **安装包地址由清单地址同目录推导**：`…/releases/latest/download/manifest.json` → `…/releases/latest/download/<文件名>`。清单也可以为单条产物显式提供 `url`，但只接受 https 且主机限定为 `github.com` / `*.githubusercontent.com`，防止清单被篡改后变成任意跳转。
+- **beta 渠道**：`releases/latest` 只指向最新正式版（预发布会被 GitHub 排除），beta 需要显式指定 tag 地址：
+
+  ```json
+  "downloads": {
+    "manifest_url": "https://github.com/<owner>/<repo>/releases/download/v0.2.0-beta.1/manifest.json"
+  }
+  ```
+
+  `manifest_url` 优先级高于 `github_repo`。
+- **缓存**：远程清单默认进程内缓存 300 秒（`downloads.manifest_cache_seconds`），避免每次请求都出网；拉取失败时回退到上一次成功结果，首次失败则显示「暂无安装包」。
+- **无出网环境不会崩**：拉取超时 8 秒、清单上限 256 KB，失败只降级为空状态。
+
+#### B. 本地目录投放（VPS）
 
 把整个目录的内容复制到网页版数据目录下的 `downloads/`（即 `config.json` 的 `downloads.dir`，默认 `<RUSIN_DATA_DIR>/downloads/`）：
 
@@ -95,9 +137,9 @@ uv run python release/build.py --merge dist/downloads
 └─ rusin-note-desktop-0.1.0-linux-x64.tar.gz
 ```
 
-投放后立即生效（服务层不缓存清单，落地页展示延迟由视图缓存 TTL 决定）。清单缺失时 `/downloads` 显示「暂无安装包」，不会报错。
+投放后立即生效（服务层不缓存清单，落地页展示延迟由视图缓存 TTL 决定）。清单缺失时 `/downloads` 显示「暂无安装包」，不会报错。该方式下安装包由应用自身 `send_file` 流式发送，支持 Range，适合 VPS。
 
-多实例部署（Vercel / Lambda）需要把安装包放到共享存储或对象存储并自行同步——`downloads/` 是本地目录，无服务器平台的只读文件系统不适合托管安装包，建议这类部署把 `/downloads` 指向自建 VPS 站点，或关闭 `downloads` 功能开关。
+> 无服务器平台的文件系统只读且不持久，**不要**用方式 B；请用方式 A（GitHub Releases），或把 `/downloads` 指向自建 VPS 站点。
 
 ### 3. CI 自动构建
 
