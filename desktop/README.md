@@ -44,6 +44,13 @@ uv run python main.py      # 运行桌面端
 
 平台运行时要求：Windows 需 [WebView2](https://developer.microsoft.com/microsoft-edge/webview2/)（Win10/11 通常已预装）；Linux 需 GTK3 与 WebKit2GTK 4.1。
 
+## 常见问题
+
+**Windows 下载后双击弹「Unhandled exception in script」，日志报 `Failed to resolve Python.Runtime.Loader.Initialize ...\pythonnet\runtime\Python.Runtime.dll`**
+
+浏览器给下载的 ZIP 打上的「来自 Internet」标记（`Zone.Identifier` 备用数据流）会随解压继承到每个文件，.NET 拒绝加载这类程序集，pythonnet 初始化失败。`0.1.1` 起程序启动时会自动清除该标记；更早的版本请先右键 ZIP → 属性 → 勾选「解除锁定」再解压，或对已解压目录执行 `Get-ChildItem .\rusin-note-desktop -Recurse -File | Unblock-File`。
+
+
 ## 测试
 
 ```bash

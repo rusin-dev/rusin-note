@@ -17,6 +17,24 @@
 
 Windows 需要 [WebView2 运行时](https://developer.microsoft.com/microsoft-edge/webview2/)（Win10/11 通常已随 Edge 预装）；Linux 需要 GTK3 与 WebKit2GTK 4.1。
 
+### Windows：下载后启动报 `Failed to resolve Python.Runtime.Loader.Initialize`
+
+症状：双击 `rusin-note-desktop.exe` 弹出「Unhandled exception in script」，日志里是：
+
+```plaintext
+RuntimeError: Failed to resolve Python.Runtime.Loader.Initialize from
+...\_internal\pythonnet\runtime\Python.Runtime.dll
+```
+
+原因：浏览器会给下载的 ZIP 打上「来自 Internet」标记（`Zone.Identifier` 备用数据流），用资源管理器解压时这个标记会继承给每个文件；Windows 的 .NET 拒绝加载带该标记的程序集，而 pythonnet（WebView 的 .NET 桥）正好依赖它，于是初始化失败。
+
+处理：
+
+- **0.1.1 及以后**：程序启动时会自动清除安装目录里的下载标记，无需任何操作。
+- **0.1.0 及更早**：解压后手动解除锁定，任选一种——
+  - 右键下载的 ZIP → 属性 → 勾选「解除锁定」→ 重新解压（推荐，先解锁再解压）；
+  - 或对已解压目录执行：`Get-ChildItem .\rusin-note-desktop -Recurse -File | Unblock-File`。
+
 ### 菜单
 
 | 菜单 | 作用 |
