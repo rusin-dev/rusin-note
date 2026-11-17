@@ -24,5 +24,5 @@ uv run python release/build.py --merge dist/downloads   # 合并为 manifest.jso
 * `src/core/setup.py`：首次运行「连接站点」页，自包含 HTML（无外部资源），JS 经 `pywebview.api.connect` 调 `ShellApi`；文案按 `navigator.language` 中英切换。
 * `src/core/site.py`：站点 URL 规范化，只允许 http/https，拒绝凭据、空白与非 http scheme。
 * `src/modules/updater.py`：更新检查走站点 `/downloads/manifest.json`（安装包站点自托管，不走 GitHub Releases），版本/渠道取随包 `data/metadata.json`（frozen 时从 `sys._MEIPASS` 读）。渠道不一致的清单直接拒绝。
-* `release/build.py` + `release/rusin-note-desktop.spec`：PyInstaller onedir，产物压成 zip（Windows/macOS）或 tar.gz（Linux），算 sha256 后产出分清单，`--merge` 合成站点投放用的 `manifest.json`。pywebview 自带 PyInstaller hook 会收集 WebView2 DLL 与 JS 资源，spec 只补平台相关 hiddenimports。
+* `release/build.py` + `release/rusin-note-desktop.spec` / `rusin-note-desktop-onefile.spec`：**Windows 用 onefile 产出单个 `.exe`（下载即用，免解压）**，macOS / Linux 用 onedir 并压成 zip（内含 `.app`）或 tar.gz；算 sha256 后产出分清单，`--merge` 合成 GitHub Release 用的 `manifest.json`。pywebview 自带 PyInstaller hook 会收集 WebView2 DLL 与 JS 资源，spec 只补平台相关 hiddenimports。
 * 发布流程与配置项见仓库根 `docs/desktop.md`；CI 见 `.github/workflows/desktop-build.yml`（推 `desktop-v*` 标签或手动触发三平台构建）。

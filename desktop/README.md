@@ -65,7 +65,7 @@ uv run python release/build.py                        # 构建当前平台
 uv run python release/build.py --merge dist/downloads # 合并各平台清单
 ```
 
-产物在 `dist/downloads/`（安装包 + `manifest.json`），整目录投放到网页版数据目录的 `downloads/` 下即完成发布。详见 [桌面客户端文档](../docs/desktop.md)。
+产物在 `dist/downloads/`（安装包 + `manifest.json`）。**Windows 是单个 `.exe`（下载即用，免解压）**，macOS 是内含 `.app` 的 zip，Linux 是 tar.gz；三个平台构建完成后合并清单，随安装包一起挂到 GitHub Release。详见 [桌面客户端文档](../docs/desktop.md)。
 
 ## 目录结构
 

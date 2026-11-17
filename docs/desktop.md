@@ -10,14 +10,19 @@
 
 ### 安装
 
-1. 打开站点的 `/downloads` 页面，按你的系统下载对应安装包（Windows `.zip` / macOS `.zip` 内含 `.app` / Linux `.tar.gz`）。
-2. 解压到任意目录，运行 `rusin-note-desktop`（Windows 为 `rusin-note-desktop.exe`）。免安装，不写注册表。
+1. 打开站点的 `/downloads` 页面，按你的系统下载安装包：
+   - **Windows**：单个 `rusin-note-desktop-<版本>-windows-x64.exe`，**下载后直接双击运行**，不需要解压，也不写注册表；
+   - **macOS**：`.zip`，解压后把 `rusin-note-desktop.app` 拖到「应用程序」；
+   - **Linux**：`.tar.gz`，解压后运行目录里的 `rusin-note-desktop`。
+2. Windows 首次启动需要把内置运行时解到临时目录，约 2–3 秒才出窗口（之后每次启动仍需重新解包，稍慢于免解压版）；如果系统弹出 SmartScreen「Windows 已保护你的电脑」，点「更多信息 → 仍要运行」。
 3. 首次运行会显示「连接站点」页，填入你的 rusin-note 地址（例如 `https://note.example.com`），点击连接。
 4. 在窗口里正常登录即可。登录态会被保存，下次启动直接进入站点。
 
 Windows 需要 [WebView2 运行时](https://developer.microsoft.com/microsoft-edge/webview2/)（Win10/11 通常已随 Edge 预装）；Linux 需要 GTK3 与 WebKit2GTK 4.1。
 
-### Windows：下载后启动报 `Failed to resolve Python.Runtime.Loader.Initialize`
+### Windows：0.1.0 / 0.1.1 解压版启动报 `Failed to resolve Python.Runtime.Loader.Initialize`
+
+> 0.1.2 起 Windows 改为单个 `.exe`，不再解压，不会触发该问题。以下仅针对旧的解压版。
 
 症状：双击 `rusin-note-desktop.exe` 弹出「Unhandled exception in script」，日志里是：
 
@@ -30,10 +35,11 @@ RuntimeError: Failed to resolve Python.Runtime.Loader.Initialize from
 
 处理：
 
-- **0.1.1 及以后**：程序启动时会自动清除安装目录里的下载标记，无需任何操作。
-- **0.1.0 及更早**：解压后手动解除锁定，任选一种——
+- **0.1.1**：程序启动时会自动清除安装目录里的下载标记，无需任何操作。
+- **0.1.0**：解压后手动解除锁定，任选一种——
   - 右键下载的 ZIP → 属性 → 勾选「解除锁定」→ 重新解压（推荐，先解锁再解压）；
   - 或对已解压目录执行：`Get-ChildItem .\rusin-note-desktop -Recurse -File | Unblock-File`。
+- 直接换成 0.1.2 的单文件 `.exe` 即可永久绕开。
 
 ### 菜单
 
@@ -68,7 +74,7 @@ RuntimeError: Failed to resolve Python.Runtime.Loader.Initialize from
 
 ### 更新
 
-桌面端不自动更新。菜单「检查更新…」会把随包携带的 `data/metadata.json`（版本 + 渠道）与站点清单比对：渠道必须一致（`stable` 只认 `stable`），版本更高时提示打开 `/downloads` 下载新包，覆盖解压即可，配置与登录态不受影响。
+桌面端不自动更新。菜单「检查更新…」会把随包携带的 `data/metadata.json`（版本 + 渠道）与站点清单比对：渠道必须一致（`stable` 只认 `stable`），版本更高时提示打开 `/downloads` 下载新包。Windows 直接替换那个 `.exe`，macOS / Linux 覆盖解压即可；配置与登录态都存在数据目录里，不受影响。
 
 ## 管理员：发布安装包
 
@@ -87,9 +93,13 @@ uv run python release/build.py       # 构建当前平台
 
 ```plaintext
 dist/downloads/
-├─ rusin-note-desktop-0.1.0-windows-x64.zip      安装包
-└─ manifest-windows-x64.json                     该平台分清单（含 size 与 sha256）
+├─ rusin-note-desktop-0.1.2-windows-x64.exe       安装包（Windows 单文件，免解压）
+├─ rusin-note-desktop-0.1.2-macos-arm64.zip       安装包（内含 .app）
+├─ rusin-note-desktop-0.1.2-linux-x64.tar.gz      安装包
+└─ manifest-windows-x64.json                      该平台分清单（含 size 与 sha256）
 ```
+
+Windows 走 PyInstaller 的 onefile 模式（`release/rusin-note-desktop-onefile.spec`），直接产出单个 `.exe`——下载即用，也顺带绕开了「解压后程序集带下载标记导致 pythonnet 加载失败」的问题；macOS / Linux 仍为 onedir + 压缩包（`.app` 与动态库目录不适合单文件）。onefile 每次启动都要解包到临时目录，首次出窗口约 2–3 秒（onedir 约 1.4 秒），这是换取「一个 exe」的代价。
 
 常用参数：`--version`（默认取 `pyproject.toml`）、`--channel stable|beta`、`--notes "更新说明"`、`--released-at YYYY-MM-DD`。
 
@@ -150,9 +160,9 @@ uv run python release/build.py --merge dist/downloads
 ```plaintext
 <RUSIN_DATA_DIR>/downloads/
 ├─ manifest.json
-├─ rusin-note-desktop-0.1.0-windows-x64.zip
-├─ rusin-note-desktop-0.1.0-macos-arm64.zip
-└─ rusin-note-desktop-0.1.0-linux-x64.tar.gz
+├─ rusin-note-desktop-0.1.2-windows-x64.exe
+├─ rusin-note-desktop-0.1.2-macos-arm64.zip
+└─ rusin-note-desktop-0.1.2-linux-x64.tar.gz
 ```
 
 投放后立即生效（服务层不缓存清单，落地页展示延迟由视图缓存 TTL 决定）。清单缺失时 `/downloads` 显示「暂无安装包」，不会报错。该方式下安装包由应用自身 `send_file` 流式发送，支持 Range，适合 VPS。

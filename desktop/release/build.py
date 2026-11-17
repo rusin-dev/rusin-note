@@ -4,9 +4,9 @@
     uv run python release/build.py                 # 构建当前平台
     uv run python release/build.py --merge dist/downloads   # 合并各平台清单
 
-产物落在 dist/downloads/，整目录投放到网页版数据目录的 downloads/ 下即可被
-/downloads 落地页读取。每个平台先产出 manifest-<platform>-<arch>.json，
-三平台构建完成后用 --merge 合成 manifest.json。
+产物落在 dist/downloads/：**Windows 为单个 .exe**（下载即用，双击运行），macOS
+为内含 .app 的 zip，Linux 为 tar.gz。每个平台先产出 manifest-<platform>-<arch>.json，
+三平台构建完成后用 --merge 合成 manifest.json，随安装包一起挂到 GitHub Release。
 """
 from __future__ import annotations
 
@@ -14,6 +14,7 @@ import argparse
 import hashlib
 import json
 import platform
+import shutil
 import subprocess
 import sys
 import tarfile
@@ -24,6 +25,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SPEC = ROOT / "release" / "rusin-note-desktop.spec"
+ONEFILE_SPEC = ROOT / "release" / "rusin-note-desktop-onefile.spec"
 DIST = ROOT / "dist"
 WORK = ROOT / "build"
 OUTPUT = DIST / "downloads"
@@ -46,7 +48,16 @@ def arch_key() -> str:
 
 
 def archive_suffix() -> str:
-    return ".tar.gz" if platform_key() == "linux" else ".zip"
+    """Windows 分发单个 .exe；Linux 用 tar.gz，macOS 用 zip（内含 .app）。"""
+    plat = platform_key()
+    if plat == "windows":
+        return ".exe"
+    return ".tar.gz" if plat == "linux" else ".zip"
+
+
+def onefile() -> bool:
+    """是否构建单文件产物（仅 Windows：下载一个 exe 双击即用）。"""
+    return platform_key() == "windows"
 
 
 def artifact_name(version: str, plat: str, arch: str, suffix: str) -> str:
@@ -77,12 +88,23 @@ def write_metadata(version: str, channel: str) -> None:
 
 
 def run_pyinstaller() -> Path:
+    """跑 PyInstaller：Windows 用单文件 spec，其余平台用 onedir spec。"""
+    spec = ONEFILE_SPEC if onefile() else SPEC
     command = [
         sys.executable, "-m", "PyInstaller", "--noconfirm", "--clean",
-        "--distpath", str(DIST), "--workpath", str(WORK), str(SPEC),
+        "--distpath", str(DIST), "--workpath", str(WORK), str(spec),
     ]
     subprocess.run(command, check=True, cwd=str(ROOT))
-    return DIST / APP_NAME
+    return DIST / (f"{APP_NAME}.exe" if onefile() else APP_NAME)
+
+
+def make_artifact(built: Path, target: Path) -> Path:
+    """产出下载文件：Windows 直接复制单文件 exe，其余平台压缩目录。"""
+    target.parent.mkdir(parents=True, exist_ok=True)
+    if onefile():
+        shutil.copy2(built, target)
+        return target
+    return make_archive(built, target)
 
 
 def make_archive(built: Path, target: Path) -> Path:
@@ -111,7 +133,7 @@ def build(version: str, channel: str, notes: str, released_at: str) -> Path:
     write_metadata(version, channel)
     built = run_pyinstaller()
     name = artifact_name(version, plat, arch, archive_suffix())
-    artifact = make_archive(built, OUTPUT / name)
+    artifact = make_artifact(built, OUTPUT / name)
     partial = {
         "version": version,
         "channel": channel,

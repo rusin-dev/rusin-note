@@ -40,7 +40,7 @@
 - **多语言与个性化**：内置简体中文 / English（手动切换或按浏览器语言自动选择）；用户设置页支持简洁模式、修改密码、修改用户名（全部数据自动迁移）。
 - **功能开关（Feature Flags）**：管理员在 `/admin/features` 用滑块即时启停各功能，保存后立即生效、无需重启；停用功能入口自动隐藏、路由 404。
 - **插件系统**：投放 `*.plugin.zip` 到运行时目录即自动解压安装并加载其中的 Flask 蓝图，支持上游自动更新（无服务器只读环境不支持）。详见 [插件系统](docs/plugins.md)。
-- **桌面客户端**：独立仓库 `rusin-note-desktop` 提供 WebView 原生壳，独立窗口直接加载你的站点，不用开浏览器；**笔记数据仍全部存放在网页版**，本地只保存客户端配置与登录态。安装包发布在该仓库的 GitHub Releases，由本站 `/downloads` 页面读取并分发（含 SHA256 校验），解压即用。详见 [桌面客户端](docs/desktop.md)。
+- **桌面客户端**：独立仓库 `rusin-note-desktop` 提供 WebView 原生壳，独立窗口直接加载你的站点，不用开浏览器；**笔记数据仍全部存放在网页版**，本地只保存客户端配置与登录态。安装包发布在该仓库的 GitHub Releases，由本站 `/downloads` 页面读取并分发（含 SHA256 校验）；Windows 直接下载单个 `.exe` 双击运行，macOS / Linux 为免安装压缩包。详见 [桌面客户端](docs/desktop.md)。
 - **部署友好 + 基础防护完善**：配置集中在 `config.json`，数据后端可插拔（sqlite / file / upstash / postgres / memory）；内置 CSRF 防护、多维 IP 限流、防 `X-Forwarded-For` 伪造、内容安全清洗，以及可选的 nginx + ModSecurity 反向代理 WAF。
 
 > 各能力的对应开关、配额与限制逐项说明见 [配置项详解](docs/configuration.md)。

@@ -33,15 +33,25 @@ class TestPlatformKeys:
         assert build.arch_key() == expected
 
     @pytest.mark.parametrize("plat, suffix", [
-        ("windows", ".zip"), ("macos", ".zip"), ("linux", ".tar.gz"),
+        ("windows", ".exe"), ("macos", ".zip"), ("linux", ".tar.gz"),
     ])
     def test_archive_suffix(self, monkeypatch, plat, suffix):
         monkeypatch.setattr(build, "platform_key", lambda: plat)
         assert build.archive_suffix() == suffix
 
+    @pytest.mark.parametrize("plat, expected", [
+        ("windows", True), ("macos", False), ("linux", False),
+    ])
+    def test_onefile_only_on_windows(self, monkeypatch, plat, expected):
+        monkeypatch.setattr(build, "platform_key", lambda: plat)
+        assert build.onefile() is expected
+
     def test_artifact_name(self):
         assert build.artifact_name("1.2.3", "windows", "x64", ".zip") == (
             "rusin-note-desktop-1.2.3-windows-x64.zip"
+        )
+        assert build.artifact_name("1.2.3", "windows", "x64", ".exe") == (
+            "rusin-note-desktop-1.2.3-windows-x64.exe"
         )
 
 
@@ -75,6 +85,27 @@ def _fake_onedir(tmp_path: Path, name: str = "rusin-note-desktop") -> Path:
     (built / "rusin-note-desktop.exe").write_bytes(b"binary")
     (built / "sub" / "lib.dll").write_bytes(b"dll")
     return built
+
+
+class TestMakeArtifact:
+    def test_windows_copies_single_exe(self, tmp_path, monkeypatch):
+        """Windows 直接分发单文件 exe（下载即用），不再打 zip。"""
+        monkeypatch.setattr(build, "platform_key", lambda: "windows")
+        exe = tmp_path / "dist" / "rusin-note-desktop.exe"
+        exe.parent.mkdir(parents=True)
+        exe.write_bytes(b"single-file-exe")
+        target = tmp_path / "out" / "rusin-note-desktop-1.0.0-windows-x64.exe"
+        build.make_artifact(exe, target)
+        assert target.read_bytes() == b"single-file-exe"
+        assert target.suffix == ".exe"
+
+    def test_linux_still_archives(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(build, "platform_key", lambda: "linux")
+        built = _fake_onedir(tmp_path)
+        target = tmp_path / "out" / "app.tar.gz"
+        build.make_artifact(built, target)
+        with tarfile.open(target) as tar:
+            assert any(m.name.endswith("rusin-note-desktop.exe") for m in tar.getmembers())
 
 
 class TestMakeArchive:
@@ -190,6 +221,6 @@ class TestMergeManifests:
         for item in merged["artifacts"]:
             assert set(item) == {"id", "platform", "arch", "file", "sha256"}
             assert item["id"] == f"{item['platform']}-{item['arch']}"
-            assert item["file"].endswith((".zip", ".tar.gz"))
+            assert item["file"].endswith((".zip", ".tar.gz", ".exe"))
             assert len(item["sha256"]) == 64
             assert all(c in "0123456789abcdef" for c in item["sha256"])
