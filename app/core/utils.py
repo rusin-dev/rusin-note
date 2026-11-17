@@ -32,13 +32,13 @@ def format_note_time(mtime) -> str:
 def get_avatar_url(username: str) -> str:
     """按配置生成用户头像 URL；头像未启用或用户名为空时返回空串。
 
-    url_template 支持 {hash}（md5(用户名)）与 {username}（URL 编码）占位符。
+    url_template 支持 {hash}（sha256(用户名)）与 {username}（URL 编码）占位符。
     """
     from app.core import config
     from app.core.feature_flags import feature_enabled
     if not feature_enabled("avatar") or not username:
         return ""
-    h = hashlib.md5(username.encode("utf-8")).hexdigest()
+    h = hashlib.sha256(username.encode("utf-8")).hexdigest()
     name = urllib.parse.quote(username, safe="")
     return config.AVATAR_URL_TEMPLATE.format(hash=h, username=name)
 
