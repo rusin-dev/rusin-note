@@ -23,5 +23,5 @@ dev = [
 testpaths = ["tests"]
 pythonpath = ["."]
 markers = [
-    "network: 依赖真实网络（站点更新清单）的用�?,
+    "network: 依赖真实网络（站点更新清单）的用例",
 ]
