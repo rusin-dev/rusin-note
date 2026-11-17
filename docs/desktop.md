@@ -4,7 +4,7 @@
 
 **笔记数据全部存放在网页版**，桌面端本地不保存任何笔记、附件或同步状态。本地数据目录只放三样东西：客户端配置（站点地址、窗口几何）、日志、WebView 会话数据（Cookie / localStorage，用于保持登录态）。换一台电脑装桌面端、登录同一账号，看到的就是同一份笔记。
 
-代码在本仓库的 [`desktop/`](../desktop/) 子目录，是一个独立的 uv 项目（自己的 `pyproject.toml` 与 `uv.lock`），与网页版共用一个仓库但互不依赖。
+代码在独立仓库 `<owner>/rusin-note-desktop`，是一个独立的 uv 项目（自己的 `pyproject.toml` 与 `uv.lock`）。拆出独立仓库是为了让 `releases/latest` 只包含桌面端版本，并避免网页版的 tag 与发布节奏互相干扰；网页版 monorepo 的 `desktop/` 只是迁移期副本。
 
 ## 用户指南
 
@@ -54,23 +54,23 @@ Windows 需要 [WebView2 运行时](https://developer.microsoft.com/microsoft-ed
 
 ## 管理员：发布安装包
 
-安装包**站点自托管**，不走 GitHub Releases，也不进 Git。
+安装包**不进 Git**，托管在 `<owner>/rusin-note-desktop` 仓库的 **GitHub Releases** 资产上（Release 资产独立存储，不会让仓库历史膨胀）。
 
 ### 1. 构建
 
-在 `desktop/` 下（需要 [uv](https://docs.astral.sh/uv/)）：
+在 `rusin-note-desktop` 仓库根目录（需要 [uv](https://docs.astral.sh/uv/)）：
 
 ```bash
 uv sync                              # 安装依赖（含 dev 组的 PyInstaller）
 uv run python release/build.py       # 构建当前平台
 ```
 
-产物落在 `desktop/dist/downloads/`：
+产物落在 `dist/downloads/`：
 
 ```plaintext
 dist/downloads/
 ├─ rusin-note-desktop-0.1.0-windows-x64.zip      安装包
-└─ manifest-windows-x64.json                     该平台分清单（含 sha256）
+└─ manifest-windows-x64.json                     该平台分清单（含 size 与 sha256）
 ```
 
 常用参数：`--version`（默认取 `pyproject.toml`）、`--channel stable|beta`、`--notes "更新说明"`、`--released-at YYYY-MM-DD`。
@@ -83,7 +83,49 @@ uv run python release/build.py --merge dist/downloads
 
 合并会校验各平台版本/渠道一致，按 Windows → macOS → Linux 排序产出 `manifest.json`。
 
-### 2. 投放
+### 2. 发布与投放
+
+安装包有两种来源，二选一（也可同时配置，远程优先）：
+
+#### A. GitHub Releases（推荐，Vercel / Lambda 等无服务器部署唯一可行方式）
+
+安装包不进 Git，但可以挂在 **GitHub Release 资产**上——Release 资产独立存储，不会让仓库历史膨胀，且支持 HTTPS、Range 断点续传与匿名下载。
+
+1. 在发布桌面端的仓库（建议独立仓库，如 `<owner>/rusin-note-desktop`）打标签并发 Release，附件包含 `manifest.json` 与各平台安装包；
+2. 网页版配置仓库名（环境变量优先，便于在 Vercel 上切换而不用改代码）：
+
+   ```json
+   "downloads": {
+     "github_repo": "rusin-dev/rusin-note-desktop"
+   }
+   ```
+
+   或设置环境变量 `RUSIN_DOWNLOADS_GITHUB_REPO=rusin-dev/rusin-note-desktop`。
+
+3. 应用会读取：
+
+   ```plaintext
+   https://github.com/<owner>/<repo>/releases/latest/download/manifest.json
+   ```
+
+   并把 `/downloads/file/<id>` 实现为 **302** 跳转到同一 Release 的资产地址——安装包字节不经过应用服务器，不会消耗 Vercel 带宽。落地页、`/downloads/manifest.json` 与桌面端「检查更新」行为完全不变。
+
+细节与注意事项：
+
+- **安装包地址由清单地址同目录推导**：`…/releases/latest/download/manifest.json` → `…/releases/latest/download/<文件名>`。清单也可以为单条产物显式提供 `url`，但只接受 https 且主机限定为 `github.com` / `*.githubusercontent.com`，防止清单被篡改后变成任意跳转。
+- **beta 渠道**：`releases/latest` 只指向最新正式版（预发布会被 GitHub 排除），beta 需要显式指定 tag 地址：
+
+  ```json
+  "downloads": {
+    "manifest_url": "https://github.com/<owner>/<repo>/releases/download/v0.2.0-beta.1/manifest.json"
+  }
+  ```
+
+  `manifest_url` 优先级高于 `github_repo`。
+- **缓存**：远程清单默认进程内缓存 300 秒（`downloads.manifest_cache_seconds`），避免每次请求都出网；拉取失败时回退到上一次成功结果，首次失败则显示「暂无安装包」。
+- **无出网环境不会崩**：拉取超时 8 秒、清单上限 256 KB，失败只降级为空状态。
+
+#### B. 本地目录投放（VPS）
 
 把整个目录的内容复制到网页版数据目录下的 `downloads/`（即 `config.json` 的 `downloads.dir`，默认 `<RUSIN_DATA_DIR>/downloads/`）：
 
@@ -95,18 +137,29 @@ uv run python release/build.py --merge dist/downloads
 └─ rusin-note-desktop-0.1.0-linux-x64.tar.gz
 ```
 
-投放后立即生效（服务层不缓存清单，落地页展示延迟由视图缓存 TTL 决定）。清单缺失时 `/downloads` 显示「暂无安装包」，不会报错。
+投放后立即生效（服务层不缓存清单，落地页展示延迟由视图缓存 TTL 决定）。清单缺失时 `/downloads` 显示「暂无安装包」，不会报错。该方式下安装包由应用自身 `send_file` 流式发送，支持 Range，适合 VPS。
 
-多实例部署（Vercel / Lambda）需要把安装包放到共享存储或对象存储并自行同步——`downloads/` 是本地目录，无服务器平台的只读文件系统不适合托管安装包，建议这类部署把 `/downloads` 指向自建 VPS 站点，或关闭 `downloads` 功能开关。
+> 无服务器平台的文件系统只读且不持久，**不要**用方式 B；请用方式 A（GitHub Releases），或把 `/downloads` 指向自建 VPS 站点。
 
-### 3. CI 自动构建
+### 3. CI 自动构建（独立仓库）
 
-[`.github/workflows/desktop-build.yml`](../.github/workflows/desktop-build.yml)：
+桌面端源码与发布都放在独立仓库 `<owner>/rusin-note-desktop`，不放在网页版 monorepo 里。这样 `releases/latest` 只包含桌面端版本，网页版的 tag 不会把安装包清单挤掉，仓库历史也不会被二进制污染。
 
-- 推 `desktop-v*` 标签或手动触发（workflow_dispatch，可填版本/渠道/更新说明）→ 三平台矩阵构建，各平台先跑自己的测试套件；
-- 标签带预发布后缀（如 `desktop-v1.0.0-rc.1`）自动归入 `beta` 渠道；
-- `merge` 作业合并清单，产出名为 `downloads` 的 artifact，下载后整体投放到服务器即可；
-- 改动 `desktop/**` 的 push / PR 只跑桌面端单元测试，不构建。
+该仓库的 `.github/workflows/release.yml`：
+
+- 推 `v*` 标签 → 三平台矩阵构建（各平台先跑自己的测试）→ `release` 作业合并清单，把 `manifest.json` 与各平台安装包一起挂到该 Release；
+- 标签带 `-` 后缀（如 `v0.2.0-beta.1`）自动归入 `beta` 渠道并标记为 pre-release，**不会**成为 `releases/latest`；
+- PR 只跑单元测试，不构建；
+- 手动触发（workflow_dispatch）可填版本/渠道/更新说明，产物保留在 Actions artifact。
+
+发布一个新版本：
+
+```bash
+git tag v0.2.0          # 预发布用 v0.2.0-beta.1
+git push origin v0.2.0
+```
+
+网页版无需重新部署——它在请求时读取 `releases/latest/download/manifest.json`（缓存 `downloads.manifest_cache_seconds`，默认 5 分钟），新版 Release 发布后片刻即生效。
 
 ### 4. 校验与安全
 
@@ -122,8 +175,10 @@ sha256sum rusin-note-desktop-0.1.0-windows-x64.zip
 
 ## 开发者
 
+源码在独立仓库 `<owner>/rusin-note-desktop`（从网页版 monorepo 的 `desktop/` 拆出），仓库根目录结构：
+
 ```plaintext
-desktop/
+rusin-note-desktop/
 ├─ main.py                  入口（uv run python main.py）
 ├─ pyproject.toml / uv.lock  独立 uv 项目，Python >= 3.12
 ├─ data/metadata.json       随包版本信息（构建时写入）

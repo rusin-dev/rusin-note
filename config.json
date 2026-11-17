@@ -148,6 +148,9 @@
   },
   "downloads": {
     "dir": "downloads",
+    "github_repo": "rusin-dev/rusin-note-desktop",
+    "manifest_url": "",
+    "manifest_cache_seconds": 300,
     "max_file_mb": 512,
     "download_rate_limit": {
       "window_seconds": 60,

@@ -116,6 +116,21 @@ def reset_runtime_state(data_dir) -> None:
 # ---------------------------------------------------------------------------
 # fixtures
 # ---------------------------------------------------------------------------
+@pytest.fixture(autouse=True)
+def force_local_downloads_manifest(monkeypatch):
+    """下载页默认走「本地投放」模式，不依赖外网。
+
+    仓库里的 ``config.json`` 配了 ``downloads.github_repo``（线上读 GitHub
+    Releases），但测试统一用临时数据目录 + 本地 ``manifest.json``；若沿用
+    仓库配置，测试会进入远程模式并因外网不可达而拿到空清单。远程清单模式的
+    用例在各自类里用 ``monkeypatch`` 重新打开，测试结束自动还原。
+    """
+    from app.core import config as app_config
+
+    monkeypatch.setattr(app_config, "DOWNLOADS_GITHUB_REPO", "")
+    monkeypatch.setattr(app_config, "DOWNLOADS_MANIFEST_URL", "")
+
+
 @pytest.fixture(scope="class")
 def data_dir(tmp_path_factory, request):
     """每个测试类独立的临时数据目录，并重置全部运行时状态。"""

@@ -187,12 +187,17 @@
 
 ## 桌面客户端下载
 
-- `downloads`：桌面客户端安装包**站点自托管**（`/downloads` 落地页、`/downloads/file/<id>` 下载、`/downloads/manifest.json` 清单，受 `downloads` 功能开关控制，默认开）。安装包不进 Git，由 `desktop/` 的构建流水线产出后整体投放到数据目录。
-   - `dir`：安装包目录，相对数据目录，默认 `downloads`（即 `<RUSIN_DATA_DIR>/downloads/`）;
-   - `max_file_mb`：单个安装包体积上限（MB），默认 `512`；超限产物会被清单校验丢弃；
+- `downloads`：桌面客户端安装包分发（`/downloads` 落地页、`/downloads/file/<id>` 下载、`/downloads/manifest.json` 清单，受 `downloads` 功能开关控制，默认开）。安装包不进 Git，支持两种来源：**GitHub Releases**（远程清单，无服务器部署用）与**本地目录投放**（VPS）。
+   - `dir`：本地安装包目录，相对数据目录，默认 `downloads`（即 `<RUSIN_DATA_DIR>/downloads/`）；仅在未配置远程清单时生效；
+   - `github_repo`：形如 `owner/repo`，从该仓库的 `releases/latest/download/manifest.json` 读取清单，并把下载跳转到同一 Release 的资产；等价于环境变量 `RUSIN_DOWNLOADS_GITHUB_REPO`；
+   - `manifest_url`：显式清单地址，优先于 `github_repo`（beta 渠道用它指向具体 tag）；等价于环境变量 `RUSIN_DOWNLOADS_MANIFEST_URL`；
+   - `manifest_cache_seconds`：远程清单进程内缓存秒数，默认 `300`；拉取失败时回退上一次成功结果；
+   - `max_file_mb`：单个安装包体积上限（MB），默认 `512`；超限产物会被清单校验丢弃（本地模式按实测体积，远程模式按清单声明）；
    - `download_rate_limit`：下载限流，`window_seconds` 窗口秒数（默认 `60`）、`max_requests` 窗口内每 IP 下载次数（默认 `10`）。
 
-   清单 `manifest.json` 由 `desktop/release/build.py --merge` 生成，字段为 `version` / `channel`（`stable` 或 `beta`）/ `released_at`（`YYYY-MM-DD`）/ `notes` / `artifacts[]`，每条产物含 `id`（如 `windows-x64`，出现在下载 URL 中）/ `platform` / `arch` / `file` / `sha256`。清单是管理员提供的外部输入，服务层逐项校验：id 仅允许小写字母数字与 `_-`、文件名须匹配白名单后缀（`.exe` `.msi` `.dmg` `.pkg` `.zip` `.appimage` `.deb` `.rpm` `.tar.gz`）、sha256 须为 64 位小写十六进制、产物路径做 realpath 越界防护。清单缺失或损坏按「暂无安装包」处理，下载页不会 500。
+    配置了 `github_repo` / `manifest_url` 时进入远程模式：`/downloads/file/<id>` 返回 **302** 跳转到 Release 资产，安装包字节不经过应用服务器；未配置时读取本地 `dir/manifest.json` 并用 `send_file` 流式发送（支持 Range）。远程清单可为单条产物显式提供 `url`，但仅接受 https 且主机限定 `github.com` / `*.githubusercontent.com`，防止清单被篡改后变成任意跳转。
+
+   清单 `manifest.json` 由 `desktop/release/build.py --merge` 生成，字段为 `version` / `channel`（`stable` 或 `beta`）/ `released_at`（`YYYY-MM-DD`）/ `notes` / `artifacts[]`，每条产物含 `id`（如 `windows-x64`，出现在下载 URL 中）/ `platform` / `arch` / `file` / `size` / `sha256`。清单是管理员提供的外部输入，服务层逐项校验：id 仅允许小写字母数字与 `_-`、文件名须匹配白名单后缀（`.exe` `.msi` `.dmg` `.pkg` `.zip` `.appimage` `.deb` `.rpm` `.tar.gz`）、sha256 须为 64 位小写十六进制、产物路径做 realpath 越界防护。清单缺失或损坏按「暂无安装包」处理，下载页不会 500。
 
    桌面端的「检查更新」读取本站 `/downloads/manifest.json`，与随包携带的 `data/metadata.json` 比对版本与渠道；渠道不一致的清单会被拒绝。构建与发布流程见 [桌面客户端](desktop.md)。
 

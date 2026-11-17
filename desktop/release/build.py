@@ -122,6 +122,7 @@ def build(version: str, channel: str, notes: str, released_at: str) -> Path:
             "platform": plat,
             "arch": arch,
             "file": name,
+            "size": artifact.stat().st_size,
             "sha256": sha256_of(artifact),
         }],
     }

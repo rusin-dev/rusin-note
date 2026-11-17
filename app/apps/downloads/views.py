@@ -1,9 +1,11 @@
 """桌面客户端下载：/downloads 落地页、安装包下载与客户端更新检查清单。
 
-落地页匿名可读并经页面缓存；安装包用 send_file(conditional=True) 流式发送，
-支持 Range 断点续传，响应带 nosniff 与 Content-Disposition: attachment。
+落地页匿名可读并经页面缓存。安装包有两种来源：本地投放时用
+send_file(conditional=True) 流式发送（支持 Range 断点续传、nosniff 与
+Content-Disposition: attachment）；远程清单（GitHub Releases）模式只返回 302，
+让浏览器直连 CDN/Release 资产，避免安装包流量经过应用服务器。
 """
-from flask import Blueprint, abort, g, jsonify, render_template, request, send_file
+from flask import Blueprint, abort, g, jsonify, redirect, render_template, request, send_file
 
 from app.core import config
 from app.core.extensions import cache, limiter
@@ -29,7 +31,7 @@ def downloads_page():
     manifest = service.read_manifest()
     artifacts = manifest["artifacts"]
     for artifact in artifacts:
-        artifact["size_text"] = format_size(artifact["size"])
+        artifact["size_text"] = format_size(artifact["size"]) if artifact["size"] else ""
     user = get_current_user()
     lang = getattr(g, "lang", "zh")
     return render_template(
@@ -49,6 +51,13 @@ def downloads_file(artifact_id):
     artifact = service.get_artifact(artifact_id)
     if artifact is None:
         _not_found()
+    # 远程清单：只做 302，让浏览器直连 Release/CDN，不让安装包流量过本机
+    remote_url = artifact.get("remote_url")
+    if remote_url:
+        response = redirect(remote_url, code=302)
+        response.headers["Cache-Control"] = "no-store"
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        return response
     path = service.resolve_file(artifact)
     if path is None:
         _not_found()
