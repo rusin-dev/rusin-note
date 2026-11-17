@@ -27,6 +27,7 @@ STRINGS = {
         "nav_stats": "统计",
         "nav_disclaimer": "免责声明",
         "nav_settings": "设置",
+        "nav_admin": "管理站点",
         "nav_notifications": "通知",
         "notifications_title": "站内通知",
         "notifications_empty": "暂无通知",
@@ -805,6 +806,7 @@ STRINGS = {
         "nav_stats": "Stats",
         "nav_disclaimer": "Disclaimer",
         "nav_settings": "Settings",
+        "nav_admin": "Site Admin",
         "nav_notifications": "Notifications",
         "notifications_title": "Notifications",
         "notifications_empty": "No notifications",
@@ -1595,7 +1597,7 @@ def register_i18n(app: Flask) -> None:
     """注册 Jinja2 全局上下文，使模板可直接用 {{ t('key') }} / {{ lang }} / {{ theme_vars }} / {{ current_user }} / {{ site_name }}"""
     from app.core import config as _cfg
     from app.core import debug_panel
-    from app.core.feature_flags import feature_enabled
+    from app.core.feature_flags import feature_enabled, is_admin
     from app.core.theme import THEME_VARS
     from app.core.utils import (
         get_avatar_url, render_code_highlight_head, render_heading_anchors_head,
@@ -1629,6 +1631,7 @@ def register_i18n(app: Flask) -> None:
             "markdown_alerts_head": render_markdown_alerts_head(),
             "get_avatar": get_avatar_url,
             "feature_enabled": feature_enabled,
+            "is_admin": is_admin,
             "debug_panel": dbg,
             "debug_data": debug_panel.snapshot() if dbg else None,
         }

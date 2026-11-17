@@ -33,6 +33,11 @@
         <a {{ nav_attrs('/user/' ~ current_user ~ '/settings', 'side-link')|safe }} href="/user/{{ current_user|e }}/settings" title="{{ t('nav_settings') }}">
             <i class="fa-solid fa-gear" aria-hidden="true"></i><span class="side-text">{{ t('nav_settings') }}</span>
         </a>
+        {% if is_admin(current_user) %}
+        <a {{ nav_attrs('/admin', 'side-link')|safe }} href="/admin/features" title="{{ t('nav_admin') }}">
+            <i class="fa-solid fa-shield-halved" aria-hidden="true"></i><span class="side-text">{{ t('nav_admin') }}</span>
+        </a>
+        {% endif %}
         <form action="/logout" method="POST" class="sidebar-form">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <button type="submit" class="side-link side-logout" title="{{ t('nav_logout') }}">
