@@ -49,6 +49,8 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
+    # Windows 用站点 favicon 作为程序图标（安装包与快捷方式沿用同一图标）
+    icon=str(ROOT / "data" / "app.ico") if sys.platform == "win32" else None,
 )
 coll = COLLECT(
     exe,

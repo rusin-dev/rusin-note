@@ -65,7 +65,7 @@ uv run python release/build.py                        # 构建当前平台
 uv run python release/build.py --merge dist/downloads # 合并各平台清单
 ```
 
-产物在 `dist/downloads/`（安装包 + `manifest.json`）。**Windows 是单个 `.exe`（下载即用，免解压）**，macOS 是内含 `.app` 的 zip，Linux 是 tar.gz；三个平台构建完成后合并清单，随安装包一起挂到 GitHub Release。详见 [桌面客户端文档](../docs/desktop.md)。
+产物在 `dist/downloads/`（安装包 + `manifest.json`）。**Windows 是 Inno Setup 单个安装包 `.exe`（装完自动创建桌面 / 开始菜单快捷方式，可正常卸载）**，macOS 是内含 `.app` 的 zip，Linux 是 tar.gz；三个平台构建完成后合并清单，随安装包一起挂到 GitHub Release。详见 [桌面客户端文档](../docs/desktop.md)。
 
 ## 目录结构
 

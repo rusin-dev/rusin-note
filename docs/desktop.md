@@ -11,10 +11,10 @@
 ### 安装
 
 1. 打开站点的 `/downloads` 页面，按你的系统下载安装包：
-   - **Windows**：单个 `rusin-note-desktop-<版本>-windows-x64.exe`，**下载后直接双击运行**，不需要解压，也不写注册表；
+   - **Windows**：单个 `rusin-note-desktop-<版本>-windows-x64-setup.exe`，**下载后直接双击安装**——装完自动生成**桌面快捷方式**与**开始菜单**项，可在「设置 → 应用」里卸载，不需要解压；
    - **macOS**：`.zip`，解压后把 `rusin-note-desktop.app` 拖到「应用程序」；
    - **Linux**：`.tar.gz`，解压后运行目录里的 `rusin-note-desktop`。
-2. Windows 首次启动需要把内置运行时解到临时目录，约 2–3 秒才出窗口（之后每次启动仍需重新解包，稍慢于免解压版）；如果系统弹出 SmartScreen「Windows 已保护你的电脑」，点「更多信息 → 仍要运行」。
+2. Windows 安装完成后首次启动约 1.5–2 秒出窗口；如果系统弹出 SmartScreen「Windows 已保护你的电脑」（未签名的安装包会触发），点「更多信息 → 仍要运行」。安装目录固定在 `%LOCALAPPDATA%\Programs\rusin-note-desktop`，免管理员。
 3. 首次运行会显示「连接站点」页，填入你的 rusin-note 地址（例如 `https://note.example.com`），点击连接。
 4. 在窗口里正常登录即可。登录态会被保存，下次启动直接进入站点。
 
@@ -22,7 +22,7 @@ Windows 需要 [WebView2 运行时](https://developer.microsoft.com/microsoft-ed
 
 ### Windows：0.1.0 / 0.1.1 解压版启动报 `Failed to resolve Python.Runtime.Loader.Initialize`
 
-> 0.1.2 起 Windows 改为单个 `.exe`，不再解压，不会触发该问题。以下仅针对旧的解压版。
+> 0.1.2 起 Windows 改为 Inno Setup 安装包（桌面/开始菜单快捷方式），安装器自身会全新落盘程序文件，不会继承 ZIP 的下载标记，不会触发该问题。以下仅针对旧的解压版。
 
 症状：双击 `rusin-note-desktop.exe` 弹出「Unhandled exception in script」，日志里是：
 
@@ -93,13 +93,13 @@ uv run python release/build.py       # 构建当前平台
 
 ```plaintext
 dist/downloads/
-├─ rusin-note-desktop-0.1.2-windows-x64.exe       安装包（Windows 单文件，免解压）
-├─ rusin-note-desktop-0.1.2-macos-arm64.zip       安装包（内含 .app）
-├─ rusin-note-desktop-0.1.2-linux-x64.tar.gz      安装包
-└─ manifest-windows-x64.json                      该平台分清单（含 size 与 sha256）
+├─ rusin-note-desktop-0.1.3-windows-x64-setup.exe   安装包（Windows，含桌面/开始菜单快捷方式）
+├─ rusin-note-desktop-0.1.3-macos-arm64.zip         安装包（内含 .app）
+├─ rusin-note-desktop-0.1.3-linux-x64.tar.gz        安装包
+└─ manifest-windows-x64.json                         该平台分清单（含 size 与 sha256）
 ```
 
-Windows 走 PyInstaller 的 onefile 模式（`release/rusin-note-desktop-onefile.spec`），直接产出单个 `.exe`——下载即用，也顺带绕开了「解压后程序集带下载标记导致 pythonnet 加载失败」的问题；macOS / Linux 仍为 onedir + 压缩包（`.app` 与动态库目录不适合单文件）。onefile 每次启动都要解包到临时目录，首次出窗口约 2–3 秒（onedir 约 1.4 秒），这是换取「一个 exe」的代价。
+Windows 走 **Inno Setup**（`release/rusin-note-desktop.iss`）把 PyInstaller onedir 产物打成单个安装包：装完自动创建**桌面**与**开始菜单**快捷方式，并注册卸载项；安装到 `%LOCALAPPDATA%\Programs\rusin-note-desktop`，免管理员、不污染系统目录。CI 在 Windows 节点上 `choco install innosetup` 提供编译器；macOS / Linux 仍为 onedir + 压缩包。onefile（单文件 exe）模式未采用——它没有安装/卸载语义，快捷方式只能靠安装器做，所以 Windows 用 Inno Setup 而不是 PyInstaller onefile。
 
 常用参数：`--version`（默认取 `pyproject.toml`）、`--channel stable|beta`、`--notes "更新说明"`、`--released-at YYYY-MM-DD`。
 
@@ -160,9 +160,9 @@ uv run python release/build.py --merge dist/downloads
 ```plaintext
 <RUSIN_DATA_DIR>/downloads/
 ├─ manifest.json
-├─ rusin-note-desktop-0.1.2-windows-x64.exe
-├─ rusin-note-desktop-0.1.2-macos-arm64.zip
-└─ rusin-note-desktop-0.1.2-linux-x64.tar.gz
+├─ rusin-note-desktop-0.1.3-windows-x64-setup.exe
+├─ rusin-note-desktop-0.1.3-macos-arm64.zip
+└─ rusin-note-desktop-0.1.3-linux-x64.tar.gz
 ```
 
 投放后立即生效（服务层不缓存清单，落地页展示延迟由视图缓存 TTL 决定）。清单缺失时 `/downloads` 显示「暂无安装包」，不会报错。该方式下安装包由应用自身 `send_file` 流式发送，支持 Range，适合 VPS。
@@ -175,7 +175,7 @@ uv run python release/build.py --merge dist/downloads
 
 该仓库的 `.github/workflows/release.yml`：
 
-- 推 `v*` 标签 → 三平台矩阵构建（各平台先跑自己的测试）→ `release` 作业合并清单，把 `manifest.json` 与各平台安装包一起挂到该 Release；
+- 推 `v*` 标签 → 三平台矩阵构建（各平台先跑自己的测试；Windows 节点额外 `choco install innosetup`）→ `release` 作业合并清单，把 `manifest.json` 与各平台安装包一起挂到该 Release；
 - 标签带 `-` 后缀（如 `v0.2.0-beta.1`）自动归入 `beta` 渠道并标记为 pre-release，**不会**成为 `releases/latest`；
 - PR 只跑单元测试，不构建；
 - 手动触发（workflow_dispatch）可填版本/渠道/更新说明，产物保留在 Actions artifact。
