@@ -10,5 +10,5 @@ bleach>=6.0,<6.3
 redis>=5.0,<7.0
 mangum>=0.17,<1.0
 psycopg[binary]>=3.2,<4.0
-Pillow>=11.0,<12.0
+Pillow>=13.0.0,<14.0
 cryptography>=50.0.2,<51
