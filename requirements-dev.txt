@@ -1,2 +1,2 @@
 -r requirements.txt
-pytest>=7.4,<10
+pytest>=9.2.0,<10
