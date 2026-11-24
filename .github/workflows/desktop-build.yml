@@ -37,7 +37,7 @@ jobs:
     outputs:
       desktop: ${{ steps.filter.outputs.desktop }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dorny/paths-filter@v3
         id: filter
         with:
@@ -51,7 +51,7 @@ jobs:
     if: ${{ needs.changes.outputs.desktop == 'true' }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # 编译 pycairo / pygobject 需要系统头文件与 pkg-config
       - name: 安装 Linux 系统依赖
@@ -87,7 +87,7 @@ jobs:
             platform: linux
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # Linux 的 pywebview 走 GTK/WebKit2，PyGObject 需要系统头文件与 GIR
       - name: 安装 Linux 系统依赖
@@ -147,7 +147,7 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # merge 里也要 uv sync，同样需要系统依赖
       - name: 安装 Linux 系统依赖
