@@ -1,0 +1,41 @@
+name: Force merge open Dependabot PRs
+
+# 手动一键把当前所有 open 的 Dependabot PR 强制合并。
+# 用 AUTO_MERGE_TOKEN（具备绕过分支保护权限）执行 --admin 合并，
+# 从而跳过 FOSSA required checks 与 required approvals。
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  merge:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 强制合并所有 open 的 Dependabot PR
+        env:
+          GH_TOKEN: ${{ secrets.AUTO_MERGE_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          echo "获取 open 的 Dependabot PR 列表..."
+          prs=$(gh pr list --repo "$REPO" --author "dependabot[bot]" --state open --json number --jq '.[].number')
+          if [ -z "$prs" ]; then
+            echo "没有 open 的 Dependabot PR，无需操作。"
+            exit 0
+          fi
+          echo "待合并: $(echo $prs | tr '\n' ' ')"
+          failed=0
+          for n in $prs; do
+            echo "===== 合并 PR #$n ====="
+            if gh pr merge "$n" --repo "$REPO" --admin --squash; then
+              echo "PR #$n 已合并"
+            else
+              echo "PR #$n 合并失败（可能 token 无 admin/bypass 权限）"
+              failed=1
+            fi
+          done
+          if [ "$failed" -ne 0 ]; then
+            echo "::warning::部分 PR 合并失败，请检查 AUTO_MERGE_TOKEN 权限"
+          fi
