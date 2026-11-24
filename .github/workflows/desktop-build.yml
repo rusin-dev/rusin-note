@@ -135,7 +135,7 @@ jobs:
           uv run python release/build.py "${args[@]}"
 
       - name: 上传本平台产物
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: downloads-${{ matrix.platform }}
           path: desktop/dist/downloads/
@@ -179,7 +179,7 @@ jobs:
           find dist/downloads -name 'manifest-*.json' -delete
 
       - name: 上传站点下载目录
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: downloads
           path: desktop/dist/downloads/
