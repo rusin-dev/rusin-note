@@ -6,6 +6,8 @@ updates:
   # 主项目（Flask 应用）：根目录 requirements.txt
   - package-ecosystem: "pip"
     directory: "/"
+    # PR 直接提到 dev（主开发分支），避免合并到 main 后被每日定时强推冲掉
+    target-branch: "dev"
     schedule:
       interval: "weekly"
       day: "monday"
@@ -20,6 +22,7 @@ updates:
   # 桌面客户端：desktop/pyproject.toml（uv 管理，锁文件 desktop/uv.lock）
   - package-ecosystem: "pip"
     directory: "/desktop"
+    target-branch: "dev"
     schedule:
       interval: "weekly"
       day: "monday"
@@ -32,6 +35,7 @@ updates:
   # GitHub Actions 工作流版本更新
   - package-ecosystem: "github-actions"
     directory: "/"
+    target-branch: "dev"
     schedule:
       interval: "weekly"
       day: "monday"
