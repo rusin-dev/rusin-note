@@ -12,6 +12,7 @@
     <p align="center">
         <a href="https://github.com/rusin-dev/rusin-note/blob/main/LICENSE"><img src="https://img.shields.io/github/license/rusin-dev/rusin-note" alt="License" /></a>
         <a href="https://github.com/rusin-dev/rusin-note/releases"><img src="https://img.shields.io/github/release/rusin-dev/rusin-note" alt="latest version" /></a>
+<a href="https://app.fossa.com/projects/git%2Bgithub.com%2Frusin-dev%2Frusin-note?ref=badge_shield" alt="FOSSA Status"><img src="https://app.fossa.com/api/projects/git%2Bgithub.com%2Frusin-dev%2Frusin-note.svg?type=shield"/></a>
         <a href="https://github.com/rusin-dev/rusin-note/releases"><img src="https://img.shields.io/github/downloads/rusin-dev/rusin-note/total?color=%239F7AEA&logo=github" alt="Downloads" /></a>
         <a href="https://github.com/rusin-dev/rusin-note/stargazers"><img src="https://img.shields.io/github/stars/rusin-dev/rusin-note" alt="Stars" /></a>
         <a href="https://github.com/rusin-dev/rusin-note/network/members"><img src="https://img.shields.io/github/forks/rusin-dev/rusin-note" alt="Forks" /></a>
@@ -25,6 +26,9 @@
 </div>
 
 ![屏幕截图](https://github.com/rusin-dev/rusin-note/blob/main/app/static/image/screenshots1.png)
+
+
+[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2Frusin-dev%2Frusin-note.svg?type=large)](https://app.fossa.com/projects/git%2Bgithub.com%2Frusin-dev%2Frusin-note?ref=badge_large)
 
 ## 产品特性
 
