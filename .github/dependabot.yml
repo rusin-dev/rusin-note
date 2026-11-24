@@ -1,0 +1,41 @@
+# Dependabot 版本更新配置
+# 参见：https://docs.github.com/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
+version: 2
+
+updates:
+  # 主项目（Flask 应用）：根目录 requirements.txt
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    # 依赖清单（requirements.txt 即 pip 默认清单，无需显式声明）
+    commit-message:
+      prefix: "chore(deps)"
+      prefix-development: "chore(deps-dev)"
+    labels:
+      - "dependencies"
+    # 安全类更新自动开启（Dependabot security updates 单独启用即可）
+
+  # 桌面客户端：desktop/pyproject.toml（uv 管理，锁文件 desktop/uv.lock）
+  - package-ecosystem: "pip"
+    directory: "/desktop"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    commit-message:
+      prefix: "chore(desktop-deps)"
+    labels:
+      - "dependencies"
+      - "desktop"
+
+  # GitHub Actions 工作流版本更新
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    commit-message:
+      prefix: "chore(ci)"
+    labels:
+      - "dependencies"
