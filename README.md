@@ -21,10 +21,11 @@
         <img src="https://github.com/rusin-dev/rusin-note/actions/workflows/auto-merge.yml/badge.svg?branch=main" alt="Auto merge"></a>
         <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/python-3.10%2B-blue?logo=python&logoColor=white" alt="Python version"></a>
         <a href="https://www.repostatus.org/#active"><img src="https://img.shields.io/badge/repo%20status-Active-Green" alt="Project Status: Active – The project has reached a stable, usable state and is being actively developed."></a>
+        <a href="https://app.fossa.com/projects/git%2Bgithub.com%2Frusin-dev%2Frusin-note?ref=badge_small" alt="FOSSA Status"><img src="https://app.fossa.com/api/projects/git%2Bgithub.com%2Frusin-dev%2Frusin-note.svg?type=small"/></a>
     </p>
 </div>
 
-![屏幕截图](https://github.com/rusin-dev/rusin-note/blob/main/app/static/image/screenshots1.png)
+![屏幕截图](https://s.wordpress.com/mshots/v1/https%3A%2F%2Fnote.rusin7.com?w=1280&h=700)
 
 ## 产品特性
 

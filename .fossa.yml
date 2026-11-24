@@ -1,0 +1,24 @@
+# FOSSA 扫描配置
+# 用于 CLI / CI 集成扫描（fossa analyze）。
+# 说明：GitHub App 的仓库扫描不一定读取本文件，但 CI 集成会使用。
+version: 3
+
+# 排除以下未使用/误报的第三方打包静态资源与构建产物，
+# 避免 FOSSA 误把 vendor 里的高亮主题、字体、编辑器打包文件当作项目自身的许可声明。
+paths:
+  exclude:
+    # vditor 编辑器打包产物（含 highlight.js 全部主题、emoji 资源等）
+    - "app/static/vendor/**"
+    # Font Awesome 图标字体（OFL / CC-BY 来源）
+    - "**/vendor/fontawesome/**"
+    # 桌面客户端构建产物（uv 锁文件保留以保证可复现）
+    - "desktop/build/"
+    - "desktop/dist/"
+    - "desktop/release/"
+    - "desktop/out/"
+
+# 扫描目标：仅分析 Python 依赖清单
+targets:
+  only:
+    - type: pip
+      path: ./

@@ -53,3 +53,6 @@ note_titles.json
 note/
 .secret_key
 .aider*
+
+# WorkBuddy 本地工作目录
+.workbuddy/

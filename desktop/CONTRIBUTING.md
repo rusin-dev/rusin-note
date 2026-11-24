@@ -119,4 +119,4 @@ uv run python release/build.py --merge dist/downloads   # 合并为站点投放�
 
 ## 许可证
 
-提交贡献即表示你同意该贡献按仓库 `LICENSE`（GPL-3.0）中的条款发布，且你有权这样授权。请勿提交包含第三方专有代码或凭据（API Key、Token）的内容。
+提交贡献即表示你同意该贡献按仓库 `LICENSE`（MIT）中的条款发布，且你有权这样授权。请勿提交包含第三方专有代码或凭据（API Key、Token）的内容。
