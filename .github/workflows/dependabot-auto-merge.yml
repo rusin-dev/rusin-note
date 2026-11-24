@@ -1,0 +1,37 @@
+name: Dependabot auto-merge
+
+on:
+  pull_request:
+    branches: [ "dev" ]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  auto-merge:
+    # 仅处理 Dependabot 打开的 PR
+    if: ${{ github.actor == 'dependabot[bot]' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: 读取 Dependabot 元数据（依赖级别、更新类型）
+        id: metadata
+        uses: dependabot/fetch-metadata@v2
+        with:
+          github-token: "${{ secrets.GITHUB_TOKEN }}"
+
+      # 统一审批 Dependabot PR（不论级别）
+      - name: 审批 PR
+        run: gh pr review "$PR_URL" --approve
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # 仅对 patch / minor 级更新开启自动合并（squash）
+      # major 级更新只审批、不自动合并，留给人工 review 破坏性变更
+      - name: 开启自动合并（patch / minor）
+        if: ${{ steps.metadata.outputs.update-type == 'version-update:semver-patch' || steps.metadata.outputs.update-type == 'version-update:semver-minor' }}
+        run: gh pr merge "$PR_URL" --auto --squash
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
