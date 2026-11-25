@@ -27,6 +27,12 @@
 
 ![屏幕截图](https://s.wordpress.com/mshots/v1/https%3A%2F%2Fnote.rusin7.com?w=1280&h=700)
 
+<p align="center">
+  <a href="https://keepandroidopen.org">
+    <img src="app/static/image/keep-android-open.svg" alt="Android will become a locked-down platform in 2027">
+  </a>
+</p>
+
 ## 产品特性
 
 - **云端剪贴板与笔记**：基于 Flask 的轻量实现，浏览器即可快速保存 / 访问文本；支持随机短链的公开笔记与登录用户的私有笔记；可为笔记生成带随机 token 的分享链接并支持内容写回，便于跨设备协作。
