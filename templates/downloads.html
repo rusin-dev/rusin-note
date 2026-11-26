@@ -143,6 +143,7 @@
 {% block content %}
 {% set os_icons = {"windows": "fa-windows", "macos": "fa-apple", "linux": "fa-linux"} %}
 {% set os_names = {"windows": t('downloads_platform_windows'), "macos": t('downloads_platform_macos'), "linux": t('downloads_platform_linux')} %}
+{% set os_verify = {"windows": "certutil -hashfile {} SHA256", "macos": "shasum -a 256 {}", "linux": "sha256sum {}"} %}
 
 <header class="dl-hero">
     <span class="dl-badge"><i class="fa-solid fa-desktop" aria-hidden="true"></i>{{ t('downloads_hero_badge') }}</span>
@@ -234,18 +235,12 @@
     <h2>{{ t('downloads_verify_title') }}</h2>
     <p class="dl-sec-sub">{{ t('downloads_verify_desc') }}</p>
     <div class="dl-verify">
+        {% for a in artifacts if a.platform in os_verify %}
         <div class="dl-verify-row">
-            <span class="dl-verify-os">Windows</span>
-            <code class="dl-verify-cmd">certutil -hashfile rusin-note-desktop.exe SHA256</code>
+            <span class="dl-verify-os">{{ os_names[a.platform]|e }}</span>
+            <code class="dl-verify-cmd">{{ (os_verify[a.platform]|format(a.file))|e }}</code>
         </div>
-        <div class="dl-verify-row">
-            <span class="dl-verify-os">macOS</span>
-            <code class="dl-verify-cmd">shasum -a 256 rusin-note-desktop.dmg</code>
-        </div>
-        <div class="dl-verify-row">
-            <span class="dl-verify-os">Linux</span>
-            <code class="dl-verify-cmd">sha256sum rusin-note-desktop.AppImage</code>
-        </div>
+        {% endfor %}
     </div>
 </section>
 {% endif %}
