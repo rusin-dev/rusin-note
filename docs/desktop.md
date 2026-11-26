@@ -124,11 +124,11 @@ uv run python release/build.py --merge dist/downloads
 
    ```json
    "downloads": {
-     "github_repo": "rusin-dev/rusin-note-desktop"
+     "github_repo": "ruying-suixing/rusin-note-desktop"
    }
    ```
 
-   或设置环境变量 `RUSIN_DOWNLOADS_GITHUB_REPO=rusin-dev/rusin-note-desktop`。
+   或设置环境变量 `RUSIN_DOWNLOADS_GITHUB_REPO=ruying-suixing/rusin-note-desktop`。
 
 3. 应用会读取：
 
