@@ -1,5 +1,9 @@
 # Rusin-Note 项目指南
 
+## 重要提示
+
+所有改动用 git 提交时都提交到 dev，**千万**不要提交到 main。
+
 ## 项目简介
 基于 Flask 的轻量级云端剪贴板，支持公开短链笔记、用户私有笔记、分享链接、动态（犇犇）、评论、首页工作台待办、组织/团队协作，以及第三方登录（OAuth）、双因素认证（2FA）与邮箱/手机号验证。可部署在 VPS（sqlite/file 后端）或 Vercel / AWS Lambda 等无服务器平台（upstash / postgres 后端接入外部存储）。另有桌面客户端（独立仓库 `rusin-note-desktop`，WebView 原生壳，数据仍在网页版），安装包发布在该仓库的 GitHub Releases，由本站 `/downloads` 读取清单并 302 分发。
 
