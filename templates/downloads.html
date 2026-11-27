@@ -143,7 +143,7 @@
 {% block content %}
 {% set os_icons = {"windows": "fa-windows", "macos": "fa-apple", "linux": "fa-linux"} %}
 {% set os_names = {"windows": t('downloads_platform_windows'), "macos": t('downloads_platform_macos'), "linux": t('downloads_platform_linux')} %}
-{% set os_verify = {"windows": "certutil -hashfile {} SHA256", "macos": "shasum -a 256 {}", "linux": "sha256sum {}"} %}
+{% set os_verify = {"windows": "certutil -hashfile %s SHA256", "macos": "shasum -a 256 %s", "linux": "sha256sum %s"} %}
 
 <header class="dl-hero">
     <span class="dl-badge"><i class="fa-solid fa-desktop" aria-hidden="true"></i>{{ t('downloads_hero_badge') }}</span>
