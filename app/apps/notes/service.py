@@ -9,6 +9,7 @@ import json
 import os
 import time
 import zipfile
+import zlib
 
 from app.core import config
 from app.core.logger import create_logger
@@ -24,6 +25,19 @@ MANIFEST_NAME = "manifest.json"
 MAX_FILE_BYTES = config.NOTE_TRANSFER_MAX_FILE_BYTES
 MAX_NOTES = config.NOTE_TRANSFER_MAX_NOTES
 MAX_NOTE_BYTES = config.MAX_CONTENT_BYTES
+# ZIP 解压防护：单条目按笔记上限流式读取；整个导入的解压总量与条目数封顶，
+# 压缩比过高的条目直接跳过（防 zip bomb 把 worker 内存打爆）。
+MAX_ZIP_TOTAL_BYTES = MAX_NOTES * MAX_NOTE_BYTES
+MAX_ZIP_ENTRIES = MAX_NOTES * 20 + 100
+MAX_MANIFEST_BYTES = 1024 * 1024
+MAX_COMPRESSION_RATIO = 200
+
+
+def _read_zip_entry(zf: zipfile.ZipFile, name: str, limit: int) -> bytes | None:
+    """最多读取 limit 字节；超过上限返回 None（不把整条解压进内存）。"""
+    with zf.open(name) as fh:
+        data = fh.read(limit + 1)
+    return data if len(data) <= limit else None
 
 
 def _safe_stem(name: str) -> str:
@@ -121,14 +135,23 @@ def _import_from_zip(username: str, raw: bytes) -> dict:
         return result
     with zf:
         names = zf.namelist()
+        if len(names) > MAX_ZIP_ENTRIES:
+            result["error"] = "too_large"
+            return result
         meta_by_id = {}
         if MANIFEST_NAME in names:
             try:
-                manifest = json.loads(zf.read(MANIFEST_NAME).decode("utf-8"))
-                for item in manifest.get("notes", []):
-                    if isinstance(item, dict) and item.get("id"):
-                        meta_by_id[str(item["id"])] = item
-            except (ValueError, KeyError):
+                info = zf.getinfo(MANIFEST_NAME)
+                data = None
+                if info.file_size <= MAX_MANIFEST_BYTES:
+                    data = _read_zip_entry(zf, MANIFEST_NAME, MAX_MANIFEST_BYTES)
+                if data is not None:
+                    manifest = json.loads(data.decode("utf-8"))
+                    for item in manifest.get("notes", []):
+                        if isinstance(item, dict) and item.get("id"):
+                            meta_by_id[str(item["id"])] = item
+            except (ValueError, KeyError, OSError, RuntimeError, EOFError,
+                    zipfile.BadZipFile, zlib.error):
                 pass
 
         md_names = [n for n in names
@@ -136,16 +159,34 @@ def _import_from_zip(username: str, raw: bytes) -> dict:
         if len(md_names) > MAX_NOTES:
             result["error"] = "too_many_notes"
             return result
+        total_bytes = 0
         for name in md_names:
             stem = _safe_stem(name)
             try:
-                content = zf.read(name).decode("utf-8")
-            except (KeyError, UnicodeDecodeError, OSError):
+                info = zf.getinfo(name)
+                # 中央目录声明的解压后大小先行拦截；压缩比异常同样跳过，
+                # 防止小包解压出超大条目（实际读取仍有 _read_zip_entry 兜底）
+                if info.file_size > MAX_NOTE_BYTES:
+                    result["skipped"] += 1
+                    continue
+                if info.file_size > 0 and (
+                        info.compress_size <= 0
+                        or info.file_size / info.compress_size > MAX_COMPRESSION_RATIO):
+                    result["skipped"] += 1
+                    continue
+                data = _read_zip_entry(zf, name, MAX_NOTE_BYTES)
+                if data is None:
+                    result["skipped"] += 1
+                    continue
+                content = data.decode("utf-8")
+            except (KeyError, UnicodeDecodeError, OSError, RuntimeError,
+                    EOFError, zipfile.BadZipFile, zlib.error):
                 result["skipped"] += 1
                 continue
-            if len(content.encode("utf-8")) > MAX_NOTE_BYTES:
-                result["skipped"] += 1
-                continue
+            if total_bytes + len(data) > MAX_ZIP_TOTAL_BYTES:
+                result["error"] = "too_large"
+                return result
+            total_bytes += len(data)
             meta = meta_by_id.get(stem, {})
             nid = _persist_note(username, stem, content,
                                 folder=meta.get("folder", ""), tags=meta.get("tags"))
