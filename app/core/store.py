@@ -93,14 +93,25 @@ def get_user(username: str) -> dict | None:
         return users.get(username)
 
 
+_RESERVATION_TTL = 600  # 改名占位最长保留 10 分钟，进程崩溃后自动失效
+
+
+def _stale_reservation(record) -> bool:
+    return (isinstance(record, dict) and bool(record.get("reserved_by"))
+            and time.time() - float(record.get("reserved_at", 0) or 0) > _RESERVATION_TTL)
+
+
 def register_user(username: str, data: dict) -> bool:
     """跨实例安全注册。False = 用户名已存在或写入失败。"""
     try:
         with users_lock:
             with storage.lock(K_USERS):
                 _read_merge(K_USERS, users)
-                if username in users:
+                existing = users.get(username)
+                if existing is not None and not _stale_reservation(existing):
                     return False
+                if existing is not None:
+                    users.pop(username, None)
                 users[username] = data
                 if _persist(K_USERS, users):
                     return True
@@ -109,6 +120,47 @@ def register_user(username: str, data: dict) -> bool:
                 return False
     except StorageError as e:
         logger.error(f"[错误] 注册用户失败: {e}")
+        return False
+
+
+def reserve_username(username: str, owner: str) -> bool:
+    """改名前原子占位目标用户名，防止复制期间被他人注册抢占。
+
+    占位记录形如 {"reserved_by": owner, "reserved_at": ts}；注册流程看到
+    该用户名已存在会直接拒绝，因此不会出现「复制到一半目标名被注册」。
+    """
+    try:
+        with users_lock:
+            with storage.lock(K_USERS):
+                _read_merge(K_USERS, users)
+                existing = users.get(username)
+                if existing is not None and not _stale_reservation(existing):
+                    return False
+                if existing is not None:
+                    users.pop(username, None)
+                users[username] = {"reserved_by": owner, "reserved_at": time.time()}
+                if _persist(K_USERS, users):
+                    return True
+                users.pop(username, None)
+                return False
+    except StorageError as e:
+        logger.error(f"[错误] 占位用户名 {username} 失败: {e}")
+        return False
+
+
+def release_username_reservation(username: str, owner: str) -> bool:
+    """改名失败时释放占位；只删除本人创建的占位记录。"""
+    try:
+        with users_lock:
+            with storage.lock(K_USERS):
+                _read_merge(K_USERS, users)
+                record = users.get(username)
+                if not isinstance(record, dict) or record.get("reserved_by") != owner:
+                    return True
+                users.pop(username, None)
+                return _persist(K_USERS, users)
+    except StorageError as e:
+        logger.error(f"[错误] 释放用户名占位 {username} 失败: {e}")
         return False
 
 
@@ -1090,7 +1142,12 @@ def rename_user_records(old: str, new: str) -> bool:
         with users_lock:
             with storage.lock(K_USERS):
                 _read_merge(K_USERS, users)
-                if old not in users or new in users:
+                if old not in users:
+                    return False
+                existing = users.get(new)
+                # 正常改名流程会预先占位目标名；非本人的占位/真实账号一律拒绝
+                if new in users and not (isinstance(existing, dict)
+                                         and existing.get("reserved_by") == old):
                     return False
                 users[new] = users.pop(old)
                 ok = _persist(K_USERS, users) and ok
