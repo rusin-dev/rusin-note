@@ -258,8 +258,9 @@ class TestOidcAdmin:
     def test_admin_client_registration(self, ctx, monkeypatch):
         logger.info("=== 管理员注册 OAuth 客户端 ===")
         _enable_oidc(monkeypatch)
-        monkeypatch.setattr(config, "ADMIN_USERS", ["oidc_admin"])
+        # 管理员用户名已禁止公开注册：先注册普通账号，再由配置授予管理员身份
         register_and_login(ctx.client, "oidc_admin")
+        monkeypatch.setattr(config, "ADMIN_USERS", ["oidc_admin"])
         page = ctx.client.get("/admin/oauth-clients")
         html = page.get_data(as_text=True)
         expect(page.status_code == 200 and "OAuth" in html, "管理员可访问客户端管理页")

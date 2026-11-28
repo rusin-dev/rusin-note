@@ -11,6 +11,7 @@ from app.core.auth import (
 )
 from app.core.logger import create_logger
 from app.core.notes import (
+    is_admin_username,
     list_user_notes,
     note_exists,
     read_note,
@@ -152,6 +153,10 @@ def rename_user(old: str, new: str, password: str):
     new = (new or "").strip()
     if new == old:
         return ("err_settings_username_same", {})
+    # 管理员身份绑定配置中的用户名，改名会导致权限丢失且旧名无法再被占用；
+    # 需要换名时请在配置里同步调整 admin_users 后另建账号迁移。
+    if is_admin_username(old):
+        return ("err_settings_admin_rename", {})
     if not validate_username(new):
         return ("err_username_invalid", {})
     if get_user(new) is not None:

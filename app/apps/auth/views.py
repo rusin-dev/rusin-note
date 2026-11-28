@@ -20,7 +20,7 @@ from app.core.extensions import limiter
 from app.core.feature_flags import feature_enabled, require_feature
 from app.core.i18n import LANG_COOKIE, t
 from app.core import login_next
-from app.core.notes import RESERVED_USERNAMES, validate_username
+from app.core.notes import RESERVED_USERNAMES, is_admin_username, validate_username
 from app.core.store import get_user, register_user
 from app.core.middleware import get_session_token
 
@@ -166,7 +166,7 @@ def register_post():
     confirm = request.form.get("confirm", "")
 
     if not validate_username(username):
-        if username.lower() in RESERVED_USERNAMES:
+        if username.lower() in RESERVED_USERNAMES or is_admin_username(username):
             return _fail(t(lang, "err_username_reserved"))
         return _fail(t(lang, "err_username_invalid"))
 

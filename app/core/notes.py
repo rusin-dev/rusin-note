@@ -26,8 +26,18 @@ RESERVED_USERNAMES = {"register", "login", "logout", "count", "disclaimer",
 
 
 # ---------- 校验 ----------
+def is_admin_username(username: str) -> bool:
+    """用户名（大小写不敏感）是否在功能开关管理员列表中。"""
+    lowered = (username or "").lower()
+    return any(isinstance(u, str) and u.lower() == lowered
+               for u in config.ADMIN_USERS)
+
+
 def validate_username(username: str) -> bool:
-    if username.lower() in RESERVED_USERNAMES:
+    if (username or "").lower() in RESERVED_USERNAMES:
+        return False
+    # 管理员用户名禁止公开注册/改名占用，避免抢注后直接获得管理权限
+    if is_admin_username(username):
         return False
     return bool(re.match(r'^[a-zA-Z0-9_\-]+$', username))
 
