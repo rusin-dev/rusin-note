@@ -2,6 +2,7 @@
 import logging
 import os
 import secrets
+import threading
 
 from flask import Flask, render_template
 
@@ -17,25 +18,33 @@ from app.apps.registry import register_blueprints
 logger = logging.getLogger("rusin-note")
 
 
+_secret_key_lock = threading.Lock()
+
+
 def _load_or_create_secret_key() -> str:
     """获取 SECRET_KEY：多实例/多次重启共用同一密钥（否则 CSRF 签名跨实例随机失效）。
 
     优先级：环境变量 RUSIN_SECRET_KEY > 存储后端 secret_key（file 后端即
     旧的 .secret_key 文件，upstash 后端存于外部 KV，多实例共享）> 随机兜底。
+
+    首次生成须在存储锁内重读后写入：多 worker 同时冷启动时，否则每个 worker
+    都会生成自己的密钥并认为写入成功，导致 CSRF/会话签名互不认。
     """
     key = os.environ.get("RUSIN_SECRET_KEY", "").strip()
     if key:
         return key
     if storage.persistent:
-        try:
-            key = storage.get("secret_key")
-            if isinstance(key, str) and key.strip():
-                return key.strip()
-            new_key = secrets.token_hex(32)
-            if storage.set("secret_key", new_key):
-                return new_key
-        except StorageError:
-            pass
+        with _secret_key_lock:
+            try:
+                with storage.lock("secret_key"):
+                    key = storage.get("secret_key")
+                    if isinstance(key, str) and key.strip():
+                        return key.strip()
+                    new_key = secrets.token_hex(32)
+                    if storage.set("secret_key", new_key):
+                        return new_key
+            except StorageError:
+                pass
     # 兜底：无法持久化时退回随机密钥（仅影响重启/多实例一致性）
     return secrets.token_hex(32)
 

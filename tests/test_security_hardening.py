@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+from concurrent.futures import ThreadPoolExecutor
 
 from app.core import config
 from app.core import notes as notes_mod
@@ -28,6 +29,18 @@ class TestIdEntropy:
                "图床 ID 为长随机串 + 扩展名")
         expect(attachment_id.endswith(".pdf") and len(attachment_id) == config.ID_LENGTH + 4,
                "附件 ID 为长随机串 + 扩展名")
+
+
+class TestSecretKeyRace:
+    def test_concurrent_first_init_same_key(self, ctx):
+        logger.info("=== [B0] SECRET_KEY 并发首次初始化一致 ===")
+        from app import _load_or_create_secret_key
+        from app.core.storage import storage
+        storage.set("secret_key", "")
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            keys = list(pool.map(lambda _: _load_or_create_secret_key(), range(8)))
+        expect(len(set(keys)) == 1, "并发初始化只产生一把密钥")
+        expect(storage.get("secret_key") == keys[0], "落盘密钥与进程使用一致")
 
 
 class TestNewNoteCollision:
