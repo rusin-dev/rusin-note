@@ -1,10 +1,12 @@
-"""滑动拼图验证码：纯标准库生成 SVG 拼图（无图像库依赖），行为轨迹校验 + 随机阻尼。
+"""滑动拼图验证码：纯标准库栅格化 PNG（无图像库依赖），行为轨迹校验 + 随机阻尼。
 
 设计要点
 --------
-- 服务端生成背景 SVG（含缺口）与拼图块 SVG（背景在缺口处的裁剪）。缺口横坐标
+- 服务端生成背景 PNG（含缺口）与拼图块 PNG（背景在缺口处的裁剪）。缺口横坐标
   ``target`` 与阻尼曲线随一次性 token 存 KV ``slide_captchas``（TTL 默认 5 分钟，
   与图形验证码同模式：写入时机会式清理过期项，verify 即销毁防重放）。
+- **缺口不进入 DOM**：背景与拼图块都在服务端栅格化后以 data URI 下发，客户端
+  拿不到 ``target`` 或可反解的精确画布坐标，只能靠像素匹配猜位置。
 - **随机阻尼**：滑块位移 d → 拼图位移 piece_x 经一条随机单调曲线映射，局部斜率
   时大时小（"移动 10px 拼图走 20px"或"走 8px"的过滑/阻滞手感）。曲线终点归一到
   travel_max，故 curve(S)=travel_max ≥ target，保证滑块到底之前拼图必能送到缺口。
@@ -13,16 +15,21 @@
 - **行为轨迹**：客户端采集拖动采样 {x,y,t}，服务端分析时长/采样数/速度方差/是否
   瞬移等给出 suspicion 分（0..100，越高越像机器）。**位置对齐即通过**（即使轨迹
   像机器也静默放行，避免打草惊蛇），suspicion 交由 captcha_risk 累计 IP 风险分，
-  风险越高验证越严（容差收紧 + 要求类人轨迹）。
+  风险越高验证越严（容差收紧 + 要求类人轨迹）。轨迹中的非有限数值（NaN/Inf）
+  一律丢弃，避免评分被污染成 0。
 
-所有随机性来自 secrets；SVG 不含可读文本节点，缺口位置以矢量裁剪呈现。
+所有随机性来自 secrets。
 """
 from __future__ import annotations
 
+import base64
+import math
 import re
 import secrets
+import struct
 import threading
 import time
+import zlib
 
 from app.core import config
 from app.core.storage import StorageError, storage
@@ -72,17 +79,6 @@ def _load() -> dict:
 
 
 # ---------- 几何与阻尼曲线 ----------
-
-def _piece_path(pw: float, ph: float, kr: float) -> str:
-    """拼图块本地路径：方形主体 + 顶部圆形凸榫，整体落在 [0,pw]×[0,ph] 内。"""
-    cx = pw / 2.0
-    top = kr
-    return (
-        f"M0 {top:.2f} L{cx - kr:.2f} {top:.2f} "
-        f"C{cx - kr:.2f} 0 {cx + kr:.2f} 0 {cx + kr:.2f} {top:.2f} "
-        f"L{pw:.2f} {top:.2f} L{pw:.2f} {ph:.2f} L0 {ph:.2f} Z"
-    )
-
 
 def make_curve(slider_width: float, travel_max: float,
                damping_min: float, damping_max: float) -> list:
@@ -137,67 +133,201 @@ _PALETTE = [
 
 
 def _scene(width: int, height: int) -> tuple:
-    """生成随机场景：返回 (色1, 色2, 渐变角度, 图形 markup)。
+    """生成随机场景：返回 (色1, 色2, 渐变角度, 圆列表, 线列表)。
 
-    图形不含渐变引用（底色 rect 在 _render 中按各自渐变 id 单独拼），以便 bg 与
-    piece 复用同一组随机图形、却各自携带独立渐变 def（SVG 自包含，不依赖跨元素 id）。
+    背景与拼图块共用同一组场景数据，各自按区域栅格化；缺口坐标只落在像素中，
+    客户端载荷不再包含可解析的画布坐标。
     """
     c1, c2 = secrets.choice(_PALETTE)
     angle = secrets.randbelow(360)
-    shapes = []
+    circles = []
     for _ in range(7 + secrets.randbelow(5)):
-        cx, cy = secrets.randbelow(width), secrets.randbelow(height)
-        r = 8 + secrets.randbelow(34)
-        op = _rand_float(0.06, 0.22)
-        fill = "#ffffff" if secrets.randbelow(2) else "#000000"
-        shapes.append(f'<circle cx="{cx}" cy="{cy}" r="{r}" fill="{fill}" fill-opacity="{op:.2f}"/>')
+        circles.append((
+            secrets.randbelow(width), secrets.randbelow(height),
+            8 + secrets.randbelow(34),
+            "#ffffff" if secrets.randbelow(2) else "#000000",
+            _rand_float(0.06, 0.22),
+        ))
+    lines = []
     for _ in range(3):
-        x1, y1 = secrets.randbelow(width), secrets.randbelow(height)
-        x2, y2 = secrets.randbelow(width), secrets.randbelow(height)
-        shapes.append(
-            f'<path d="M{x1} {y1} L{x2} {y2}" stroke="#ffffff" '
-            f'stroke-opacity="0.12" stroke-width="{2 + secrets.randbelow(4)}"/>')
-    return c1, c2, angle, "".join(shapes)
+        lines.append((
+            secrets.randbelow(width), secrets.randbelow(height),
+            secrets.randbelow(width), secrets.randbelow(height),
+            2 + secrets.randbelow(4),
+        ))
+    return c1, c2, angle, circles, lines
 
 
-def _grad(grad_id: str, c1: str, c2: str, angle: int) -> str:
+def _rgb(hex_color: str) -> tuple[int, int, int]:
+    return (int(hex_color[1:3], 16), int(hex_color[3:5], 16),
+            int(hex_color[5:7], 16))
+
+
+def _blend(buf: bytearray, idx: int, r: int, g: int, b: int, alpha: float) -> None:
+    inv = 1.0 - alpha
+    buf[idx] = int(buf[idx] * inv + r * alpha)
+    buf[idx + 1] = int(buf[idx + 1] * inv + g * alpha)
+    buf[idx + 2] = int(buf[idx + 2] * inv + b * alpha)
+
+
+def _scene_rgb(scene_w: int, scene_h: int, ox: float, oy: float,
+               out_w: int, out_h: int, c1: str, c2: str, angle: int,
+               circles: list, lines: list) -> bytearray:
+    """把场景的 [ox, ox+out_w) × [oy, oy+out_h) 区域栅格化为 RGB 缓冲区。"""
+    r1, g1, b1 = _rgb(c1)
+    r2, g2, b2 = _rgb(c2)
+    rad = math.radians(angle)
+    dx, dy = math.cos(rad), math.sin(rad)
+    buf = bytearray(out_w * out_h * 3)
+    for y in range(out_h):
+        gy = (oy + y + 0.5) / scene_h - 0.5
+        row = y * out_w * 3
+        for x in range(out_w):
+            gx = (ox + x + 0.5) / scene_w - 0.5
+            t = 0.5 + gx * dx + gy * dy
+            t = 0.0 if t < 0 else (1.0 if t > 1 else t)
+            i = row + x * 3
+            buf[i] = int(r1 + (r2 - r1) * t)
+            buf[i + 1] = int(g1 + (g2 - g1) * t)
+            buf[i + 2] = int(b1 + (b2 - b1) * t)
+    for cx, cy, radius, fill, opacity in circles:
+        cr, cg, cb = (255, 255, 255) if fill == "#ffffff" else (0, 0, 0)
+        x0 = max(0, int(cx - radius - ox) - 1)
+        x1 = min(out_w, int(cx + radius - ox) + 2)
+        y0 = max(0, int(cy - radius - oy) - 1)
+        y1 = min(out_h, int(cy + radius - oy) + 2)
+        r2sq = radius * radius
+        for yy in range(y0, y1):
+            py = oy + yy + 0.5
+            dy2 = (py - cy) ** 2
+            row = yy * out_w * 3
+            for xx in range(x0, x1):
+                px = ox + xx + 0.5
+                if (px - cx) ** 2 + dy2 <= r2sq:
+                    _blend(buf, row + xx * 3, cr, cg, cb, opacity)
+    for x1, y1, x2, y2, width in lines:
+        lx, ly = x2 - x1, y2 - y1
+        seg_len2 = lx * lx + ly * ly
+        half = width / 2.0
+        bx0 = max(0, int(min(x1, x2) - ox - half) - 1)
+        bx1 = min(out_w, int(max(x1, x2) - ox + half) + 2)
+        by0 = max(0, int(min(y1, y2) - oy - half) - 1)
+        by1 = min(out_h, int(max(y1, y2) - oy + half) + 2)
+        for yy in range(by0, by1):
+            py = oy + yy + 0.5
+            row = yy * out_w * 3
+            for xx in range(bx0, bx1):
+                px = ox + xx + 0.5
+                if seg_len2 <= 0:
+                    dist2 = (px - x1) ** 2 + (py - y1) ** 2
+                else:
+                    t = ((px - x1) * lx + (py - y1) * ly) / seg_len2
+                    t = 0.0 if t < 0 else (1.0 if t > 1 else t)
+                    qx, qy = x1 + t * lx, y1 + t * ly
+                    dist2 = (px - qx) ** 2 + (py - qy) ** 2
+                if dist2 <= half * half:
+                    _blend(buf, row + xx * 3, 255, 255, 255, 0.12)
+    return buf
+
+
+def _piece_inside(lx: float, ly: float, pw: float, ph: float, kr: float) -> bool:
+    """拼图块本地坐标是否在形状内：方形主体 + 顶部半圆凸榫。"""
+    if 0.0 <= lx <= pw and kr <= ly <= ph:
+        return True
+    if ly <= kr:
+        cx = pw / 2.0
+        return (lx - cx) ** 2 + (ly - kr) ** 2 <= kr * kr
+    return False
+
+
+def _piece_border(lx: float, ly: float, pw: float, ph: float, kr: float) -> bool:
+    for dx, dy in ((-1.2, 0.0), (1.2, 0.0), (0.0, -1.2), (0.0, 1.2)):
+        if not _piece_inside(lx + dx, ly + dy, pw, ph, kr):
+            return True
+    return False
+
+
+def _png(width: int, height: int, data: bytearray, channels: int) -> bytes:
+    """最小 PNG 编码（RGB / RGBA，8 位，无滤波）。"""
+    stride = width * channels
+    raw = bytearray()
+    for y in range(height):
+        raw.append(0)
+        raw.extend(data[y * stride:(y + 1) * stride])
+
+    def chunk(tag: bytes, payload: bytes) -> bytes:
+        return (struct.pack(">I", len(payload)) + tag + payload +
+                struct.pack(">I", zlib.crc32(tag + payload) & 0xFFFFFFFF))
+
+    color_type = 6 if channels == 4 else 2
     return (
-        f'<linearGradient id="{grad_id}" gradientTransform="rotate({angle} 0.5 0.5)">'
-        f'<stop offset="0" stop-color="{c1}"/><stop offset="1" stop-color="{c2}"/>'
-        f'</linearGradient>'
+        b"\x89PNG\r\n\x1a\n"
+        + chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, color_type, 0, 0, 0))
+        + chunk(b"IDAT", zlib.compress(bytes(raw), 6))
+        + chunk(b"IEND", b"")
     )
+
+
+def _data_uri(png: bytes) -> str:
+    return "data:image/png;base64," + base64.b64encode(png).decode("ascii")
 
 
 def _render(target: float, body_top: float, geom: dict) -> dict:
-    """据缺口位置与几何参数渲染背景/拼图 SVG，返回客户端挑战字段。"""
+    """栅格化背景/拼图块并返回客户端字段。
+
+    背景与拼图块均为服务端渲染的 PNG，缺口坐标只存在于像素中，客户端
+    载荷不再包含 ``target`` 或可反解的精确画布坐标。
+    """
     W, H = geom["W"], geom["H"]
     pw, ph, kr = geom["pw"], geom["ph"], geom["kr"]
-    uid = secrets.token_hex(4)
-    c1, c2, angle, shapes = _scene(W, H)
-    gb, gp = f"gb{uid}", f"gp{uid}"
-    rect = f'<rect width="{W}" height="{H}" fill="url(#{gb})"/>'
-    rect_p = f'<rect width="{W}" height="{H}" fill="url(#{gp})"/>'
-    local = _piece_path(pw, ph, kr)
+    c1, c2, angle, circles, lines = _scene(W, H)
     piece_top = body_top - kr
-    bg = (
-        f'<svg xmlns="http://www.w3.org/2000/svg" width="{W}" height="{H}" '
-        f'viewBox="0 0 {W} {H}" role="img" aria-label="puzzle">'
-        f'<defs>{_grad(gb, c1, c2, angle)}</defs>{rect}{shapes}'
-        f'<g transform="translate({target:.2f} {piece_top:.2f})">'
-        f'<path d="{local}" fill="#0b0f0e" fill-opacity="0.5" '
-        f'stroke="#ffffff" stroke-opacity="0.45" stroke-width="1.5"/></g>'
-        f'</svg>'
-    )
-    piece = (
-        f'<svg xmlns="http://www.w3.org/2000/svg" width="{pw}" height="{ph}" '
-        f'viewBox="0 0 {pw} {ph}" role="img" aria-label="piece">'
-        f'<defs>{_grad(gp, c1, c2, angle)}<clipPath id="cp{uid}"><path d="{local}"/></clipPath></defs>'
-        f'<g clip-path="url(#cp{uid})">'
-        f'<g transform="translate({-target:.2f} {-piece_top:.2f})">{rect_p}{shapes}</g></g>'
-        f'<path d="{local}" fill="none" stroke="#ffffff" stroke-opacity="0.75" stroke-width="1.5"/>'
-        f'</svg>'
-    )
-    return {"bg": bg, "piece": piece, "y_top": round(piece_top, 2),
+
+    bg = _scene_rgb(W, H, 0.0, 0.0, W, H, c1, c2, angle, circles, lines)
+    hx0 = max(0, int(math.floor(target)) - 1)
+    hx1 = min(W, int(math.ceil(target + pw)) + 1)
+    hy0 = max(0, int(math.floor(piece_top)) - 1)
+    hy1 = min(H, int(math.ceil(piece_top + ph)) + 1)
+    for yy in range(hy0, hy1):
+        ly = yy + 0.5 - piece_top
+        row = yy * W * 3
+        for xx in range(hx0, hx1):
+            lx = xx + 0.5 - target
+            if not _piece_inside(lx, ly, pw, ph, kr):
+                continue
+            i = row + xx * 3
+            if _piece_border(lx, ly, pw, ph, kr):
+                _blend(bg, i, 255, 255, 255, 0.45)
+            else:
+                _blend(bg, i, 11, 15, 14, 0.5)
+
+    out_w = int(math.ceil(pw))
+    out_h = int(math.ceil(ph))
+    rgb = _scene_rgb(W, H, target, piece_top, out_w, out_h,
+                     c1, c2, angle, circles, lines)
+    piece = bytearray(out_w * out_h * 4)
+    for yy in range(out_h):
+        ly = yy + 0.5
+        row = yy * out_w * 3
+        prow = yy * out_w * 4
+        for xx in range(out_w):
+            lx = xx + 0.5
+            if not _piece_inside(lx, ly, pw, ph, kr):
+                continue
+            j = prow + xx * 4
+            if _piece_border(lx, ly, pw, ph, kr):
+                piece[j], piece[j + 1], piece[j + 2] = 255, 255, 255
+                piece[j + 3] = 191
+            else:
+                i = row + xx * 3
+                piece[j], piece[j + 1], piece[j + 2] = rgb[i], rgb[i + 1], rgb[i + 2]
+                piece[j + 3] = 255
+
+    bg_img = (f'<img src="{_data_uri(_png(W, H, bg, 3))}" '
+              f'width="{W}" height="{H}" alt="">')
+    piece_img = (f'<img src="{_data_uri(_png(out_w, out_h, piece, 4))}" '
+                 f'width="{out_w}" height="{out_h}" alt="">')
+    return {"bg": bg_img, "piece": piece_img, "y_top": round(piece_top, 2),
             "pw": pw, "ph": ph}
 
 
@@ -206,8 +336,8 @@ def _render(target: float, body_top: float, geom: dict) -> dict:
 def generate(ttl: float | None = None) -> tuple[str, dict]:
     """签发一次性滑动挑战，返回 (token, 客户端挑战字段)。
 
-    客户端字段含 bg/piece/y_top/pw/ph/curve/S/tm；缺口 target 仅存服务端。
-    ttl 传负数得到已过期条目（测试用）。
+    客户端字段含 bg/piece（PNG data URI）/y_top/pw/ph/curve/S/tm；
+    缺口 target 仅存服务端。ttl 传负数得到已过期条目（测试用）。
     """
     W = _int_cfg("width", 320, 120)
     H = _int_cfg("height", 160, 80)
@@ -267,6 +397,8 @@ def _normalize_traj(traj) -> list:
             else:
                 continue
         except (KeyError, TypeError, ValueError):
+            continue
+        if not all(math.isfinite(v) for v in (x, y, t)):
             continue
         out.append((x, y, t))
     return out
@@ -356,6 +488,8 @@ def verify(token: str, x, traj, tolerance: float | None = None,
     try:
         d = float(x)
     except (TypeError, ValueError):
+        return False, 100.0, "bad_x"
+    if not math.isfinite(d):
         return False, 100.0, "bad_x"
     if tolerance is None:
         tolerance = _float_cfg("tolerance_px", 6)
