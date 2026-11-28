@@ -58,6 +58,8 @@ DEFAULT_CONFIG = {
     "ip_allowlist": [],                     # 免限流白名单
     "ip_blocklist": [],                     # 直接 403 黑名单
     "secure_cookies": False,                # HTTPS 部署置 True
+    "site_base_url": "",                    # 站点外部基址（OAuth/OIDC/清单绝对 URL）
+    "trusted_hosts": [],                    # Flask Host 白名单；留空不启用
     "global_cdn": "https://cdn.jsdmirror.cn",  # 前端静态资源 CDN 基础地址
     "id_generation": {
         "length": 16,
@@ -408,6 +410,31 @@ IP_BLOCKLIST = list(config.get("ip_blocklist", []) or []) + _env_list("RUSIN_IP_
 
 # 会话 Cookie 的 Secure 标志
 SECURE_COOKIES = bool(config.get("secure_cookies", False))
+# 站点外部基址：OAuth 回调、OIDC issuer、下载清单等安全敏感绝对 URL 一律以此
+# 为准，绝不读 Host 头。未配置时 OAuth/OIDC 直接不可用（避免被伪造 Host 污染）。
+SITE_BASE_URL = (os.environ.get("RUSIN_SITE_URL", "")
+                 or str(config.get("site_base_url", "") or "")).strip().rstrip("/")
+if SITE_BASE_URL and not re.match(r"^https?://[A-Za-z0-9.\-:\[\]]+$", SITE_BASE_URL):
+    SITE_BASE_URL = ""
+# Host 白名单（传给 Flask TRUSTED_HOSTS）；配置 site_base_url 时自动纳入其主机
+_trusted_hosts = config.get("trusted_hosts", [])
+if not isinstance(_trusted_hosts, list):
+    _trusted_hosts = []
+_trusted_hosts = [str(h).strip() for h in _trusted_hosts if str(h).strip()]
+_trusted_hosts += _env_list("RUSIN_TRUSTED_HOSTS")
+if SITE_BASE_URL:
+    _site_host = SITE_BASE_URL.split("://", 1)[1]
+    if _site_host not in _trusted_hosts:
+        _trusted_hosts.append(_site_host)
+TRUSTED_HOSTS = tuple(dict.fromkeys(_trusted_hosts))
+# 外部 URL scheme：仅从显式配置或 site_base_url 推断；都不配时沿用 Flask 默认，
+# 避免改变测试客户端/未配置部署的请求 scheme 行为
+PREFERRED_URL_SCHEME = ""
+if SITE_BASE_URL:
+    PREFERRED_URL_SCHEME = "https" if SITE_BASE_URL.startswith("https://") else "http"
+_scheme_cfg = str(config.get("preferred_url_scheme", "") or "").strip().lower()
+if _scheme_cfg in ("http", "https"):
+    PREFERRED_URL_SCHEME = _scheme_cfg
 # 会话 Cookie Max-Age 默认 30 天
 COOKIE_MAX_AGE_DEFAULT = 30 * 24 * 3600
 # 登录态 Cookie 名须与 Flask session cookie（CSRF token）区分，否则互相覆盖

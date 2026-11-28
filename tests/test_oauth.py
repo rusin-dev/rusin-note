@@ -14,6 +14,8 @@ from __future__ import annotations
 import logging
 import urllib.parse
 
+import pytest
+
 from app.core import config
 from app.core.feature_flags import FEATURE_KEYS, set_flags
 from app.core.store import get_user
@@ -24,6 +26,12 @@ logger = logging.getLogger("rusin.tests.oauth")
 
 PROFILE = {"uid": "123456", "display": "octocat", "email": "octo@example.com",
            "avatar": "https://example.com/a.png"}
+
+
+@pytest.fixture(autouse=True)
+def _pin_site_base(monkeypatch):
+    """OAuth 回调必须由固定站点地址生成，测试里钉到 localhost。"""
+    monkeypatch.setattr(config, "SITE_BASE_URL", "http://localhost")
 
 
 def _enable_all():

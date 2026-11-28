@@ -114,6 +114,11 @@ def create_app() -> Flask:
         GLOBAL_CDN=config.GLOBAL_CDN,
         DEBUG_PANEL=config.DEBUG_PANEL,
     )
+    # 仅当白名单非空时启用 Flask Host 校验（空列表会拒绝所有 Host）
+    if config.TRUSTED_HOSTS:
+        app.config["TRUSTED_HOSTS"] = list(config.TRUSTED_HOSTS)
+    if config.PREFERRED_URL_SCHEME:
+        app.config["PREFERRED_URL_SCHEME"] = config.PREFERRED_URL_SCHEME
 
     if config.DEBUG_PANEL:
         logger.warning("调试面板已开启（RUSIN_DEBUG_PANEL）：页面将暴露验证码与风控敏感信息，仅限本地排障")

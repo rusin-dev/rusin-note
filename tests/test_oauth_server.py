@@ -20,6 +20,7 @@ REDIRECT_URI = "https://client.example/callback"
 def _enable_oidc(monkeypatch):
     set_flags({**{key: True for key in FEATURE_KEYS}, "oauth_server": True})
     monkeypatch.setattr(config, "OAUTH_SERVER_ISSUER", "")
+    monkeypatch.setattr(config, "SITE_BASE_URL", "http://localhost")
 
 
 def _client(monkeypatch, public=False):

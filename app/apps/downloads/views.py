@@ -79,7 +79,8 @@ def downloads_file(artifact_id):
 def downloads_manifest():
     """客户端更新检查：产物 url 给绝对地址，桌面端无需自己拼站点前缀。"""
     manifest = service.read_manifest()
-    root = request.url_root.rstrip("/")
+    # 优先使用配置的站点外部基址；未配置时才退回请求 Host（清单只含下载地址）
+    root = (config.SITE_BASE_URL or request.url_root).rstrip("/")
     response = jsonify({
         "version": manifest["version"],
         "channel": manifest["channel"],
