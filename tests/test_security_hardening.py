@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from concurrent.futures import ThreadPoolExecutor
 
 from app.core import config
@@ -41,6 +42,25 @@ class TestSecretKeyRace:
             keys = list(pool.map(lambda _: _load_or_create_secret_key(), range(8)))
         expect(len(set(keys)) == 1, "并发初始化只产生一把密钥")
         expect(storage.get("secret_key") == keys[0], "落盘密钥与进程使用一致")
+
+
+class TestSessionExpiry:
+    def test_expired_session_rejected_and_purged(self, ctx):
+        logger.info("=== [B1] 默认启用会话超时 ===")
+        from app.core import auth
+        from app.core.store import reload_sessions, store_session
+        expect(config.SESSION_TIMEOUT_ENABLED is True, "默认开启会话超时")
+        old = time.time() - config.SESSION_TIMEOUT_SECONDS - 5
+        token = auth.create_session("sess_user")
+        store_session(auth.hash_token(token),
+                      {"username": "sess_user", "created_at": old})
+        reload_sessions()
+        expect(auth.get_session_user(token) is None, "超时会话被拒绝")
+        token2 = auth.create_session("sess_user2")
+        store_session(auth.hash_token(token2),
+                      {"username": "sess_user2", "created_at": old})
+        reload_sessions()
+        expect(auth.purge_expired_sessions() >= 1, "清理任务删除过期会话")
 
 
 class TestNewNoteCollision:

@@ -48,7 +48,7 @@
     "use_digits": true
   },
   "session_timeout": {
-    "enabled": false,
+    "enabled": true,
     "minutes": 1440
   },
   "note_expiration": {

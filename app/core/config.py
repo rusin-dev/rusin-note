@@ -74,8 +74,8 @@ DEFAULT_CONFIG = {
         "use_digits": True
     },
     "session_timeout": {
-        "enabled": False,
-        "minutes": 60
+        "enabled": True,
+        "minutes": 1440
     },
     "note_expiration": {
         "enabled": False,
@@ -816,6 +816,9 @@ if SECURITY_CODE_LENGTH > 8:
 SECURITY_CODE_TTL = _security_int("code_ttl_seconds", 600)
 SECURITY_CODE_RESEND_COOLDOWN = _security_int("code_resend_cooldown_seconds", 60, 0)
 SECURITY_CODE_MAX_ATTEMPTS = _security_int("code_max_attempts", 5)
+# 2FA 账号级失败锁定：连续失败 N 次后锁定 M 秒（防分布式 IP 爆破 TOTP）
+SECURITY_2FA_MAX_ATTEMPTS = _security_int("twofa_max_attempts", 5)
+SECURITY_2FA_LOCK_SECONDS = _security_int("twofa_lock_seconds", 900)
 SECURITY_CHALLENGE_TTL = _security_int("challenge_ttl_seconds", 600)
 SECURITY_EMAIL_LOGIN = bool(SECURITY_CFG.get("email_login", True))
 SECURITY_PHONE_LOGIN = bool(SECURITY_CFG.get("phone_login", True))

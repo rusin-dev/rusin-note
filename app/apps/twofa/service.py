@@ -6,7 +6,7 @@
 import threading
 import time
 
-from app.core import totp
+from app.core import config, totp
 from app.core.feature_flags import feature_enabled
 from app.core.logger import create_logger
 from app.core.storage import StorageError, storage
@@ -91,6 +91,8 @@ def start_setup(username: str):
             "created_at": time.time(),
             "confirmed_at": None,
             "last_step": 0,
+            "failed_attempts": 0,
+            "locked_until": 0,
         })
         data[username] = base
         return True
@@ -144,10 +146,12 @@ def regenerate_recovery_codes(username: str, code: str) -> list[str] | None:
     """校验当前动态码后重新生成恢复码，返回新明文列表。"""
     record = get_record(username)
     secret = record.get("secret") if isinstance(record, dict) else None
-    if not secret or not record.get("enabled"):
+    if not secret or not record.get("enabled") or _locked(record):
         return None
     if not _verify_totp(username, record, code):
+        _record_failure(username)
         return None
+    _reset_failures(username)
 
     plain = totp.generate_recovery_codes()
     hashes = [totp.hash_recovery_code(c) for c in plain]
@@ -218,14 +222,60 @@ def _consume_recovery_code(username: str, code: str) -> bool:
     return matched["hit"]
 
 
+def _locked(record: dict) -> bool:
+    try:
+        return float(record.get("locked_until") or 0) > time.time()
+    except (TypeError, ValueError):
+        return False
+
+
+def _reset_failures(username: str) -> None:
+    def _mutate(data):
+        rec = data.get(username)
+        if isinstance(rec, dict):
+            rec["failed_attempts"] = 0
+            rec["locked_until"] = 0
+        return True
+
+    _update(_mutate)
+
+
+def _record_failure(username: str) -> None:
+    """累计账号级失败次数，达到阈值后锁定一段时间。"""
+    def _mutate(data):
+        rec = data.get(username)
+        if not isinstance(rec, dict):
+            return False
+        if _locked(rec):
+            return True
+        attempts = int(rec.get("failed_attempts") or 0) + 1
+        rec["failed_attempts"] = attempts
+        if attempts >= config.SECURITY_2FA_MAX_ATTEMPTS:
+            rec["locked_until"] = time.time() + config.SECURITY_2FA_LOCK_SECONDS
+        return True
+
+    _update(_mutate)
+
+
 def verify(username: str, code: str) -> bool:
-    """登录二次校验：先按动态码，再按一次性恢复码。"""
+    """登录二次校验：先按动态码，再按一次性恢复码。
+
+    连续失败达到阈值后账号级锁定，正确验证码在锁定期内也拒绝，避免
+    攻击者轮换 IP 绕过单 IP 限流爆破 6 位 TOTP。
+    """
     record = get_record(username)
     if not isinstance(record, dict) or not record.get("enabled"):
         return False
+    if _locked(record):
+        return False
     if _verify_totp(username, record, code):
+        _reset_failures(username)
         return True
-    return _consume_recovery_code(username, code)
+    if _consume_recovery_code(username, code):
+        _reset_failures(username)
+        return True
+    _record_failure(username)
+    return False
 
 
 # ---------- 用户改名迁移 ----------
