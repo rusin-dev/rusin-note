@@ -56,14 +56,16 @@
 - `secure_cookies`：会话 Cookie 是否附加 `Secure` 标志，当前仓库配置为 `true`。
 
   **安全说明**：仅当通过 HTTPS 访问时置为 `true`，否则浏览器会拒绝在 HTTP 下回传 Cookie。
+- `site_base_url`：站点对外基址（如 `https://note.example.com`）。OAuth 回调、OIDC issuer 与下载清单的绝对 URL 一律以此为准，**不再从请求 Host 头推导**；未配置时第三方登录与 OIDC 端点不可用。也可用环境变量 `RUSIN_SITE_URL` 指定。
+- `trusted_hosts`：Flask `TRUSTED_HOSTS` Host 白名单（如 `["note.example.com"]`），配置后其它 Host 的请求直接 400；配置 `site_base_url` 时会自动加入其主机。也可用环境变量 `RUSIN_TRUSTED_HOSTS`（逗号分隔）。
 
 ## ID / Token 生成
 
-- `id_generation` 随机 url 配置（下列为仓库 `config.json` 的值，配置缺失时代码回退为长度 $6$、大小写与数字全开）。
-   - `length` ：长度，默认 $4$；
+- `id_generation` 随机 url 配置（配置缺失时代码回退为长度 $16$、小写字母与数字）。
+   - `length` ：长度，默认 $16$；
    - `use_uppercase` ：是否使用大写字母，默认 `false`；
    - `use_lowercase` ：是否使用小写字母，默认 `true`；
-   - `use_digits` ：是否使用数字，默认 `false`；
+   - `use_digits` ：是否使用数字，默认 `true`；
 - `share_token` 分享链接 token 配置。
    - `length` ：长度，默认 $64$；
    - `use_uppercase` ：是否使用大写字母，默认 `true`；
@@ -73,10 +75,12 @@
 ## 会话与过期
 
 - `session_timeout` 单次会话时间。
-   - `enabled` ：是否开启，默认 `false`；
+   - `enabled` ：是否开启，默认 `true`；
    - `minutes` ：设定时长，（单位：**分钟**）当前仓库默认 $1440$；
 
     当时间超过设定时，将登出访客账号。
+- `max_concurrent_writes`：单用户同时在途写请求上限（笔记保存、图床/导入等慢 POST），默认 `2`，`0` 表示不限；附件上传/下载另有独立上限。
+- `max_username_length`：用户名最大长度，默认 `32`（用户名同时是存储路径的一段，不能无限长）。
 - `note_expiration` 笔记自动清除（剪贴板超过保存时间自动删除）。
    - `enabled` ：是否开启，默认 `false`；
    - `hours` ：保存时长（单位：**小时**）默认 $24$；
@@ -239,7 +243,7 @@
 
 ## 第三方登录（OAuth）
 
-- `oauth` 第三方登录（OAuth 2.0）。
+- `oauth` 第三方登录（OAuth 2.0）。**须先配置 `site_base_url`**，否则回调地址不稳定，Provider 入口直接 404。
    - `enabled`：总开关，**默认 `false`（关闭全部 OAuth）**。即使功能开关被打开、凭据已配置，此开关为 `false` 时所有第三方登录仍不可用；适合在配置层硬关闭，不受运行时功能开关影响；
    - `auto_register`：第三方账号未绑定时是否自动创建站内用户，默认 `true`（关闭后需先登录再在设置中绑定）；
    - `timeout_seconds`：向各 Provider 发起 HTTP 请求的超时（秒），默认 `10`；
@@ -248,7 +252,7 @@
 ## OAuth / OIDC 授权服务
 
 - `oauth_server` Rusin-Note 作为受限 OIDC Provider（管理员在 `/admin/oauth-clients` 审核注册客户端）。
-   - `issuer`：对外权威 issuer（如 `https://note.example.com`）。生产环境应显式配置，避免反向代理 Host 头影响 discovery/JWT；留空时使用请求站点。
+   - `issuer`：对外权威 issuer（如 `https://note.example.com`）。生产环境应显式配置，避免反向代理 Host 头影响 discovery/JWT；留空时回退到 `site_base_url`，两者都未配置则端点返回 503（不再使用请求 Host）。
    - `authorization_code_ttl_seconds` / `access_token_ttl_seconds` / `id_token_ttl_seconds`：授权码、不透明 access token 与 ID Token 有效期，默认 300 / 3600 / 300 秒。
    - 端点：`/.well-known/openid-configuration`、`/.well-known/jwks.json`、`/oauth/authorize`、`/oauth/token`、`/oauth/userinfo`、`/oauth/revoke`。
    - 仅支持 Authorization Code + 强制 S256 PKCE；不签发 refresh token。Scope 仅有 `openid`、`profile`、`email`，不授予笔记读写。
