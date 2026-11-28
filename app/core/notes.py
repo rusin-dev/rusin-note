@@ -34,7 +34,9 @@ def is_admin_username(username: str) -> bool:
 
 
 def validate_username(username: str) -> bool:
-    if (username or "").lower() in RESERVED_USERNAMES:
+    if not username or len(username) > config.MAX_USERNAME_LENGTH:
+        return False
+    if username.lower() in RESERVED_USERNAMES:
         return False
     # 管理员用户名禁止公开注册/改名占用，避免抢注后直接获得管理权限
     if is_admin_username(username):

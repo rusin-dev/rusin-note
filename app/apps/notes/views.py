@@ -8,6 +8,7 @@ from flask import (
 )
 
 from app.core import config
+from app.core.concurrency import write_guard
 from app.core.extensions import cache, limiter
 from app.core.feature_flags import feature_enabled, require_feature
 from app.core.i18n import t
@@ -178,17 +179,23 @@ def user_import(username):
     if not validate_username(username):
         abort(400)
     require_auth(username)
-    upload = request.files.get("file")
-    if not upload or not upload.filename:
-        result = {"imported": [], "skipped": 0, "error": "no_file"}
-    else:
-        raw = upload.read(config.NOTE_TRANSFER_MAX_FILE_BYTES + 1)
-        result = import_notes(username, upload.filename, raw)
-    purge_page_cache([f"/user/{username}", f"/user/{username}/"], viewers=(username,))
-    base = url_for("notes.user_root", username=username)
-    if result.get("error"):
-        return redirect(f"{base}?import_err={result['error']}")
-    return redirect(f"{base}?imported={len(result['imported'])}&skipped={result['skipped']}")
+    slot = write_guard.try_acquire(username, config.MAX_CONCURRENT_WRITES)
+    if slot is None:
+        abort(429)
+    try:
+        upload = request.files.get("file")
+        if not upload or not upload.filename:
+            result = {"imported": [], "skipped": 0, "error": "no_file"}
+        else:
+            raw = upload.read(config.NOTE_TRANSFER_MAX_FILE_BYTES + 1)
+            result = import_notes(username, upload.filename, raw)
+        purge_page_cache([f"/user/{username}", f"/user/{username}/"], viewers=(username,))
+        base = url_for("notes.user_root", username=username)
+        if result.get("error"):
+            return redirect(f"{base}?import_err={result['error']}")
+        return redirect(f"{base}?imported={len(result['imported'])}&skipped={result['skipped']}")
+    finally:
+        slot.release()
 
 
 @bp.route("/user/<username>/refs", methods=["GET"])
@@ -267,27 +274,34 @@ def user_note_post(username, note_id):
         abort(400)
     check_note_id(note_id)
     require_auth(username)
-    content = request.form.get("content", "")
-    # 单笔记附件配额：内容引用的附件总量不得超过限制
-    if content and feature_enabled("note_attachments") and not note_attachment_quota_ok(username, content):
-        return jsonify({"error": t(getattr(g, "lang", "zh"), "err_attachment_note_quota",
-                                   total=config.MAX_ATTACHMENT_PER_NOTE_KB)}), 400
-    if not write_note(username, note_id, content):
-        abort(500)
-    # 标签/文件夹随内容保存；内容空即删笔记，钩子已清理，只更新仍存在笔记
-    if content:
-        if feature_enabled("note_tags"):
-            set_note_tags(username, note_id, parse_tag_input(request.form.get("tags", "")))
-        if feature_enabled("note_folders"):
-            set_note_folder(username, note_id, parse_folder_input(request.form.get("folder", "")))
-    # 清理所有者私有页、笔记列表页与首页缓存（列表/首页均依赖笔记内容）
-    purge_page_cache(
-        ["/", f"/user/{username}", f"/user/{username}/",
-         f"/user/{username}/{note_id}", f"/user/{username}/{note_id}/",
-         f"/user/{username}/{note_id}.md", f"/user/{username}/{note_id}/md"],
-        viewers=(username,),
-    )
-    return redirect(url_for("notes.user_note_get", username=username, note_id=note_id))
+    # 慢速请求体读取前先占用单用户写槽位（IP 限流挡不住少量长连接）
+    slot = write_guard.try_acquire(username, config.MAX_CONCURRENT_WRITES)
+    if slot is None:
+        abort(429)
+    try:
+        content = request.form.get("content", "")
+        # 单笔记附件配额：内容引用的附件总量不得超过限制
+        if content and feature_enabled("note_attachments") and not note_attachment_quota_ok(username, content):
+            return jsonify({"error": t(getattr(g, "lang", "zh"), "err_attachment_note_quota",
+                                       total=config.MAX_ATTACHMENT_PER_NOTE_KB)}), 400
+        if not write_note(username, note_id, content):
+            abort(500)
+        # 标签/文件夹随内容保存；内容空即删笔记，钩子已清理，只更新仍存在笔记
+        if content:
+            if feature_enabled("note_tags"):
+                set_note_tags(username, note_id, parse_tag_input(request.form.get("tags", "")))
+            if feature_enabled("note_folders"):
+                set_note_folder(username, note_id, parse_folder_input(request.form.get("folder", "")))
+        # 清理所有者私有页、笔记列表页与首页缓存（列表/首页均依赖笔记内容）
+        purge_page_cache(
+            ["/", f"/user/{username}", f"/user/{username}/",
+             f"/user/{username}/{note_id}", f"/user/{username}/{note_id}/",
+             f"/user/{username}/{note_id}.md", f"/user/{username}/{note_id}/md"],
+            viewers=(username,),
+        )
+        return redirect(url_for("notes.user_note_get", username=username, note_id=note_id))
+    finally:
+        slot.release()
 
 
 @bp.route("/user/<username>/<note_id>/delete", methods=["POST"], strict_slashes=False)

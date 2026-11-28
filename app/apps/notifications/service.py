@@ -44,7 +44,9 @@ def add(username: str, kind: str, title: str, body: str = "", url: str = "",
     if not username:
         return None
     safe_url = (url or "")[:500]
-    if safe_url and (not safe_url.startswith("/") or safe_url.startswith("//")):
+    # 仅站内绝对路径；//host 与 /\host 都会被浏览器解析为站外地址
+    if safe_url and (not safe_url.startswith("/")
+                     or safe_url[1:2] in ("/", "\\")):
         safe_url = ""
     item = {
         "id": secrets.token_hex(8),

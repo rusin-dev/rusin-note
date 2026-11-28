@@ -5,11 +5,12 @@ GET 与 POST 拆分为不同函数以分别配置限流（GET 走 GET 限流，P
 from flask import Blueprint, abort, g, redirect, render_template, request, url_for
 
 from app.core import config
+from app.core.concurrency import write_guard
 from app.core.extensions import cache, limiter
 from app.core.i18n import t
 from app.core.feature_flags import require_feature
 from app.core.notes import (
-    generate_random_id,
+    generate_unique_note_id,
     get_note_mtime,
     read_note,
     write_note,
@@ -27,7 +28,7 @@ bp = Blueprint("world", __name__)
 @require_feature("world_notes")
 @limiter.limit(lambda: f"{config.GET_RATE_MAX} per {config.GET_RATE_WINDOW} second")
 def world_new():
-    new_id = generate_random_id()
+    new_id = generate_unique_note_id("public")
     return redirect(url_for("world.world_note_get", note_id=new_id))
 
 
@@ -54,16 +55,24 @@ def world_note_get(note_id):
 @limiter.limit(lambda: f"{config.SAVE_RATE_MAX} per {config.SAVE_RATE_WINDOW} second")
 def world_note_post(note_id):
     check_note_id(note_id)
-    content = request.form.get("content", "")
-    if not write_note("public", note_id, content):
-        abort(500)
-    # 一并清理编辑页与短链 /<id>.md、首页缓存，保持对称
-    purge_page_cache(
-        ["/", f"/world/{note_id}", f"/world/{note_id}.md", f"/world/{note_id}/md",
-         f"/{note_id}.md"],
-        viewers=(None, get_current_user()),
-    )
-    return redirect(url_for("world.world_note_get", note_id=note_id))
+    viewer = get_current_user()
+    slot = write_guard.try_acquire(
+        viewer or f"ip:{getattr(g, 'client_ip', '?')}", config.MAX_CONCURRENT_WRITES)
+    if slot is None:
+        abort(429)
+    try:
+        content = request.form.get("content", "")
+        if not write_note("public", note_id, content):
+            abort(500)
+        # 一并清理编辑页与短链 /<id>.md、首页缓存，保持对称
+        purge_page_cache(
+            ["/", f"/world/{note_id}", f"/world/{note_id}.md", f"/world/{note_id}/md",
+             f"/{note_id}.md"],
+            viewers=(None, viewer),
+        )
+        return redirect(url_for("world.world_note_get", note_id=note_id))
+    finally:
+        slot.release()
 
 
 @bp.route("/world/<note_id>/md", methods=["GET"])

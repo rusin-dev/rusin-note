@@ -9,6 +9,7 @@ from flask import (
 )
 
 from app.core import config
+from app.core.concurrency import write_guard
 from app.core.extensions import limiter
 from app.core.feature_flags import require_feature
 from app.core.i18n import t
@@ -75,21 +76,29 @@ def images_upload(username):
         abort(400)
     require_auth(username)
     lang = getattr(g, "lang", "zh")
-    file = request.files.get("file")
-    data = file.read() if file is not None else b""
-    ext = sniff_image_format(data)
-    if ext is None:
-        return jsonify({"error": t(lang, "err_image_format")}), 400
-    if len(data) > config.MAX_IMAGE_SIZE_BYTES:
-        return jsonify({"error": t(lang, "err_image_too_large",
-                                   max=config.MAX_IMAGE_SIZE_KB)}), 400
-    if user_image_usage(username) + len(data) > config.MAX_IMAGE_TOTAL_BYTES:
-        return jsonify({"error": t(lang, "err_image_quota",
-                                   total=f"{config.MAX_IMAGE_TOTAL_KB} KB")}), 400
-    image_id = generate_image_id(ext)
-    if not write_image(username, image_id, data):
-        return jsonify({"error": t(lang, "err_image_upload")}), 500
-    return jsonify({"url": image_url(username, image_id), "name": image_id})
+    slot = write_guard.try_acquire(username, config.MAX_CONCURRENT_WRITES)
+    if slot is None:
+        resp = jsonify({"error": t(lang, "err_too_many_requests")})
+        resp.headers["Retry-After"] = "1"
+        return resp, 429
+    try:
+        file = request.files.get("file")
+        data = file.read() if file is not None else b""
+        ext = sniff_image_format(data)
+        if ext is None:
+            return jsonify({"error": t(lang, "err_image_format")}), 400
+        if len(data) > config.MAX_IMAGE_SIZE_BYTES:
+            return jsonify({"error": t(lang, "err_image_too_large",
+                                       max=config.MAX_IMAGE_SIZE_KB)}), 400
+        if user_image_usage(username) + len(data) > config.MAX_IMAGE_TOTAL_BYTES:
+            return jsonify({"error": t(lang, "err_image_quota",
+                                       total=f"{config.MAX_IMAGE_TOTAL_KB} KB")}), 400
+        image_id = generate_image_id(ext)
+        if not write_image(username, image_id, data):
+            return jsonify({"error": t(lang, "err_image_upload")}), 500
+        return jsonify({"url": image_url(username, image_id), "name": image_id})
+    finally:
+        slot.release()
 
 
 @bp.route("/user/<username>/images/delete", methods=["POST"])

@@ -34,6 +34,8 @@
   "ip_allowlist": [],
   "ip_blocklist": [],
   "secure_cookies": true,
+  "site_base_url": "",
+  "trusted_hosts": [],
   "global_cdn": "https://cdn.jsdmirror.cn",
   "id_generation": {
     "length": 16,
@@ -260,6 +262,8 @@
   },
   "admin_users": ["sysadmin"],
   "max_note_id_length": 250,
+  "max_username_length": 32,
+  "max_concurrent_writes": 2,
   "max_note_tags": 10,
   "max_tag_length": 24,
   "max_folder_name_length": 64,

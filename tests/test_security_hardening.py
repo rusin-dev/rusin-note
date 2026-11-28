@@ -7,12 +7,16 @@ from concurrent.futures import ThreadPoolExecutor
 
 from app.core import config
 from app.core import notes as notes_mod
-from app.core.notes import generate_random_id, generate_unique_note_id, write_note
+from app.core.notes import (
+    generate_random_id, generate_unique_note_id, validate_username, write_note,
+)
 from app.apps.attachments.service import generate_attachment_id
 from app.apps.images.service import generate_image_id
+from app.core.storage import UpstashBackend
 from app.core.store import get_user
+from app.apps.notifications import service as notifications_service
 from support import (
-    csrf_of, expect, register_and_login, upload_attachment,
+    csrf_of, expect, register, register_and_login, upload_attachment,
 )
 
 logger = logging.getLogger("rusin.tests.hardening")
@@ -82,6 +86,90 @@ class TestResponseHeaders:
         expect(resp.headers.get("X-Content-Type-Options") == "nosniff", "nosniff 已设置")
         expect(resp.headers.get("X-Frame-Options") == "SAMEORIGIN", "防点击劫持头已设置")
         expect("strict-origin" in resp.headers.get("Referrer-Policy", ""), "Referrer-Policy 已设置")
+
+
+class TestLimits:
+    def test_form_memory_matches_body_limit(self, ctx):
+        logger.info("=== [E] 表单内存上限与请求体上限一致 ===")
+        expect(ctx.app.config["MAX_FORM_MEMORY_SIZE"]
+               == ctx.app.config["MAX_CONTENT_LENGTH"], "两个上限同值")
+
+    def test_username_length_bounded(self, ctx):
+        logger.info("=== [F] 用户名长度有上限 ===")
+        expect(not validate_username("a" * 33), "33 字符用户名非法")
+        resp = register(ctx.client, "a" * 33)
+        expect(resp.status_code == 400, "超长用户名注册被拒")
+
+    def test_note_under_limit_can_save(self, ctx):
+        logger.info("=== [G] 接近上限的笔记可保存（不再被 500KB 表单上限拦截） ===")
+        register_and_login(ctx.client, "big_note_user")
+        location = ctx.client.get("/user/big_note_user/new").headers["Location"]
+        content = "A" * (500 * 1024)
+        resp = ctx.client.post(location, data={
+            "content": content,
+            "csrf_token": csrf_of(ctx.client.get(location).get_data(as_text=True)),
+        })
+        expect(resp.status_code == 302, "500KB 笔记保存成功")
+
+
+class TestUpstashGuard:
+    def test_lock_release_only_own_token(self, ctx, monkeypatch):
+        logger.info("=== [H] Upstash 锁只释放自己的 token ===")
+        backend = UpstashBackend("https://example.invalid", "token")
+        calls = []
+
+        def fake_request(method, path, body=None, timeout=10.0):
+            calls.append((method, path))
+            if path.startswith("setnx/"):
+                return 1
+            if path.startswith("get/"):
+                return "someone-else"
+            return 1
+
+        monkeypatch.setattr(backend, "_request", fake_request)
+        with backend.lock("demo"):
+            pass
+        expect(not any(method == "DELETE" for method, _ in calls),
+               "锁已被他人重新获取时不做 DEL")
+
+    def test_list_keys_escapes_glob(self, ctx, monkeypatch):
+        logger.info("=== [I] Upstash KEYS 前缀 glob 转义 ===")
+        backend = UpstashBackend("https://example.invalid", "token")
+        seen = {}
+
+        def fake_request(method, path, body=None, timeout=10.0):
+            seen["path"] = path
+            return []
+
+        monkeypatch.setattr(backend, "_request", fake_request)
+        backend.list_keys("note:a_b*")
+        expect("%5C*" in seen["path"], "星号已转义")
+        expect(seen["path"].endswith("**"), "末尾保留未转义的匹配通配符")
+
+    def test_notification_url_rejects_backslash(self, data_dir):
+        logger.info("=== [J] 通知 URL 拒绝 /\\ 站外跳转 ===")
+        notifications_service.add("notif_user", "system", "t", url="/\\evil.example")
+        items = notifications_service.list_for_user("notif_user")
+        expect(items and items[0]["url"] == "", "反斜杠变体被清空")
+        notifications_service.add("notif_user", "system", "t2", url="/user/ok")
+        items = notifications_service.list_for_user("notif_user")
+        expect(items[0]["url"] == "/user/ok", "正常站内路径保留")
+
+
+class TestWriteGate:
+    def test_note_save_rejects_when_slot_exhausted(self, ctx, monkeypatch):
+        logger.info("=== [K] 单用户并发写闸门 ===")
+        from app.core.concurrency import write_guard
+        register_and_login(ctx.client, "gate_user")
+        location = ctx.client.get("/user/gate_user/new").headers["Location"]
+        csrf = csrf_of(ctx.client.get(location).get_data(as_text=True))
+        monkeypatch.setattr(config, "MAX_CONCURRENT_WRITES", 1)
+        slot = write_guard.try_acquire("gate_user", 1)
+        try:
+            resp = ctx.client.post(location, data={"content": "x", "csrf_token": csrf})
+            expect(resp.status_code == 429, "已有在途写请求时返回 429")
+        finally:
+            slot.release()
 
 
 class TestAttachmentDisposition:

@@ -113,8 +113,10 @@ def create_app() -> Flask:
         SECRET_KEY=secret,
         # 模板改动即时生效：避免服务进程持有旧模板（曾因改模板后未重启看到旧页面）
         TEMPLATES_AUTO_RELOAD=True,
-        # 全局请求体上限：笔记保存、图片上传与附件上传共用，取三者较大值
+        # 全局请求体上限：笔记保存、图片上传与附件上传共用，取三者较大值；
+        # 表单字段内存上限与之对齐，否则 Flask 默认 500KB 会先于应用配置拒绝大笔记
         MAX_CONTENT_LENGTH=max(config.MAX_CONTENT_BYTES, config.MAX_IMAGE_SIZE_BYTES, config.MAX_ATTACHMENT_SIZE_BYTES),
+        MAX_FORM_MEMORY_SIZE=max(config.MAX_CONTENT_BYTES, config.MAX_IMAGE_SIZE_BYTES, config.MAX_ATTACHMENT_SIZE_BYTES),
         SESSION_COOKIE_SECURE=config.SECURE_COOKIES,
         SESSION_COOKIE_HTTPONLY=True,
         SESSION_COOKIE_SAMESITE="Lax",

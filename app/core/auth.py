@@ -16,7 +16,8 @@ from app.core.store import (
 )
 from app.core.logger import create_logger
 
-# PBKDF2-HMAC-SHA256 慢哈希（≥10 万迭代）；旧版单轮 SHA-256 登录后自动升级
+# PBKDF2-HMAC-SHA256 慢哈希（≥10 万迭代）；仅接受该格式，旧版非 PBKDF2 哈希
+# 不再校验（如历史数据确有旧哈希，需重置密码）
 PBKDF2_ITERATIONS = 100000
 PBKDF2_PREFIX = "pbkdf2_sha256"
 

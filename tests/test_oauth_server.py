@@ -8,7 +8,10 @@ import logging
 import re
 import urllib.parse
 
+import pytest
+
 from app.core import config
+from app.core.storage import StorageError
 from app.core.feature_flags import FEATURE_KEYS, set_flags
 from support import csrf_of, expect, login, logout, register_and_login
 
@@ -66,6 +69,12 @@ def _verify_rs256(jwt_value, jwk):
 
 
 class TestOidcService:
+    def test_signing_key_storage_failure_fails_closed(self, data_dir, monkeypatch):
+        from app.apps.oauth_server import service
+        monkeypatch.setattr(service, "_update", lambda *a, **k: None)
+        with pytest.raises(StorageError):
+            service.signing_key_record()
+
     def test_client_secret_is_hashed_and_redirect_exact(self, data_dir):
         from app.apps.oauth_server import oidc, service
         client, secret = service.create_client(

@@ -454,6 +454,10 @@ NOTE_CLEANUP_INTERVAL = 1800
 
 # 笔记 ID 最大长度
 MAX_NOTE_ID_LENGTH = config.get("max_note_id_length", 250)
+# 用户名/组织名最大长度（同时是存储路径的一段，避免超长路径触发 OSError）
+MAX_USERNAME_LENGTH = config.get("max_username_length", 32)
+# 单用户在途写请求上限（笔记保存/图床/附件/导入共用；0 = 不限）
+MAX_CONCURRENT_WRITES = max(0, int(config.get("max_concurrent_writes", 2) or 0))
 
 # 笔记标签限制
 MAX_NOTE_TAGS = config.get("max_note_tags", 10)
