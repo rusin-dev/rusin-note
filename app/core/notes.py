@@ -1,7 +1,7 @@
 """笔记操作、校验、统计、随机 ID 与过期笔记清理（存储后端无关）"""
 import re
+import secrets
 import time
-import random
 from threading import Lock
 
 from app.core import config
@@ -26,8 +26,20 @@ RESERVED_USERNAMES = {"register", "login", "logout", "count", "disclaimer",
 
 
 # ---------- 校验 ----------
+def is_admin_username(username: str) -> bool:
+    """用户名（大小写不敏感）是否在功能开关管理员列表中。"""
+    lowered = (username or "").lower()
+    return any(isinstance(u, str) and u.lower() == lowered
+               for u in config.ADMIN_USERS)
+
+
 def validate_username(username: str) -> bool:
+    if not username or len(username) > config.MAX_USERNAME_LENGTH:
+        return False
     if username.lower() in RESERVED_USERNAMES:
+        return False
+    # 管理员用户名禁止公开注册/改名占用，避免抢注后直接获得管理权限
+    if is_admin_username(username):
         return False
     return bool(re.match(r'^[a-zA-Z0-9_\-]+$', username))
 
@@ -220,8 +232,16 @@ def get_stats():
 # ---------- 随机ID生成 ----------
 def generate_random_id() -> str:
     while True:
-        rid = ''.join(random.choices(config.ID_CHARSET, k=config.ID_LENGTH))
+        rid = ''.join(secrets.choice(config.ID_CHARSET) for _ in range(config.ID_LENGTH))
         if rid not in FORBIDDEN_NOTE_IDS:
+            return rid
+
+
+def generate_unique_note_id(username: str) -> str:
+    """生成该用户命名空间下未被占用的笔记 ID（/new 用，防覆盖既有笔记）。"""
+    while True:
+        rid = generate_random_id()
+        if not note_exists(username, rid):
             return rid
 
 

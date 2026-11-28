@@ -25,6 +25,7 @@ import base64
 import json
 import os
 import re
+import secrets
 import threading
 import time
 import urllib.error
@@ -857,7 +858,9 @@ class UpstashBackend(StorageBackend):
         return result == 1
 
     def list_keys(self, prefix: str) -> list:
-        pattern = urllib.parse.quote(self._key(prefix) + "*", safe="*")
+        # Redis KEYS 的 glob 元字符必须转义，否则前缀里的 _ / * 会跨命名空间匹配
+        escaped = "".join("\\" + c if c in "\\*?[]" else c for c in self._key(prefix))
+        pattern = urllib.parse.quote(escaped + "*", safe="*")
         result = self._request("GET", f"keys/{pattern}")
         if not isinstance(result, list):
             return []
@@ -909,12 +912,13 @@ class UpstashBackend(StorageBackend):
     @contextmanager
     def lock(self, name: str):
         key = f"lock:{name}"
+        token = secrets.token_hex(16)
         deadline = time.time() + self._LOCK_WAIT
         while True:
             try:
                 acquired = self._request(
                     "POST", f"setnx/{urllib.parse.quote(self._key(key), safe='')}",
-                    {"value": "1", "ex": self._LOCK_TTL},
+                    {"value": token, "ex": self._LOCK_TTL},
                 )
             except StorageError:
                 acquired = None
@@ -927,7 +931,13 @@ class UpstashBackend(StorageBackend):
             yield
         finally:
             try:
-                self._request("DELETE", f"del/{urllib.parse.quote(self._key(key), safe='')}")
+                # 只释放自己的锁：持锁超过 TTL 后锁可能已被他人重新获取，
+                # 无条件 DEL 会误删新持有者的锁
+                current = self._request(
+                    "GET", f"get/{urllib.parse.quote(self._key(key), safe='')}")
+                if current == token:
+                    self._request(
+                        "DELETE", f"del/{urllib.parse.quote(self._key(key), safe='')}")
             except StorageError:
                 pass
 
@@ -1057,8 +1067,12 @@ class PostgresBackend(StorageBackend):
         return bool(self._execute("DELETE FROM storage_kv WHERE key = %s", (key,)))
 
     def list_keys(self, prefix: str) -> list:
+        # LIKE 的 % / _ 必须转义，否则前缀含通配符时会枚举/误删其它命名空间
+        escaped = (prefix.replace("\\", "\\\\")
+                   .replace("%", "\\%").replace("_", "\\_"))
         rows = self._execute(
-            "SELECT key FROM storage_kv WHERE key LIKE %s", (prefix + "%",), fetch="all")
+            "SELECT key FROM storage_kv WHERE key LIKE %s ESCAPE '\\'",
+            (escaped + "%",), fetch="all")
         return [r[0] for r in rows]
 
     # ---------- 笔记：storage_notes 表 ----------

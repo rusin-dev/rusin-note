@@ -251,6 +251,7 @@ STRINGS = {
         "err_settings_password_wrong": "当前密码错误",
         "err_settings_username_same": "新用户名与当前用户名相同",
         "err_settings_rename_failed": "数据迁移失败，请稍后重试（原有数据未被删除）",
+        "err_settings_admin_rename": "管理员用户名不可修改（权限绑定配置中的用户名）",
         "err_settings_save_failed": "保存失败，请稍后重试",
         # 登录
         "login_title": "登录",
@@ -1032,6 +1033,7 @@ STRINGS = {
         "err_settings_password_wrong": "Current password is incorrect",
         "err_settings_username_same": "New username is the same as the current one",
         "err_settings_rename_failed": "Data migration failed, please try again later (existing data was not deleted)",
+        "err_settings_admin_rename": "Admin usernames cannot be changed (privileges are bound to the configured name)",
         "err_settings_save_failed": "Failed to save, please try again later",
         # Login
         "login_title": "Log In",

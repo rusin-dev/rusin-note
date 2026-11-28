@@ -4,8 +4,8 @@ attachment_id 形如 <随机串>.<扩展名>；读写走 storage 附件专用 AP
 附件不可变、无跨实例读改写，无需存储锁。
 """
 import os
-import random
 import re
+import secrets
 
 from app.core import config
 from app.core.concurrency import ConcurrencyLimiter, Slot
@@ -61,7 +61,7 @@ def generate_attachment_id(filename: str) -> str:
     # 确保扩展名以点开头
     if not ext.startswith("."):
         ext = f".{ext}"
-    rid = ''.join(random.choices(config.ID_CHARSET, k=config.ID_LENGTH))
+    rid = ''.join(secrets.choice(config.ID_CHARSET) for _ in range(config.ID_LENGTH))
     return f"{rid}{ext}"
 
 

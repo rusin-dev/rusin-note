@@ -91,8 +91,10 @@ class TestCommentTargets:
                "不存在的笔记评论页 -> 404")
         register(ctx.client, owner)
         note_id = create_note(ctx.client, owner, "私有笔记")
-        expect(ctx.anon.get(f"/comments/note/{owner}/{note_id}").status_code == 200,
-               "已存在笔记的评论页仍可访问")
+        expect(ctx.anon.get(f"/comments/note/{owner}/{note_id}").status_code == 404,
+               "私密笔记评论页不对匿名开放（防存在性探测）")
+        expect(ctx.client.get(f"/comments/note/{owner}/{note_id}").status_code == 200,
+               "笔记本人可访问自己的评论页")
         expect(ctx.anon.get(f"/comments/note/{owner}/{note_id}x").status_code == 404,
                "同用户的不存在笔记不再开板")
         expect(ctx.anon.post(f"/comments/note/{owner}/{note_id}x", data={

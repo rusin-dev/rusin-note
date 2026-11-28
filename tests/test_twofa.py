@@ -13,7 +13,7 @@ import logging
 import re
 import time
 
-from app.core import totp
+from app.core import config, totp
 from app.core.feature_flags import FEATURE_KEYS, set_flags
 from app.apps.twofa import service
 from support import expect, login, logout, register, register_and_login
@@ -113,6 +113,22 @@ class TestTwoFA:
         page = ctx.client.get("/login/2fa").get_data(as_text=True)
         resp = ctx.client.post("/login/2fa", data={"code": codes[0], "csrf_token": _csrf(page)})
         expect(resp.status_code == 302 and resp.headers["Location"] == "/", "恢复码登录成功")
+
+
+class TestTwoFALockout:
+    def test_account_lockout_after_failures(self, data_dir):
+        logger.info("=== [D0] 连续失败触发账号级锁定 ===")
+        _enable()
+        user = "twofa_lock"
+        secret, _ = service.start_setup(user)
+        expect(service.confirm_setup(user, totp.generate_code(secret)) is not None,
+               "2FA 已启用")
+        for _ in range(config.SECURITY_2FA_MAX_ATTEMPTS):
+            expect(service.verify(user, "000000") is False, "错误动态码被拒")
+        record = service.get_record(user) or {}
+        expect(record.get("locked_until", 0) > time.time(), "达到阈值后锁定")
+        good = totp.generate_code(secret, at=time.time() + 30)
+        expect(service.verify(user, good) is False, "锁定期内正确动态码也被拒")
 
 
 class TestTwoFADisabled:

@@ -217,8 +217,11 @@ def signing_key_record() -> dict:
         result["record"] = record
         return True
 
-    _update(K_SIGNING_KEY, _mutate)
-    return result["record"] or oidc.generate_signing_key()
+    # 写盘失败必须失败关闭：临时密钥会让 JWKS 与已签发 ID Token 不一致，
+    # 重启后全部失效，且客户端可能缓存错误公钥
+    if _update(K_SIGNING_KEY, _mutate) is None or not isinstance(result["record"], dict):
+        raise StorageError("无法持久化 OIDC 签名密钥")
+    return result["record"]
 
 
 def signing_public_jwk() -> dict:

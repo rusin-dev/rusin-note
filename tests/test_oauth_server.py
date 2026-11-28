@@ -8,7 +8,10 @@ import logging
 import re
 import urllib.parse
 
+import pytest
+
 from app.core import config
+from app.core.storage import StorageError
 from app.core.feature_flags import FEATURE_KEYS, set_flags
 from support import csrf_of, expect, login, logout, register_and_login
 
@@ -20,6 +23,7 @@ REDIRECT_URI = "https://client.example/callback"
 def _enable_oidc(monkeypatch):
     set_flags({**{key: True for key in FEATURE_KEYS}, "oauth_server": True})
     monkeypatch.setattr(config, "OAUTH_SERVER_ISSUER", "")
+    monkeypatch.setattr(config, "SITE_BASE_URL", "http://localhost")
 
 
 def _client(monkeypatch, public=False):
@@ -65,6 +69,12 @@ def _verify_rs256(jwt_value, jwk):
 
 
 class TestOidcService:
+    def test_signing_key_storage_failure_fails_closed(self, data_dir, monkeypatch):
+        from app.apps.oauth_server import service
+        monkeypatch.setattr(service, "_update", lambda *a, **k: None)
+        with pytest.raises(StorageError):
+            service.signing_key_record()
+
     def test_client_secret_is_hashed_and_redirect_exact(self, data_dir):
         from app.apps.oauth_server import oidc, service
         client, secret = service.create_client(
@@ -258,8 +268,9 @@ class TestOidcAdmin:
     def test_admin_client_registration(self, ctx, monkeypatch):
         logger.info("=== 管理员注册 OAuth 客户端 ===")
         _enable_oidc(monkeypatch)
-        monkeypatch.setattr(config, "ADMIN_USERS", ["oidc_admin"])
+        # 管理员用户名已禁止公开注册：先注册普通账号，再由配置授予管理员身份
         register_and_login(ctx.client, "oidc_admin")
+        monkeypatch.setattr(config, "ADMIN_USERS", ["oidc_admin"])
         page = ctx.client.get("/admin/oauth-clients")
         html = page.get_data(as_text=True)
         expect(page.status_code == 200 and "OAuth" in html, "管理员可访问客户端管理页")

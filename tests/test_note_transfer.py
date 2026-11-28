@@ -147,6 +147,19 @@ class TestImport:
         finally:
             transfer.MAX_FILE_BYTES = saved
 
+    def test_zip_bomb_entry_skipped(self, ctx):
+        logger.info("=== [H2] ZIP 炸弹条目按上限跳过 ===")
+        bomb = io.BytesIO()
+        with zipfile.ZipFile(bomb, "w", zipfile.ZIP_DEFLATED) as zf:
+            zf.writestr("bomb.md", "A" * (transfer.MAX_NOTE_BYTES + 1024))
+        raw = bomb.getvalue()
+        resp = _import(ctx.client, CAROL, "bomb.zip", raw)
+        q = _query(resp)
+        expect(q.get("imported") == ["0"] and q.get("skipped") == ["1"],
+               f"超限条目直接跳过: {q}")
+        expect("import_err" not in q, "炸弹条目按跳过处理而非 500")
+        expect(len(raw) < transfer.MAX_NOTE_BYTES, "压缩包远小于解压后体积")
+
     def test_feature_flag_gating(self, ctx):
         logger.info("=== [I] 功能开关 notes_import_export ===")
         set_flags({k: (k != "notes_import_export") for k in FEATURE_KEYS})

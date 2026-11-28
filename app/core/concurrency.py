@@ -151,6 +151,10 @@ class ConcurrencyLimiter:
         return f"<ConcurrencyLimiter {self.name} active={self.total_active()}>"
 
 
+# 通用写请求闸门：笔记保存、图床/附件上传、导入等慢 POST 共用
+write_guard = ConcurrencyLimiter("writes")
+
+
 def reset_all() -> None:
     """重置所有闸门（测试隔离用）。"""
     for instance in _INSTANCES:

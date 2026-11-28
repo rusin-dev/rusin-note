@@ -62,14 +62,16 @@ This document lists every `config.json` setting and environment variable, its me
 - `secure_cookies`: Whether to add the `Secure` flag to the session cookie. The repository configuration currently sets it to `true`; disable it for plain HTTP local/VPS use.
 
     **Security note**: Only set to `true` when the site is served over HTTPS; otherwise browsers will refuse to send the cookie over HTTP.
+- `site_base_url`: Canonical public base URL (for example `https://note.example.com`). OAuth callbacks, the OIDC issuer and download-manifest URLs are built from this value and **never** from the request Host header; when empty, third-party login and OIDC endpoints are unavailable. Can also be set with `RUSIN_SITE_URL`.
+- `trusted_hosts`: Flask `TRUSTED_HOSTS` allowlist (for example `["note.example.com"]`); requests with any other Host are rejected with 400. The host of `site_base_url` is added automatically. Can also be set with `RUSIN_TRUSTED_HOSTS` (comma separated).
 
 ## ID and token generation
 
-- `id_generation`: Random URL generation configuration (values below are what `config.json` ships; when the key is missing the code falls back to length `6` with letters and digits all enabled).
-    - `length`: URL length, default `4`.
+- `id_generation`: Random URL generation configuration (when the key is missing the code falls back to length `16`, lowercase letters and digits).
+    - `length`: URL length, default `16`.
     - `use_uppercase`: Use uppercase letters, default `false`.
     - `use_lowercase`: Use lowercase letters, default `true`.
-    - `use_digits`: Use digits, default `false`.
+    - `use_digits`: Use digits, default `true`.
 
 - `share_token`: Share link token configuration.
     - `length`: Token length, default `64`.
@@ -80,10 +82,12 @@ This document lists every `config.json` setting and environment variable, its me
 ## Session and expiration
 
 - `session_timeout`: Session timeout configuration.
-    - `enabled`: Enable session timeout, default `false`.
+    - `enabled`: Enable session timeout, default `true`.
     - `minutes`: Timeout duration (in **minutes**), currently `1440` in `config.json`.
 
     Visitors will be logged out when the session exceeds the configured time.
+- `max_concurrent_writes`: Per-user in-flight write limit (note saves, image uploads, imports), default `2`; `0` disables. Attachment uploads/downloads have their own limits.
+- `max_username_length`: Maximum username length, default `32` (usernames are also storage path segments).
 - `note_expiration`: Note auto-cleanup (notes/clipboards are deleted after their save duration expires).
     - `enabled`: Enable auto-cleanup, default `false`.
     - `hours`: Save duration (in **hours**), default $24$.
@@ -242,7 +246,7 @@ This document lists every `config.json` setting and environment variable, its me
 ## OAuth / OIDC provider
 
 - `oauth_server`: exposes Rusin-Note as a restricted OIDC provider. Administrators register reviewed clients at `/admin/oauth-clients`.
-   - `issuer`: canonical public issuer such as `https://note.example.com`. Set it explicitly in production so proxy Host headers cannot alter discovery or token issuer; when empty, the request origin is used.
+   - `issuer`: canonical public issuer such as `https://note.example.com`. Set it explicitly in production so proxy Host headers cannot alter discovery or token issuer; when empty it falls back to `site_base_url`, and if both are empty the endpoints return 503 (the request Host is never used).
    - `authorization_code_ttl_seconds` / `access_token_ttl_seconds` / `id_token_ttl_seconds`: authorization-code, opaque access-token and ID-token lifetimes; defaults `300` / `3600` / `300`.
    - Endpoints: `/.well-known/openid-configuration`, `/.well-known/jwks.json`, `/oauth/authorize`, `/oauth/token`, `/oauth/userinfo`, `/oauth/revoke`.
    - Authorization Code with mandatory S256 PKCE only; no refresh tokens. Supported scopes are `openid`, `profile`, `email`; notes APIs are not exposed.

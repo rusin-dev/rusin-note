@@ -11,6 +11,7 @@ from app.core.auth import (
 )
 from app.core.logger import create_logger
 from app.core.notes import (
+    is_admin_username,
     list_user_notes,
     note_exists,
     read_note,
@@ -20,7 +21,9 @@ from app.core.notes import (
 from app.core.store import (
     delete_sessions_if,
     get_user,
+    release_username_reservation,
     rename_user_records,
+    reserve_username,
     update_user,
 )
 from app.core.tags import rename_user_note_tags
@@ -152,10 +155,12 @@ def rename_user(old: str, new: str, password: str):
     new = (new or "").strip()
     if new == old:
         return ("err_settings_username_same", {})
+    # 管理员身份绑定配置中的用户名，改名会导致权限丢失且旧名无法再被占用；
+    # 需要换名时请在配置里同步调整 admin_users 后另建账号迁移。
+    if is_admin_username(old):
+        return ("err_settings_admin_rename", {})
     if not validate_username(new):
         return ("err_username_invalid", {})
-    if get_user(new) is not None:
-        return ("err_username_taken", {})
 
     user = get_user(old)
     salt = user.get("salt") if isinstance(user, dict) else None
@@ -166,46 +171,55 @@ def rename_user(old: str, new: str, password: str):
     if has_password and not verify_password(password, salt, hashed):
         return ("err_settings_password_wrong", {})
 
-    # 1) 笔记与二进制资源：先复制到新命名空间（失败则旧数据不动）
-    if not _copy_notes(old, new):
-        logger.error(f"[错误] 迁移笔记失败: {old} -> {new}")
-        return ("err_settings_rename_failed", {})
-    if not _migrate_images(old, new):
-        logger.error(f"[错误] 迁移图床失败: {old} -> {new}")
-        return ("err_settings_rename_failed", {})
-    if not _migrate_attachments(old, new):
-        logger.error(f"[错误] 迁移附件失败: {old} -> {new}")
-        return ("err_settings_rename_failed", {})
+    # 0) 原子占位目标用户名：复制/迁移期间他人无法注册该名字，消除 TOCTOU
+    if not reserve_username(new, old):
+        return ("err_username_taken", {})
+    committed = False
+    try:
+        # 1) 笔记与二进制资源：先复制到新命名空间（失败则旧数据不动）
+        if not _copy_notes(old, new):
+            logger.error(f"[错误] 迁移笔记失败: {old} -> {new}")
+            return ("err_settings_rename_failed", {})
+        if not _migrate_images(old, new):
+            logger.error(f"[错误] 迁移图床失败: {old} -> {new}")
+            return ("err_settings_rename_failed", {})
+        if not _migrate_attachments(old, new):
+            logger.error(f"[错误] 迁移附件失败: {old} -> {new}")
+            return ("err_settings_rename_failed", {})
 
-    # 2) 用户名为键/字段的 KV；标签/文件夹/置顶须在删旧笔记前迁移（删除钩子按旧名清理）
-    if not rename_user_note_tags(old, new):
-        return ("err_settings_rename_failed", {})
-    if not rename_user_note_folders(old, new):
-        return ("err_settings_rename_failed", {})
-    if not rename_user_note_pins(old, new):
-        return ("err_settings_rename_failed", {})
-    if not rename_user_todos(old, new):
-        return ("err_settings_rename_failed", {})
-    # 账号安全数据：双因素、邮箱/手机绑定与验证码、第三方登录绑定
-    if not rename_user_two_factor(old, new):
-        return ("err_settings_rename_failed", {})
-    if not rename_user_contacts(old, new):
-        return ("err_settings_rename_failed", {})
-    if not rename_user_oauth(old, new):
-        return ("err_settings_rename_failed", {})
-    if not rename_user_gitee(old, new):
-        return ("err_settings_rename_failed", {})
-    if not rename_user_notifications(old, new):
-        return ("err_settings_rename_failed", {})
-    if not rename_user_oauth_server(old, new):
-        return ("err_settings_rename_failed", {})
+        # 2) 用户名为键/字段的 KV；标签/文件夹/置顶须在删旧笔记前迁移（删除钩子按旧名清理）
+        if not rename_user_note_tags(old, new):
+            return ("err_settings_rename_failed", {})
+        if not rename_user_note_folders(old, new):
+            return ("err_settings_rename_failed", {})
+        if not rename_user_note_pins(old, new):
+            return ("err_settings_rename_failed", {})
+        if not rename_user_todos(old, new):
+            return ("err_settings_rename_failed", {})
+        # 账号安全数据：双因素、邮箱/手机绑定与验证码、第三方登录绑定
+        if not rename_user_two_factor(old, new):
+            return ("err_settings_rename_failed", {})
+        if not rename_user_contacts(old, new):
+            return ("err_settings_rename_failed", {})
+        if not rename_user_oauth(old, new):
+            return ("err_settings_rename_failed", {})
+        if not rename_user_gitee(old, new):
+            return ("err_settings_rename_failed", {})
+        if not rename_user_notifications(old, new):
+            return ("err_settings_rename_failed", {})
+        if not rename_user_oauth_server(old, new):
+            return ("err_settings_rename_failed", {})
 
-    # 3) 清理旧命名空间笔记（此时删除钩子已无旧标签/文件夹/置顶可清）
-    _delete_notes(old)
+        # 3) 移动 users 记录（消费占位）与其余子系统的用户标识；失败时旧笔记仍在
+        if not rename_user_records(old, new):
+            return ("err_settings_rename_failed", {})
+        committed = True
 
-    # 4) 最后移动 users 记录本身与其余子系统的用户标识
-    if not rename_user_records(old, new):
-        return ("err_settings_rename_failed", {})
+        # 4) 身份已切换后再清理旧命名空间笔记（删除钩子已无旧元数据可清）
+        _delete_notes(old)
+    finally:
+        if not committed:
+            release_username_reservation(new, old)
 
     logger.info(f"[设置] 用户改名成功: {old} -> {new}")
     return None

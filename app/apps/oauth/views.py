@@ -37,10 +37,15 @@ def _guard_provider(provider: str) -> None:
         abort(404)
     if not service.is_configured(provider):
         abort(404)
+    # 未固定站点外部地址时禁用 OAuth：否则回调地址由 Host 头推导，可被伪造
+    if not config.SITE_BASE_URL:
+        abort(404)
 
 
 def _redirect_uri(provider: str) -> str:
-    return url_for("oauth.callback", provider=provider, _external=True)
+    if not config.SITE_BASE_URL:
+        abort(404)
+    return config.SITE_BASE_URL + url_for("oauth.callback", provider=provider)
 
 
 def _login_error(key: str):

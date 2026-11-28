@@ -2,6 +2,7 @@
 import logging
 import os
 import secrets
+import threading
 
 from flask import Flask, render_template
 
@@ -17,25 +18,33 @@ from app.apps.registry import register_blueprints
 logger = logging.getLogger("rusin-note")
 
 
+_secret_key_lock = threading.Lock()
+
+
 def _load_or_create_secret_key() -> str:
     """获取 SECRET_KEY：多实例/多次重启共用同一密钥（否则 CSRF 签名跨实例随机失效）。
 
     优先级：环境变量 RUSIN_SECRET_KEY > 存储后端 secret_key（file 后端即
     旧的 .secret_key 文件，upstash 后端存于外部 KV，多实例共享）> 随机兜底。
+
+    首次生成须在存储锁内重读后写入：多 worker 同时冷启动时，否则每个 worker
+    都会生成自己的密钥并认为写入成功，导致 CSRF/会话签名互不认。
     """
     key = os.environ.get("RUSIN_SECRET_KEY", "").strip()
     if key:
         return key
     if storage.persistent:
-        try:
-            key = storage.get("secret_key")
-            if isinstance(key, str) and key.strip():
-                return key.strip()
-            new_key = secrets.token_hex(32)
-            if storage.set("secret_key", new_key):
-                return new_key
-        except StorageError:
-            pass
+        with _secret_key_lock:
+            try:
+                with storage.lock("secret_key"):
+                    key = storage.get("secret_key")
+                    if isinstance(key, str) and key.strip():
+                        return key.strip()
+                    new_key = secrets.token_hex(32)
+                    if storage.set("secret_key", new_key):
+                        return new_key
+            except StorageError:
+                pass
     # 兜底：无法持久化时退回随机密钥（仅影响重启/多实例一致性）
     return secrets.token_hex(32)
 
@@ -104,8 +113,10 @@ def create_app() -> Flask:
         SECRET_KEY=secret,
         # 模板改动即时生效：避免服务进程持有旧模板（曾因改模板后未重启看到旧页面）
         TEMPLATES_AUTO_RELOAD=True,
-        # 全局请求体上限：笔记保存、图片上传与附件上传共用，取三者较大值
+        # 全局请求体上限：笔记保存、图片上传与附件上传共用，取三者较大值；
+        # 表单字段内存上限与之对齐，否则 Flask 默认 500KB 会先于应用配置拒绝大笔记
         MAX_CONTENT_LENGTH=max(config.MAX_CONTENT_BYTES, config.MAX_IMAGE_SIZE_BYTES, config.MAX_ATTACHMENT_SIZE_BYTES),
+        MAX_FORM_MEMORY_SIZE=max(config.MAX_CONTENT_BYTES, config.MAX_IMAGE_SIZE_BYTES, config.MAX_ATTACHMENT_SIZE_BYTES),
         SESSION_COOKIE_SECURE=config.SECURE_COOKIES,
         SESSION_COOKIE_HTTPONLY=True,
         SESSION_COOKIE_SAMESITE="Lax",
@@ -114,6 +125,11 @@ def create_app() -> Flask:
         GLOBAL_CDN=config.GLOBAL_CDN,
         DEBUG_PANEL=config.DEBUG_PANEL,
     )
+    # 仅当白名单非空时启用 Flask Host 校验（空列表会拒绝所有 Host）
+    if config.TRUSTED_HOSTS:
+        app.config["TRUSTED_HOSTS"] = list(config.TRUSTED_HOSTS)
+    if config.PREFERRED_URL_SCHEME:
+        app.config["PREFERRED_URL_SCHEME"] = config.PREFERRED_URL_SCHEME
 
     if config.DEBUG_PANEL:
         logger.warning("调试面板已开启（RUSIN_DEBUG_PANEL）：页面将暴露验证码与风控敏感信息，仅限本地排障")
@@ -130,6 +146,15 @@ def create_app() -> Flask:
     register_i18n(app)
     register_blueprints(app)
     register_error_handlers(app)
+
+    @app.after_request
+    def _security_headers(resp):
+        # 全站基础安全头：禁止 MIME 嗅探、防点击劫持、限制 Referer 泄露。
+        # CSP 未启用：模板大量内联脚本/样式，需单独梳理 nonce 后再上。
+        resp.headers.setdefault("X-Content-Type-Options", "nosniff")
+        resp.headers.setdefault("X-Frame-Options", "SAMEORIGIN")
+        resp.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+        return resp
 
     if not app.config.get("TESTING") and not config.SERVERLESS:
         start_background_threads()

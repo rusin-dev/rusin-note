@@ -46,10 +46,16 @@ logger = create_logger("attachments")
 _USERNAME_RE = re.compile(r"^[a-zA-Z0-9_\-]+$")
 
 
-def _content_disposition(filename: str) -> str:
-    """构造 Content-Disposition：过滤引号/反斜杠/控制字符，避免响应头被破坏"""
+def _content_disposition(filename: str, content_type: str) -> str:
+    """构造 Content-Disposition：过滤引号/反斜杠/控制字符，避免响应头被破坏。
+
+    只有浏览器可安全内联预览的类型（PDF/图片/音视频）用 inline，其余强制
+    下载，避免 HTML/XML 之类在同源下被渲染执行。
+    """
     safe = re.sub(r'[\x00-\x1f\x7f"\\]', "_", str(filename or "")) or "attachment"
-    return f'inline; filename="{safe}"'
+    inline = (content_type == "application/pdf"
+              or content_type.startswith(("image/", "audio/", "video/")))
+    return f'{"inline" if inline else "attachment"}; filename="{safe}"'
 
 
 @bp.route("/attachment/<username>/<attachment_id>")
@@ -89,7 +95,7 @@ def attachment_user(username, attachment_id):
         content_type = meta.get("content_type", "application/octet-stream") if meta else "application/octet-stream"
         filename = meta.get("filename", attachment_id) if meta else attachment_id
         resp = Response(stream_attachment(data, slot), mimetype=content_type)
-        resp.headers["Content-Disposition"] = _content_disposition(filename)
+        resp.headers["Content-Disposition"] = _content_disposition(filename, content_type)
         resp.headers["Content-Length"] = str(len(data))
         # 附件需登录才能下载：只能私有缓存（public 会被共享缓存回放给未登录访客）
         resp.headers["Cache-Control"] = "private, max-age=86400"

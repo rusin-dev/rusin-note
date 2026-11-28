@@ -121,11 +121,24 @@ class TestSlideCurve:
             expect(d < S, "对齐缺口所需滑块位移 < 满量程")
             expect(abs(sc.curve_value(curve, d) - target) < 0.5, "反解位置命中缺口")
 
-    def test_svg_no_plaintext(self, data_dir):
-        logger.info("=== [D] SVG 不含可读文本节点 ===")
+    def test_png_no_plaintext(self, data_dir):
+        logger.info("=== [D] 客户端图像不含缺口坐标 ===")
         tok, ch = sc.generate()
-        expect("<text" not in ch["bg"] and "<text" not in ch["piece"], "背景/拼图均无 text 元素")
-        expect("<svg" in ch["bg"] and "<svg" in ch["piece"], "返回内联 SVG")
+        target = sc.peek(tok)["t"]
+        payload = ch["bg"] + ch["piece"]
+        expect("translate(" not in payload, "背景/拼图不含可解析的 SVG 坐标变换")
+        expect(f"{target:.2f}" not in payload, "精确缺口坐标不出现在客户端载荷")
+        expect("data:image/png;base64," in ch["bg"] and "data:image/png;base64," in ch["piece"],
+               "背景/拼图为服务端栅格化 PNG")
+
+    def test_non_finite_trajectory_rejected(self, data_dir):
+        logger.info("=== [D2] NaN/Inf 轨迹不可逃逸 ===")
+        nan_traj = [{"x": "nan", "y": 0, "t": 0}, {"x": "nan", "y": 0, "t": 100}]
+        expect(sc.behavior_suspicion(nan_traj) >= 40, "NaN 轨迹按可疑处理而非 0 分")
+        tok, _ = sc.generate()
+        ok, suspicion, reason = sc.verify(tok, "nan", [], tolerance=6, require_human=True)
+        expect(not ok and reason == "bad_x" and suspicion >= 40,
+               "NaN 位移直接拒绝且可疑度拉满")
 
 
 class TestSlideFlow:
@@ -136,7 +149,8 @@ class TestSlideFlow:
             expect("slideCaptcha" in html, f"{path} 含滑动容器")
             expect('name="captcha_x"' in html and 'name="captcha_traj"' in html,
                    f"{path} 含位移/轨迹隐藏字段")
-            expect("slide-thumb" in html and "<svg" in html, f"{path} 含滑块与 SVG")
+            expect("slide-thumb" in html and "data:image/png;base64," in html,
+                   f"{path} 含滑块与栅格化拼图")
             expect("/login/captcha" in html, f"{path} 刷新脚本就位")
 
     def test_refresh_endpoint(self, ctx):
@@ -145,8 +159,8 @@ class TestSlideFlow:
         expect(resp.status_code == 200, "刷新端点 200")
         d = json.loads(resp.data)
         expect(d.get("type") == "slide", "类型为 slide")
-        expect(d.get("token") and "<svg" in d.get("bg", "") and "curve" in d,
-               "返回 token/背景/曲线")
+        expect(d.get("token") and "data:image/png;base64," in d.get("bg", "")
+               and "curve" in d, "返回 token/栅格背景/曲线")
         expect(bool(sc.peek(d["token"])), "新 token 可校验")
 
     def test_correct_registers(self, ctx):

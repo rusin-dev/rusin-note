@@ -27,6 +27,21 @@ from app.apps.common.helpers import delete_cache_keys
 bp = Blueprint("comments", __name__)
 
 
+def _note_target_allowed(target_id: str, viewer: str | None) -> bool:
+    """笔记评论板访问控制：仅公开命名空间（public）或笔记本人可见。
+
+    先判权限再查存在性，未授权访问与不存在统一返回 404，避免用评论板
+    探测他人私密笔记 ID。
+    """
+    parts = target_id.split("/", 1)
+    if len(parts) != 2:
+        return False
+    owner, note_id = parts
+    if owner != "public" and (not viewer or viewer != owner):
+        return False
+    return note_exists(owner, note_id)
+
+
 def _comments_cache_key(**kwargs):
     """分页 + 访问者 + 语言 + 目标 + 简洁模式：页面文案依赖语言、导航栏依赖登录用户"""
     user = getattr(g, "current_user", None) or "anon"
@@ -57,12 +72,10 @@ def comments_get(target_type: str, target_id: str):
             return render_template("errors/404.html"), 404
         target_title = f"分享 {target_id[:8]}..."
     else:
-        # 笔记类型：目标 ID 格式为 username/note_id
-        parts = target_id.split("/", 1)
-        # 评论板必须挂在真实存在的笔记上，防僵尸区与 comments:all 键膨胀
-        if len(parts) != 2 or not note_exists(parts[0], parts[1]):
+        # 笔记类型：仅公开笔记或笔记本人可访问；不存在与无权限统一 404
+        if not _note_target_allowed(target_id, get_current_user()):
             return render_template("errors/404.html"), 404
-        target_title = f"笔记 {parts[1]}"
+        target_title = f"笔记 {target_id.split('/', 1)[1]}"
 
     try:
         page = max(1, int(request.args.get("page", "1")))
@@ -132,12 +145,10 @@ def comments_post(target_type: str, target_id: str):
             return render_template("errors/404.html"), 404
         target_title = f"分享 {target_id[:8]}..."
     else:
-        # 笔记类型：目标 ID 格式为 username/note_id
-        parts = target_id.split("/", 1)
-        # 评论板必须挂在真实存在的笔记上，防僵尸区与 comments:all 键膨胀
-        if len(parts) != 2 or not note_exists(parts[0], parts[1]):
+        # 笔记类型：仅公开笔记或笔记本人可访问；不存在与无权限统一 404
+        if not _note_target_allowed(target_id, get_current_user()):
             return render_template("errors/404.html"), 404
-        target_title = f"笔记 {parts[1]}"
+        target_title = f"笔记 {target_id.split('/', 1)[1]}"
 
     current_user = get_current_user()
     content = request.form.get("content", "").strip()

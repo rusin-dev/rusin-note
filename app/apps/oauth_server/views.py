@@ -41,7 +41,12 @@ def _require_admin() -> str:
 
 
 def _issuer() -> str:
-    return config.OAUTH_SERVER_ISSUER or request.url_root.rstrip("/")
+    # issuer 必须稳定且可校验：只接受显式配置，绝不从 Host 头推导（discovery
+    # 响应会被缓存，Host 污染会把客户端引向攻击者域名）
+    issuer = config.OAUTH_SERVER_ISSUER or config.SITE_BASE_URL
+    if not issuer:
+        abort(503, description="OIDC requires oauth_server.issuer or site_base_url")
+    return issuer.rstrip("/")
 
 
 def _json_error(error: str, description: str, status: int = 400):

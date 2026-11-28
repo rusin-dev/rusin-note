@@ -96,8 +96,12 @@ def is_globally_enabled() -> bool:
 
 
 def is_available(provider: str) -> bool:
-    """总开关 ∧ 功能开关 ∧ 凭据已配置（三者任一不满足即不可用）"""
+    """总开关 ∧ 功能开关 ∧ 凭据已配置 ∧ 站点外部地址已固定（任一不满足即不可用）。
+
+    site_base_url 为空时回调地址只能由 Host 头推导，存在伪造风险，故直接隐藏。
+    """
     return (is_globally_enabled()
+            and bool(config.SITE_BASE_URL)
             and provider in PROVIDERS
             and feature_enabled(feature_key(provider))
             and is_configured(provider))
