@@ -3,8 +3,8 @@
 扩展名由内容魔数决定，不信任上传方声明；不支持可内嵌脚本的 SVG。
 图片不可变、无跨实例读改写，无需存储锁。
 """
-import random
 import re
+import secrets
 
 from app.core import config
 from app.core.logger import create_logger
@@ -46,7 +46,7 @@ def validate_image_id(image_id: str) -> bool:
 
 
 def generate_image_id(ext: str) -> str:
-    rid = ''.join(random.choices(config.ID_CHARSET, k=config.ID_LENGTH))
+    rid = ''.join(secrets.choice(config.ID_CHARSET) for _ in range(config.ID_LENGTH))
     return f"{rid}.{ext}"
 
 

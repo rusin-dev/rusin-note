@@ -131,6 +131,15 @@ def create_app() -> Flask:
     register_blueprints(app)
     register_error_handlers(app)
 
+    @app.after_request
+    def _security_headers(resp):
+        # 全站基础安全头：禁止 MIME 嗅探、防点击劫持、限制 Referer 泄露。
+        # CSP 未启用：模板大量内联脚本/样式，需单独梳理 nonce 后再上。
+        resp.headers.setdefault("X-Content-Type-Options", "nosniff")
+        resp.headers.setdefault("X-Frame-Options", "SAMEORIGIN")
+        resp.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+        return resp
+
     if not app.config.get("TESTING") and not config.SERVERLESS:
         start_background_threads()
         # 插件 Phase 2：定期检查上游更新（Phase 1 安装在 register_blueprints 内完成）

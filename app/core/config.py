@@ -60,8 +60,8 @@ DEFAULT_CONFIG = {
     "secure_cookies": False,                # HTTPS 部署置 True
     "global_cdn": "https://cdn.jsdmirror.cn",  # 前端静态资源 CDN 基础地址
     "id_generation": {
-        "length": 6,
-        "use_uppercase": True,
+        "length": 16,
+        "use_uppercase": False,
         "use_lowercase": True,
         "use_digits": True
     },

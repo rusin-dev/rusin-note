@@ -1,7 +1,7 @@
 """笔记操作、校验、统计、随机 ID 与过期笔记清理（存储后端无关）"""
 import re
+import secrets
 import time
-import random
 from threading import Lock
 
 from app.core import config
@@ -230,8 +230,16 @@ def get_stats():
 # ---------- 随机ID生成 ----------
 def generate_random_id() -> str:
     while True:
-        rid = ''.join(random.choices(config.ID_CHARSET, k=config.ID_LENGTH))
+        rid = ''.join(secrets.choice(config.ID_CHARSET) for _ in range(config.ID_LENGTH))
         if rid not in FORBIDDEN_NOTE_IDS:
+            return rid
+
+
+def generate_unique_note_id(username: str) -> str:
+    """生成该用户命名空间下未被占用的笔记 ID（/new 用，防覆盖既有笔记）。"""
+    while True:
+        rid = generate_random_id()
+        if not note_exists(username, rid):
             return rid
 
 

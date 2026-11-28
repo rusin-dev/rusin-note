@@ -13,7 +13,7 @@ from app.core.feature_flags import feature_enabled, require_feature
 from app.core.i18n import t
 from app.apps.attachments.service import note_attachment_quota_ok
 from app.core.notes import (
-    generate_random_id,
+    generate_unique_note_id,
     get_note_mtime,
     list_user_notes,
     list_user_notes_detailed,
@@ -143,7 +143,7 @@ def user_new(username):
     if not validate_username(username):
         abort(400)
     require_auth(username)
-    new_id = generate_random_id()
+    new_id = generate_unique_note_id(username)
     return redirect(url_for("notes.user_note_get", username=username, note_id=new_id))
 
 

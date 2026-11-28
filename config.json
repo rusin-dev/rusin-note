@@ -36,10 +36,10 @@
   "secure_cookies": true,
   "global_cdn": "https://cdn.jsdmirror.cn",
   "id_generation": {
-    "length": 4,
+    "length": 16,
     "use_uppercase": false,
     "use_lowercase": true,
-    "use_digits": false
+    "use_digits": true
   },
   "share_token": {
     "length": 64,
